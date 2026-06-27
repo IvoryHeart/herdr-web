@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- Prevented sidebar row labels and terminal tab labels from being text-selected during long-press
+  context-menu gestures.
 - Added Mobile settings for an expanding terminal command input and Enter-as-newline
   editing, allowing long prompts to wrap and remain viewable while preserving send-on-Enter
   by default. [PR #21](https://github.com/kcosr/herdr-web/pull/21)

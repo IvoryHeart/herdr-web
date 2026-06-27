@@ -507,6 +507,15 @@ button {
   transition: background 120ms ease, border-color 120ms ease;
 }
 
+.space-row,
+.pane-row,
+.tab-head,
+.tabbar-tab {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .space-row:hover {
   background: var(--row-hover);
 }
