@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildVisibleAgentPaneEntries,
   buildVisibleScopedNotes,
+  canAddNoteFromPaneMenu,
+  mergeCreatedPaneNoteList,
+  mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
   buildVisibleScopedWorkspaces,
   buildVisibleTabEntries,
@@ -10,6 +13,8 @@ import {
   nextVisibleAgentPaneEntry,
   nextVisibleTabEntry,
   resolveInitialSelectedBridgeId,
+  resolveCreatedPaneNoteForTarget,
+  paneNoteListContains,
   shouldBlockDirtyNoteAutosave,
   shouldCollapseHostScope,
   shouldShowLastStatusChangeSort,
@@ -24,6 +29,7 @@ import {
   isConnectionResultCurrent,
 } from "./connectionState";
 import type { AgentStatus, PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "./types";
+import { notesForPane } from "./notes";
 import type { PaneNote } from "./notes";
 
 describe("App connection guards", () => {
@@ -425,6 +431,143 @@ describe("App multi-bridge helpers", () => {
     expect(menuItems("pane", false, false, true, true, "agent")).toEqual([
       { key: "unpin", label: "Unpin agent" },
     ]);
+  });
+
+  it("shows add-note actions only for eligible pane menus", () => {
+    expect(menuItems("pane", false, false, false, false, "pane", true)).toEqual([
+      { key: "add_note", label: "Add note" },
+    ]);
+    expect(menuItems("pane", false, false, true, false, "agent", true)).toEqual([
+      { key: "pin", label: "Pin agent" },
+      { key: "add_note", label: "Add note" },
+    ]);
+    expect(menuItems("space", false, false, false, false, "pane", true)).toEqual([]);
+    expect(menuItems("tab", false, false, false, false, "pane", true)).toEqual([]);
+  });
+
+  it("requires a current note-capable pane before showing add-note", () => {
+    const eligible = {
+      kind: "pane" as const,
+      notesEnabled: true,
+      runtimeCanConnect: true,
+      capabilityState: "ready" as const,
+      notesSupported: true,
+      runtimeConnectionKey: "configured:one",
+      stateConnectionKey: "configured:one",
+      paneExists: true,
+    };
+
+    expect(canAddNoteFromPaneMenu(eligible)).toBe(true);
+    expect(canAddNoteFromPaneMenu({ ...eligible, kind: "tab" })).toBe(false);
+    expect(canAddNoteFromPaneMenu({ ...eligible, notesEnabled: false })).toBe(false);
+    expect(canAddNoteFromPaneMenu({ ...eligible, runtimeCanConnect: false })).toBe(false);
+    expect(canAddNoteFromPaneMenu({ ...eligible, capabilityState: "probing" })).toBe(false);
+    expect(canAddNoteFromPaneMenu({ ...eligible, notesSupported: false })).toBe(false);
+    expect(
+      canAddNoteFromPaneMenu({ ...eligible, stateConnectionKey: "configured:two" }),
+    ).toBe(false);
+    expect(canAddNoteFromPaneMenu({ ...eligible, paneExists: false })).toBe(false);
+  });
+
+  it("normalizes created notes so they are visible as pane notes", () => {
+    const targetPane = pane("pane-a", "workspace-a", "tab-a");
+    const rawNote: PaneNote = {
+      ...note("new", "workspace-b", "unresolved"),
+      attachment: null,
+      link_state: "detached",
+      updated_at: "300",
+    };
+    const olderPaneNote = {
+      ...resolveCreatedPaneNoteForTarget(note("older", "workspace-a", "linked"), targetPane),
+      updated_at: "100",
+    };
+    const staleServerNote = {
+      ...rawNote,
+      title: "Server title",
+      updated_at: "400",
+    };
+
+    const resolved = resolveCreatedPaneNoteForTarget(rawNote, targetPane);
+    const merged = mergeCreatedPaneNoteList([olderPaneNote], rawNote, targetPane);
+    const mergedWithServerCopy = mergeCreatedPaneNoteList([staleServerNote, olderPaneNote], rawNote, targetPane);
+
+    expect(resolved.link_state).toBe("linked");
+    expect(resolved.attachment?.pane_id).toBe(targetPane.pane_id);
+    expect(resolved.resolved_pane?.pane_id).toBe(targetPane.pane_id);
+    expect(paneNoteListContains([resolved], targetPane, rawNote.note_id)).toBe(true);
+    expect(paneNoteListContains([rawNote], targetPane, rawNote.note_id)).toBe(false);
+    expect(notesForPane(merged, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "new",
+      "older",
+    ]);
+    expect(notesForPane(mergedWithServerCopy, targetPane.pane_id)[0]).toMatchObject({
+      note_id: "new",
+      title: "Server title",
+    });
+  });
+
+  it("keeps pending created pane notes through lagging refreshes", () => {
+    const targetPane = pane("pane-a", "workspace-a", "tab-a");
+    const rawNote: PaneNote = {
+      ...note("new", "workspace-b", "unresolved"),
+      attachment: null,
+      link_state: "detached",
+      updated_at: "300",
+    };
+    const olderPaneNote = {
+      ...resolveCreatedPaneNoteForTarget(note("older", "workspace-a", "linked"), targetPane),
+      updated_at: "100",
+    };
+    const serverLinkedNote = resolveCreatedPaneNoteForTarget(rawNote, targetPane);
+    const serverDetachedNote = {
+      ...rawNote,
+      updated_at: "500",
+    };
+    const serverUnresolvedNote = {
+      ...rawNote,
+      link_state: "unresolved" as const,
+      updated_at: "450",
+    };
+
+    const firstLaggingRefresh = mergePendingPaneNotesIntoList([], [
+      { note: rawNote, pane: targetPane },
+    ]);
+    const secondLaggingRefresh = mergePendingPaneNotesIntoList([olderPaneNote], firstLaggingRefresh.pending);
+    const serverDetachedRefresh = mergePendingPaneNotesIntoList(
+      [serverDetachedNote, olderPaneNote],
+      firstLaggingRefresh.pending,
+    );
+    const serverUnresolvedRefresh = mergePendingPaneNotesIntoList(
+      [serverUnresolvedNote, olderPaneNote],
+      firstLaggingRefresh.pending,
+    );
+    const serverCaughtUpRefresh = mergePendingPaneNotesIntoList(
+      [serverLinkedNote, olderPaneNote],
+      secondLaggingRefresh.pending,
+    );
+
+    expect(notesForPane(firstLaggingRefresh.notes, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "new",
+    ]);
+    expect(firstLaggingRefresh.pending).toHaveLength(1);
+    expect(notesForPane(secondLaggingRefresh.notes, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "new",
+      "older",
+    ]);
+    expect(secondLaggingRefresh.pending).toHaveLength(1);
+    expect(notesForPane(serverDetachedRefresh.notes, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "older",
+    ]);
+    expect(serverDetachedRefresh.pending).toHaveLength(0);
+    expect(notesForPane(serverUnresolvedRefresh.notes, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "older",
+    ]);
+    expect(serverUnresolvedRefresh.pending).toHaveLength(0);
+    expect(notesForPane(serverCaughtUpRefresh.notes, targetPane.pane_id).map((item) => item.note_id)).toEqual([
+      "new",
+      "older",
+    ]);
+    expect(serverCaughtUpRefresh.pending).toHaveLength(0);
   });
 
   it("builds visible tab entries across hosts for all-host shortcut navigation", () => {

@@ -6,6 +6,8 @@
 
 ### Added
 
+- Added an `Add note` action to pane and agent sidebar context menus, creating a new note attached
+  to the target pane and opening it in the notes editor.
 - Added bridge-tracked agent status transition activity with an Agents view sort option for
   `Last status change`, using semantic status changes rather than terminal output activity.
   [PR #23](https://github.com/kcosr/herdr-web/pull/23)
