@@ -4,7 +4,12 @@
 import { act, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BridgeConnectionController, NoteEditor, noteDraftStorageKey } from "./App";
+import {
+  BridgeConnectionController,
+  NoteEditor,
+  QuickPaneNoteDialog,
+  noteDraftStorageKey,
+} from "./App";
 import type { BridgeConnectionRef, BridgeConnectionState, ScopedNoteEntry } from "./App";
 import type { BridgeRuntime } from "./bridge";
 
@@ -65,6 +70,57 @@ describe("BridgeConnectionController sockets", () => {
 
     expect(FakeWebSocket.instances).toHaveLength(3);
     expect(FakeWebSocket.instances.filter((socket) => socket.closed)).toHaveLength(0);
+  });
+});
+
+describe("QuickPaneNoteDialog", () => {
+  it("selects the title and submits an optional body", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
+    const onSubmit = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <QuickPaneNoteDialog
+          targetLabel="Pinned Indicator"
+          onCancel={vi.fn()}
+          onSubmit={onSubmit}
+        />,
+      );
+    });
+
+    const titleInput = container.querySelector<HTMLInputElement>("input.field");
+    if (!titleInput) {
+      throw new Error("missing quick note title input");
+    }
+    expect(document.activeElement).toBe(titleInput);
+    expect(titleInput.selectionStart).toBe(0);
+    expect(titleInput.selectionEnd).toBe(titleInput.value.length);
+    const createButton = buttonByText(container, "Create");
+
+    await act(async () => {
+      createButton.click();
+    });
+    expect(onSubmit).toHaveBeenLastCalledWith("Untitled note", "");
+
+    await act(async () => {
+      buttonByText(container, "Add body").click();
+    });
+    const bodyInput = container.querySelector<HTMLTextAreaElement>(".quick-note-body");
+    if (!bodyInput) {
+      throw new Error("missing quick note body input");
+    }
+    expect(document.activeElement).toBe(bodyInput);
+    await act(async () => {
+      setNativeValue(bodyInput, "Follow-up details");
+      bodyInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      buttonByText(container, "Create").click();
+    });
+    expect(onSubmit).toHaveBeenLastCalledWith("Untitled note", "Follow-up details");
   });
 });
 

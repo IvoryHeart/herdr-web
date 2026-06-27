@@ -29,8 +29,10 @@
 
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view.
-- New notes now open in Edit mode with the title selected, so the default title can be replaced
-  immediately.
+- Pane context menu `Add note` now opens a quick-create dialog with a focused title and optional body
+  instead of switching to the notes panel.
+- Notes created from the notes panel now open in Edit mode with the title selected, so the default
+  title can be replaced immediately.
 
 ### Fixed
 

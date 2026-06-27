@@ -31,6 +31,7 @@ import {
 import type {
   CSSProperties,
   Dispatch,
+  FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MutableRefObject,
   SetStateAction,
@@ -204,6 +205,9 @@ type PendingCreatedPaneNoteTarget = {
 };
 type PendingCreatedPaneNote = PendingCreatedPaneNoteTarget & {
   connectionKey: string;
+};
+type QuickPaneNoteTarget = ScopedPaneRef & {
+  label: string;
 };
 type BridgeAgentPinsState = {
   connectionKey: string;
@@ -784,6 +788,8 @@ export function App() {
   const [mobileNotesScreen, setMobileNotesScreen] = useState<MobileNotesScreen>("list");
   const [notesIncludeArchived, setNotesIncludeArchived] = useState(false);
   const [notesIncludeDeleted, setNotesIncludeDeleted] = useState(false);
+  const [quickPaneNoteTarget, setQuickPaneNoteTarget] = useState<QuickPaneNoteTarget | null>(null);
+  const [quickPaneNoteCreating, setQuickPaneNoteCreating] = useState(false);
   const [selectedPaneRefState, setSelectedPaneRefState] = useState<ScopedPaneRef | null>(
     initialPrefs.selectedPane,
   );
@@ -2066,7 +2072,7 @@ export function App() {
     };
   };
 
-  const createNoteForPaneTarget = async (bridgeId: BridgeId, paneId: string) => {
+  const openQuickPaneNoteDialog = (bridgeId: BridgeId, paneId: string, label: string) => {
     if (!notesEnabled) {
       setError("Notes are disabled in settings");
       return;
@@ -2081,51 +2087,89 @@ export function App() {
       setError("Notes are not available for this bridge");
       return;
     }
-    const requestConnectionKey = runtime.connectionKey;
-    const isCurrentConnection = () => {
-      const currentRuntime = bridge.getRuntime(bridgeId);
-      return Boolean(
-        notesEnabledRef.current &&
-          currentRuntime?.connectionKey === requestConnectionKey &&
-          isConnectionResultCurrent(
-            connectionRefs.current[bridgeId]?.connectionKey ?? "",
-            requestConnectionKey,
-          ),
-      );
-    };
     const bridgeSnapshot = snapshotForBridge(bridgeId);
     const targetPane = bridgeSnapshot?.panes.find((pane) => pane.pane_id === paneId) ?? null;
     if (!targetPane) {
       setError("Pane not found");
       return;
     }
+    setQuickPaneNoteTarget({
+      bridgeId,
+      paneId,
+      label: label || paneTitle(targetPane),
+    });
+    setError(null);
+  };
 
-    openPane(bridgeId, targetPane);
-    setNotesPanelOpen(true);
-    if (isCompactLayout) {
-      setMobileNotesScreen("editor");
+  const createQuickPaneNote = async (title: string, body: string) => {
+    const target = quickPaneNoteTarget;
+    if (!target) {
+      return;
     }
-
+    if (!notesEnabled) {
+      setError("Notes are disabled in settings");
+      return;
+    }
+    const runtime = bridge.getRuntime(target.bridgeId);
+    if (
+      !runtime ||
+      !runtime.canConnect ||
+      runtime.capabilityState !== "ready" ||
+      !supportsNotes(runtime.capabilities)
+    ) {
+      setError("Notes are not available for this bridge");
+      return;
+    }
+    const bridgeSnapshot = snapshotForBridge(target.bridgeId);
+    const targetPane = bridgeSnapshot?.panes.find((pane) => pane.pane_id === target.paneId) ?? null;
+    if (!targetPane) {
+      setError("Pane not found");
+      return;
+    }
+    const requestConnectionKey = runtime.connectionKey;
+    const isCurrentConnection = () => {
+      const currentRuntime = bridge.getRuntime(target.bridgeId);
+      return Boolean(
+        notesEnabledRef.current &&
+          currentRuntime?.connectionKey === requestConnectionKey &&
+          isConnectionResultCurrent(
+            connectionRefs.current[target.bridgeId]?.connectionKey ?? "",
+            requestConnectionKey,
+          ),
+      );
+    };
+    setQuickPaneNoteCreating(true);
     try {
       const note = await createNote(runtime.httpUrl, {
-        title: "Untitled note",
-        body: "",
+        title,
+        body,
         paneId: targetPane.pane_id,
       });
-      const response = await refreshBridgeNotes(runtime, false);
-      if (!isCurrentConnection()) {
+      setQuickPaneNoteTarget((current) =>
+        current?.bridgeId === target.bridgeId && current.paneId === target.paneId ? null : current,
+      );
+      try {
+        const response = await refreshBridgeNotes(runtime, false);
+        if (!isCurrentConnection()) {
+          return;
+        }
+        if (!response || !noteListContainsId(response.notes, note.note_id)) {
+          mergeCreatedPaneNote(target.bridgeId, requestConnectionKey, note, targetPane, Boolean(response));
+        }
+      } catch (caught) {
+        if (isCurrentConnection()) {
+          const detail = caught instanceof Error ? caught.message : "unknown refresh error";
+          setError(`Note created, but notes did not refresh: ${detail}`);
+        }
         return;
       }
-      if (!response || !noteListContainsId(response.notes, note.note_id)) {
-        mergeCreatedPaneNote(bridgeId, requestConnectionKey, note, targetPane, Boolean(response));
-      }
-      setSelectedNoteRef({ bridgeId, noteId: note.note_id });
-      requestNoteTitleFocus(bridgeId, note.note_id);
       setError(null);
     } catch (caught) {
       if (isCurrentConnection()) {
         setError(caught instanceof Error ? caught.message : "Could not create note");
       }
+    } finally {
+      setQuickPaneNoteCreating(false);
     }
   };
 
@@ -3048,7 +3092,7 @@ export function App() {
     } else if (key === "unpin" && kind === "pane") {
       void toggleAgentPin(bridgeId, id, true);
     } else if (key === "add_note" && kind === "pane") {
-      void createNoteForPaneTarget(bridgeId, id);
+      openQuickPaneNoteDialog(bridgeId, id, label);
     } else if (key === "move_new_tab" && kind === "pane") {
       const pane = connectionRefs.current[bridgeId]?.snapshot?.panes.find(
         (item) => item.pane_id === id,
@@ -3656,6 +3700,19 @@ export function App() {
           busy={busy}
           onCancel={() => setDialog(null)}
           onConfirm={confirmClose}
+        />
+      ) : null}
+
+      {quickPaneNoteTarget ? (
+        <QuickPaneNoteDialog
+          targetLabel={quickPaneNoteTarget.label}
+          busy={quickPaneNoteCreating}
+          onCancel={() => {
+            if (!quickPaneNoteCreating) {
+              setQuickPaneNoteTarget(null);
+            }
+          }}
+          onSubmit={(title, body) => void createQuickPaneNote(title, body)}
         />
       ) : null}
 
@@ -5883,6 +5940,163 @@ function SidebarOptionsMenu({
           </label>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+export function QuickPaneNoteDialog({
+  targetLabel,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  targetLabel: string;
+  busy?: boolean;
+  onCancel: () => void;
+  onSubmit: (title: string, body: string) => void;
+}) {
+  const [title, setTitle] = useState("Untitled note");
+  const [bodyExpanded, setBodyExpanded] = useState(false);
+  const [body, setBody] = useState("");
+  const dialogRef = useRef<HTMLFormElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const bodyInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, []);
+
+  useEffect(() => {
+    if (bodyExpanded) {
+      bodyInputRef.current?.focus();
+    }
+  }, [bodyExpanded]);
+
+  useEffect(() => {
+    return addNativeBackHandler(() => {
+      if (!busy) {
+        onCancel();
+      }
+      return true;
+    });
+  }, [busy, onCancel]);
+
+  const cancel = () => {
+    if (!busy) {
+      onCancel();
+    }
+  };
+
+  const submit = (event: ReactFormEvent) => {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || busy) {
+      return;
+    }
+    onSubmit(trimmedTitle, bodyExpanded ? body : "");
+  };
+  const trapDialogFocus = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") {
+      return;
+    }
+    const dialog = dialogRef.current;
+    if (!dialog) {
+      return;
+    }
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])",
+      ),
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="overlay-root">
+      <button
+        className="overlay-scrim"
+        type="button"
+        aria-label="Cancel"
+        disabled={busy}
+        onClick={cancel}
+      />
+      <form
+        ref={dialogRef}
+        className="modal quick-note-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add note"
+        onSubmit={submit}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancel();
+            return;
+          }
+          trapDialogFocus(event);
+        }}
+      >
+        <div className="modal-title">Add note</div>
+        <div className="modal-message quick-note-target">Attached to {targetLabel}</div>
+        <label className="field-label">
+          <span>Title</span>
+          <input
+            ref={titleInputRef}
+            className="field"
+            value={title}
+            placeholder="Untitled note"
+            spellCheck={false}
+            autoComplete="off"
+            disabled={busy}
+            onChange={(event) => setTitle(event.currentTarget.value)}
+          />
+        </label>
+        {bodyExpanded ? (
+          <label className="field-label">
+            <span>Body</span>
+            <textarea
+              ref={bodyInputRef}
+              className="field quick-note-body"
+              value={body}
+              placeholder="Write a note"
+              disabled={busy}
+              rows={5}
+              onChange={(event) => setBody(event.currentTarget.value)}
+            />
+          </label>
+        ) : (
+          <button
+            className="btn quick-note-expand"
+            type="button"
+            disabled={busy}
+            aria-expanded="false"
+            onClick={() => setBodyExpanded(true)}
+          >
+            Add body
+          </button>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn" disabled={busy} onClick={cancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !title.trim()}>
+            Create
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
