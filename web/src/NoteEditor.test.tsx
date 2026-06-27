@@ -261,6 +261,38 @@ describe("NoteEditor actions", () => {
     expect(container.querySelector(".note-body-preview strong")?.textContent).toBe("bold");
   });
 
+  it("forces edit mode and selects the title for note title focus requests", async () => {
+    localStorage.setItem("herdr-web:note-editor-mode:v1", "preview");
+    const onSave = vi.fn(() => Promise.resolve(2));
+    const { container, render } = createEditorHarness(onSave);
+
+    await render(
+      noteEntry({
+        noteId: "note-new",
+        revision: 1,
+        title: "Untitled note",
+        body: "",
+      }),
+      {
+        titleFocusRequest: {
+          bridgeId: "bridge-a",
+          noteId: "note-new",
+          token: 1,
+        },
+      },
+    );
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const titleInput = noteTitleInput(container);
+    expect(noteBodyInput(container).value).toBe("");
+    expect(document.activeElement).toBe(titleInput);
+    expect(titleInput.selectionStart).toBe(0);
+    expect(titleInput.selectionEnd).toBe(titleInput.value.length);
+    expect(localStorage.getItem("herdr-web:note-editor-mode:v1")).toBe("edit");
+  });
+
   it("escapes raw HTML, blocks remote images, and restricts markdown links", async () => {
     const onSave = vi.fn(() => Promise.resolve(6));
     const { container, render } = createEditorHarness(onSave);
@@ -344,6 +376,11 @@ function createEditorHarness(
     entry: ScopedNoteEntry,
     options: {
       showCurrentPaneViewAction?: boolean;
+      titleFocusRequest?: {
+        bridgeId: string;
+        noteId: string;
+        token: number;
+      };
       onSave?: (
         entry: ScopedNoteEntry,
         title: string,
@@ -358,6 +395,7 @@ function createEditorHarness(
           entry={entry}
           currentBridgeId="bridge-a"
           currentPaneId="pane-a"
+          titleFocusRequest={options.titleFocusRequest}
           canAttachToCurrentPane
           showCurrentPaneViewAction={options.showCurrentPaneViewAction}
           onSave={options.onSave ?? onSave}
@@ -462,6 +500,14 @@ function noteBodyInput(container: HTMLElement) {
   const input = container.querySelector<HTMLTextAreaElement>(".note-body-input");
   if (!input) {
     throw new Error("missing note body input");
+  }
+  return input;
+}
+
+function noteTitleInput(container: HTMLElement) {
+  const input = container.querySelector<HTMLInputElement>(".note-title-input");
+  if (!input) {
+    throw new Error("missing note title input");
   }
   return input;
 }

@@ -171,6 +171,9 @@ type ScopedNoteRef = {
   bridgeId: BridgeId;
   noteId: string;
 };
+type ScopedNoteTitleFocusRequest = ScopedNoteRef & {
+  token: number;
+};
 type MobileNotesScreen = "list" | "editor";
 type ScopedWorkspaceRef = {
   bridgeId: BridgeId;
@@ -773,6 +776,8 @@ export function App() {
     initialPrefs.selectedBridgeId,
   );
   const [selectedNoteRef, setSelectedNoteRef] = useState<ScopedNoteRef | null>(null);
+  const [noteTitleFocusRequest, setNoteTitleFocusRequest] =
+    useState<ScopedNoteTitleFocusRequest | null>(null);
   const [notesPanelOpen, setNotesPanelOpen] = useState(
     initialPrefs.notesEnabled && initialPrefs.notesPanelOpen,
   );
@@ -1840,6 +1845,16 @@ export function App() {
   };
 
   const requestTerminalFocus = () => setTerminalFocusToken((token) => token + 1);
+  const requestNoteTitleFocus = (bridgeId: BridgeId, noteId: string) => {
+    setNoteTitleFocusRequest((current) => ({
+      bridgeId,
+      noteId,
+      token: (current?.token ?? 0) + 1,
+    }));
+  };
+  const clearNoteTitleFocusRequest = useCallback((request: ScopedNoteTitleFocusRequest) => {
+    setNoteTitleFocusRequest((current) => (current?.token === request.token ? null : current));
+  }, []);
 
   const snapshotForBridge = (bridgeId: BridgeId) => {
     const runtime = bridge.getRuntime(bridgeId);
@@ -1958,6 +1973,7 @@ export function App() {
         paneId: selectedPane.pane_id,
       });
       setSelectedNoteRef({ bridgeId: selectedRuntime.id, noteId: note.note_id });
+      requestNoteTitleFocus(selectedRuntime.id, note.note_id);
       if (isCompactLayout) {
         setMobileNotesScreen("editor");
       }
@@ -1984,6 +2000,7 @@ export function App() {
         body: "",
       });
       setSelectedNoteRef({ bridgeId: runtime.id, noteId: note.note_id });
+      requestNoteTitleFocus(runtime.id, note.note_id);
       if (isCompactLayout) {
         setMobileNotesScreen("editor");
       }
@@ -2103,6 +2120,7 @@ export function App() {
         mergeCreatedPaneNote(bridgeId, requestConnectionKey, note, targetPane, Boolean(response));
       }
       setSelectedNoteRef({ bridgeId, noteId: note.note_id });
+      requestNoteTitleFocus(bridgeId, note.note_id);
       setError(null);
     } catch (caught) {
       if (isCurrentConnection()) {
@@ -3486,6 +3504,8 @@ export function App() {
           mobileScreen={mobileNotesScreen}
           selectedEntry={selectedScopedNote}
           selectedBridgeId={selectedRuntime?.id ?? null}
+          titleFocusRequest={noteTitleFocusRequest}
+          onTitleFocusRequestHandled={clearNoteTitleFocusRequest}
           selectedPane={selectedPane}
           selectedPaneNotes={selectedRuntime ? selectedPaneNotes.map((note) => ({
             bridgeId: selectedRuntime.id,
@@ -5872,6 +5892,8 @@ function NotesSurface({
   mobileScreen,
   selectedEntry,
   selectedBridgeId,
+  titleFocusRequest,
+  onTitleFocusRequestHandled,
   selectedPane,
   selectedPaneNotes,
   visibleNotes,
@@ -5908,6 +5930,8 @@ function NotesSurface({
   mobileScreen: MobileNotesScreen;
   selectedEntry: ScopedNoteEntry | null;
   selectedBridgeId: BridgeId | null;
+  titleFocusRequest: ScopedNoteTitleFocusRequest | null;
+  onTitleFocusRequestHandled: (request: ScopedNoteTitleFocusRequest) => void;
   selectedPane: PaneInfo | null;
   selectedPaneNotes: ScopedNoteEntry[];
   visibleNotes: ScopedNoteEntry[];
@@ -6130,6 +6154,8 @@ function NotesSurface({
           entry={selectedEntry}
           currentBridgeId={selectedBridgeId}
           currentPaneId={selectedPane?.pane_id ?? null}
+          titleFocusRequest={titleFocusRequest}
+          onTitleFocusRequestHandled={onTitleFocusRequestHandled}
           canAttachToCurrentPane={canAttachToCurrentPane}
           showCurrentPaneViewAction={compact}
           onSave={onSaveNote}
@@ -6175,6 +6201,8 @@ export function NoteEditor({
   entry,
   currentBridgeId,
   currentPaneId,
+  titleFocusRequest = null,
+  onTitleFocusRequestHandled,
   canAttachToCurrentPane,
   showCurrentPaneViewAction = false,
   onSave,
@@ -6188,6 +6216,8 @@ export function NoteEditor({
   entry: ScopedNoteEntry | null;
   currentBridgeId: BridgeId | null;
   currentPaneId: string | null;
+  titleFocusRequest?: ScopedNoteTitleFocusRequest | null;
+  onTitleFocusRequestHandled?: (request: ScopedNoteTitleFocusRequest) => void;
   canAttachToCurrentPane: boolean;
   showCurrentPaneViewAction?: boolean;
   onSave: (
@@ -6216,10 +6246,13 @@ export function NoteEditor({
   const loadedNoteIdentityRef = useRef("");
   const saveBlockedRef = useRef(false);
   const noteSaveInFlightRef = useRef<NoteSaveInFlight | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const entryRef = useRef(entry);
   const onSaveRef = useRef(onSave);
   const noteIdentity = entry ? noteDraftStorageKey(entry) : "";
   const noteKey = entry ? `${entry.bridgeId}:${entry.note.note_id}:${entry.note.revision}` : "";
+  const currentEntryBridgeId = entry?.bridgeId ?? null;
+  const currentEntryNoteId = entry?.note.note_id ?? null;
   const serverTitle = entry?.note.title ?? "";
   const serverBody = entry?.note.body ?? "";
   const serverRevision = entry?.note.revision ?? 0;
@@ -6232,10 +6265,10 @@ export function NoteEditor({
     onSaveRef.current = onSave;
   }, [onSave]);
 
-  const setEditorMode = (mode: NoteEditorMode) => {
+  const setEditorMode = useCallback((mode: NoteEditorMode) => {
     setEditorModeState(mode);
     writeNoteEditorMode(mode);
-  };
+  }, []);
 
   useEffect(() => {
     if (!entry) {
@@ -6326,6 +6359,37 @@ export function NoteEditor({
       clearNoteDraft(entry);
     }
   }, [baseRevision, body, dirty, entry, noteIdentity, noteKey, title]);
+
+  useEffect(() => {
+    if (
+      !currentEntryBridgeId ||
+      !currentEntryNoteId ||
+      !titleFocusRequest ||
+      titleFocusRequest.bridgeId !== currentEntryBridgeId ||
+      titleFocusRequest.noteId !== currentEntryNoteId
+    ) {
+      return;
+    }
+    setEditorMode("edit");
+    const handledRequest = titleFocusRequest;
+    const focusTimer = window.setTimeout(() => {
+      const titleInput = titleInputRef.current;
+      if (!titleInput || titleInput.disabled) {
+        onTitleFocusRequestHandled?.(handledRequest);
+        return;
+      }
+      titleInput.focus();
+      titleInput.select();
+      onTitleFocusRequestHandled?.(handledRequest);
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [
+    currentEntryBridgeId,
+    currentEntryNoteId,
+    onTitleFocusRequestHandled,
+    setEditorMode,
+    titleFocusRequest,
+  ]);
 
   useEffect(() => {
     if (!entry) {
@@ -6585,6 +6649,7 @@ export function NoteEditor({
         </div>
       ) : null}
       <input
+        ref={titleInputRef}
         className="note-title-input"
         value={title}
         onChange={(event) => {

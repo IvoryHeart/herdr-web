@@ -29,6 +29,8 @@
 
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view.
+- New notes now open in Edit mode with the title selected, so the default title can be replaced
+  immediately.
 
 ### Fixed
 
