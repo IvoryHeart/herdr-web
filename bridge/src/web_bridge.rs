@@ -63,6 +63,7 @@ const MAX_QUEUED_TERMINAL_INPUT_BYTES: usize = 8 * 1024 * 1024;
 const TERMINAL_DETACH_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_TERMINAL_DETACH_DRAIN_WAITS: usize = 4;
 const MAX_ATTACH_HANDSHAKE_RETRIES: usize = 2;
+const TERMINAL_ATTACH_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TERMINAL_OUTPUT_COALESCE_MS: u64 = 16;
 const MAX_TERMINAL_OUTPUT_COALESCE_MS: u64 = 256;
 const TERMINAL_OUTPUT_COALESCE_MAX_BYTES: usize = 32 * 1024;
@@ -534,11 +535,16 @@ fn terminal_output_coalesce_window(coalesce_ms: Option<u64>) -> Duration {
 /// teardown so the new attach cannot reach the daemon ahead of the pending
 /// `Detach` and be rejected as a second concurrent client. The daemon never
 /// closes attach sockets itself, so the close that resolves a draining entry
-/// is always the bridge's own post-`Detach` shutdown.
+/// is always the bridge's own post-`Detach` shutdown. `attaching` serializes
+/// fresh attach handshakes per terminal: with two concurrent attaches the
+/// daemon accepts one and rejects the other, and which one the map would
+/// keep is an independent race — so concurrent acquires instead wait for the
+/// in-flight handshake and join the session it publishes.
 #[derive(Default)]
 struct TerminalSessions {
     active: HashMap<String, SharedTerminalSession>,
     draining: HashMap<String, Arc<ConnectionClosed>>,
+    attaching: HashMap<String, Arc<ConnectionClosed>>,
 }
 
 /// Signals that a daemon attach connection has fully closed.
@@ -2672,97 +2678,155 @@ async fn acquire_terminal_session(
     takeover: bool,
 ) -> Result<SharedTerminalSession, BridgeError> {
     tokio::task::spawn_blocking(move || {
+        // What to do after inspecting the maps under one lock hold.
+        enum AttachStep {
+            WaitDrain(Arc<ConnectionClosed>),
+            WaitGate(Arc<ConnectionClosed>),
+            Handshake(Arc<ConnectionClosed>),
+        }
+
         let mut drain_waits = 0;
+        let mut gate_waits = 0;
         let mut handshake_retries = 0;
         'attach: loop {
-            // Join an existing session or wait out draining connections,
-            // looping because both maps can change while this thread waits
-            // without the lock: a session attached during the wait must be
-            // joined, and a *newer* draining connection installed during the
-            // wait must also be drained before attaching, or the fresh attach
-            // races its teardown and the daemon rejects it as a second
-            // concurrent client.
-            loop {
-                let draining = {
-                    let sessions = state.terminal_sessions.lock().map_err(|_| {
-                        BridgeError::Protocol("terminal session lock poisoned".to_string())
-                    })?;
-                    if let Some(session) = sessions.active.get(&terminal_id) {
-                        session.client_count.fetch_add(1, Ordering::AcqRel);
-                        return Ok(session.clone());
-                    }
-                    sessions.draining.get(&terminal_id).cloned()
-                };
-                let Some(draining) = draining else {
-                    break;
-                };
-                if drain_waits >= MAX_TERMINAL_DETACH_DRAIN_WAITS {
-                    warn!(
-                        terminal_id = %terminal_id,
-                        "reattaching despite pending detach teardown after repeated drain waits"
-                    );
-                    break;
-                }
-                drain_waits += 1;
-                if !draining.wait_closed(TERMINAL_DETACH_DRAIN_TIMEOUT) {
-                    warn!(
-                        terminal_id = %terminal_id,
-                        "timed out waiting for detached terminal connection to close"
-                    );
-                }
+            // All maps can change while this thread waits without the lock, so
+            // every wait loops back here: a session attached meanwhile must be
+            // joined, another thread's in-flight handshake must be awaited
+            // (two concurrent fresh attaches make the daemon reject one — it
+            // races whichever the map keeps), and a draining connection must
+            // finish tearing down before a fresh attach, or the daemon rejects
+            // it as a second concurrent client.
+            let step = {
                 let mut sessions = state.terminal_sessions.lock().map_err(|_| {
                     BridgeError::Protocol("terminal session lock poisoned".to_string())
                 })?;
-                if sessions
-                    .draining
-                    .get(&terminal_id)
-                    .is_some_and(|entry| Arc::ptr_eq(entry, &draining))
-                {
-                    sessions.draining.remove(&terminal_id);
+                if let Some(session) = sessions.active.get(&terminal_id) {
+                    session.client_count.fetch_add(1, Ordering::AcqRel);
+                    return Ok(session.clone());
                 }
-            }
-
-            // Perform the daemon handshake without holding the map lock so a
-            // stalled daemon cannot wedge every other terminal client.
-            let protocol_version = terminal_attach_protocol(&state.api)?;
-            let (output_tx, _) = tokio::sync::broadcast::channel(256);
-            let attach = open_terminal_attach(
-                state.client_socket_path.clone(),
-                terminal_id.clone(),
-                cols,
-                rows,
-                takeover,
-                protocol_version,
-                output_tx.clone(),
-            )?;
-            let session = SharedTerminalSession {
-                write_tx: attach.write_tx,
-                output_tx,
-                client_count: Arc::new(AtomicUsize::new(0)),
-                connection_closed: attach.connection_closed,
+                if let Some(gate) = sessions.attaching.get(&terminal_id) {
+                    if gate_waits < MAX_TERMINAL_DETACH_DRAIN_WAITS {
+                        AttachStep::WaitGate(gate.clone())
+                    } else {
+                        // Progress guard: handshake anyway, without claiming
+                        // the gate another thread still holds.
+                        warn!(
+                            terminal_id = %terminal_id,
+                            "attaching despite a stuck concurrent attach handshake"
+                        );
+                        AttachStep::Handshake(Arc::new(ConnectionClosed::default()))
+                    }
+                } else if let Some(draining) = sessions.draining.get(&terminal_id) {
+                    if drain_waits < MAX_TERMINAL_DETACH_DRAIN_WAITS {
+                        AttachStep::WaitDrain(draining.clone())
+                    } else {
+                        warn!(
+                            terminal_id = %terminal_id,
+                            "reattaching despite pending detach teardown after repeated drain waits"
+                        );
+                        let gate = Arc::new(ConnectionClosed::default());
+                        sessions.attaching.insert(terminal_id.clone(), gate.clone());
+                        AttachStep::Handshake(gate)
+                    }
+                } else {
+                    let gate = Arc::new(ConnectionClosed::default());
+                    sessions.attaching.insert(terminal_id.clone(), gate.clone());
+                    AttachStep::Handshake(gate)
+                }
             };
 
-            let mut sessions = state
-                .terminal_sessions
-                .lock()
-                .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
+            let gate = match step {
+                AttachStep::WaitGate(gate) => {
+                    gate_waits += 1;
+                    if !gate.wait_closed(TERMINAL_ATTACH_GATE_TIMEOUT) {
+                        warn!(
+                            terminal_id = %terminal_id,
+                            "timed out waiting for a concurrent terminal attach handshake"
+                        );
+                    }
+                    continue 'attach;
+                }
+                AttachStep::WaitDrain(draining) => {
+                    drain_waits += 1;
+                    if !draining.wait_closed(TERMINAL_DETACH_DRAIN_TIMEOUT) {
+                        warn!(
+                            terminal_id = %terminal_id,
+                            "timed out waiting for detached terminal connection to close"
+                        );
+                    }
+                    let mut sessions = state.terminal_sessions.lock().map_err(|_| {
+                        BridgeError::Protocol("terminal session lock poisoned".to_string())
+                    })?;
+                    if sessions
+                        .draining
+                        .get(&terminal_id)
+                        .is_some_and(|entry| Arc::ptr_eq(entry, &draining))
+                    {
+                        sessions.draining.remove(&terminal_id);
+                    }
+                    continue 'attach;
+                }
+                AttachStep::Handshake(gate) => gate,
+            };
+
+            // Perform the daemon handshake without holding the map lock so a
+            // stalled daemon cannot wedge every other terminal client. The
+            // gate keeps concurrent acquires for this terminal waiting; they
+            // join the published session once it opens.
+            let handshake = || -> Result<SharedTerminalSession, BridgeError> {
+                let protocol_version = terminal_attach_protocol(&state.api)?;
+                let (output_tx, _) = tokio::sync::broadcast::channel(256);
+                let attach = open_terminal_attach(
+                    state.client_socket_path.clone(),
+                    terminal_id.clone(),
+                    cols,
+                    rows,
+                    takeover,
+                    protocol_version,
+                    output_tx.clone(),
+                )?;
+                Ok(SharedTerminalSession {
+                    write_tx: attach.write_tx,
+                    output_tx,
+                    client_count: Arc::new(AtomicUsize::new(0)),
+                    connection_closed: attach.connection_closed,
+                })
+            };
+            let session = match handshake() {
+                Ok(session) => session,
+                Err(err) => {
+                    release_attach_gate(&state.terminal_sessions, &terminal_id, &gate);
+                    return Err(err);
+                }
+            };
+
+            let Ok(mut sessions) = state.terminal_sessions.lock() else {
+                let _ = session.write_tx.send(ClientMessage::Detach);
+                gate.mark_closed();
+                return Err(BridgeError::Protocol(
+                    "terminal session lock poisoned".to_string(),
+                ));
+            };
             if let Some(existing) = sessions.active.get(&terminal_id) {
-                // Another connection attached while we were handshaking; keep
-                // the established session and detach the redundant one.
+                // Safety net: only reachable via the stuck-gate fallback.
+                // Keep the established session and detach the redundant one.
                 existing.client_count.fetch_add(1, Ordering::AcqRel);
                 let existing = existing.clone();
+                drop(sessions);
                 let _ = session.write_tx.send(ClientMessage::Detach);
+                release_attach_gate(&state.terminal_sessions, &terminal_id, &gate);
                 return Ok(existing);
             }
             if sessions.draining.contains_key(&terminal_id) {
                 // A connection attached and began detaching while we were
-                // handshaking, so the daemon may have rejected our attach as
-                // a second concurrent client. Never publish the possibly dead
-                // session: retry from the drain wait, and once the retry
-                // budget is spent fail with a reason the web client treats
-                // as retryable, handing pacing back to its backoff.
+                // handshaking (only possible via the stuck-gate fallback), so
+                // the daemon may have rejected our attach as a second
+                // concurrent client. Never publish the possibly dead session:
+                // retry, and once the retry budget is spent fail with a reason
+                // the web client treats as retryable.
                 drop(sessions);
                 let _ = session.write_tx.send(ClientMessage::Detach);
+                release_attach_gate(&state.terminal_sessions, &terminal_id, &gate);
                 if handshake_retries < MAX_ATTACH_HANDSHAKE_RETRIES {
                     handshake_retries += 1;
                     continue 'attach;
@@ -2776,7 +2840,9 @@ async fn acquire_terminal_session(
                 ));
             }
             session.client_count.fetch_add(1, Ordering::AcqRel);
-            sessions.active.insert(terminal_id, session.clone());
+            sessions.active.insert(terminal_id.clone(), session.clone());
+            drop(sessions);
+            release_attach_gate(&state.terminal_sessions, &terminal_id, &gate);
             return Ok(session);
         }
     })
@@ -2807,6 +2873,25 @@ fn release_terminal_session(
         sessions.active.remove(terminal_id);
         remember_draining_connection(&mut sessions, terminal_id, session);
     }
+}
+
+/// Releases a terminal's attach-handshake gate and wakes its waiters, who
+/// re-check the maps and normally join the session the handshake published.
+fn release_attach_gate(
+    sessions: &Mutex<TerminalSessions>,
+    terminal_id: &str,
+    gate: &Arc<ConnectionClosed>,
+) {
+    if let Ok(mut sessions) = sessions.lock() {
+        if sessions
+            .attaching
+            .get(terminal_id)
+            .is_some_and(|entry| Arc::ptr_eq(entry, gate))
+        {
+            sessions.attaching.remove(terminal_id);
+        }
+    }
+    gate.mark_closed();
 }
 
 /// Records a detached connection so a quick reattach waits for the daemon to
@@ -3320,7 +3405,7 @@ fn open_terminal_attach(
     protocol::write_message(
         &mut stream,
         &ClientMessage::AttachTerminal {
-            terminal_id,
+            terminal_id: terminal_id.clone(),
             takeover,
         },
     )
@@ -3376,9 +3461,16 @@ fn open_terminal_attach(
                     let _ = output_tx.send(TerminalOutput::Bytes(Bytes::from(frame.bytes)));
                 }
                 ServerMessage::ServerShutdown { reason } => {
-                    let _ = output_tx.send(TerminalOutput::Close(
-                        reason.unwrap_or_else(|| "server shutdown".to_string()),
-                    ));
+                    let reason = reason.unwrap_or_else(|| "server shutdown".to_string());
+                    // The daemon does not log these (attach rejections in
+                    // particular), so this is the only record of why an
+                    // attach connection was closed from the daemon side.
+                    warn!(
+                        terminal_id = %terminal_id,
+                        reason = %reason,
+                        "terminal attach connection closed by daemon"
+                    );
+                    let _ = output_tx.send(TerminalOutput::Close(reason));
                     break;
                 }
                 ServerMessage::Welcome { .. } => {}
@@ -3875,6 +3967,27 @@ mod tests {
         let map = sessions.lock().unwrap();
         assert!(map.active.is_empty());
         assert!(map.draining.is_empty());
+    }
+
+    #[test]
+    fn attach_gate_release_removes_only_matching_gate_and_wakes_waiters() {
+        let sessions = Mutex::new(TerminalSessions::default());
+        let gate = Arc::new(ConnectionClosed::default());
+        let other = Arc::new(ConnectionClosed::default());
+        sessions
+            .lock()
+            .unwrap()
+            .attaching
+            .insert("term-1".to_string(), gate.clone());
+
+        // Releasing a non-matching gate signals it but leaves the entry.
+        release_attach_gate(&sessions, "term-1", &other);
+        assert!(other.is_closed());
+        assert!(sessions.lock().unwrap().attaching.contains_key("term-1"));
+
+        release_attach_gate(&sessions, "term-1", &gate);
+        assert!(gate.is_closed());
+        assert!(sessions.lock().unwrap().attaching.is_empty());
     }
 
     #[test]

@@ -17,6 +17,8 @@ import { addNativeResumeHandler } from "./native";
 import { shellQuote } from "./shell";
 import {
   isNonRetryableTerminalClose,
+  isTerminalAttachConflictClose,
+  MAX_TERMINAL_ATTACH_CONFLICT_RETRIES,
   parseTerminalCloseReason,
   terminalConnectionCopy,
   terminalConnectionOverlayDelayMs,
@@ -621,6 +623,7 @@ export function TerminalView({
     let foregroundCoalesceTimer: number | null = null;
     let reconnectAttempts = 0;
     let foregroundFastAttemptsRemaining = 0;
+    let attachConflictRetries = 0;
     let lastCloseReason: string | null = null;
     let socketGeneration = 0;
     let socketStartedAt = 0;
@@ -747,10 +750,14 @@ export function TerminalView({
           return;
         }
         if (event.data instanceof ArrayBuffer) {
+          // Terminal output only flows after a successful daemon attach, so
+          // a transient attach-conflict streak is over.
+          attachConflictRetries = 0;
           writeTerminalData(currentSocketGeneration, new Uint8Array(event.data));
           return;
         }
         if (event.data instanceof Blob) {
+          attachConflictRetries = 0;
           void event.data.arrayBuffer().then((buffer) => {
             writeTerminalData(currentSocketGeneration, new Uint8Array(buffer));
           });
@@ -767,6 +774,18 @@ export function TerminalView({
         socket = null;
         if (lastCloseReason) {
           console.warn("terminal websocket closed", lastCloseReason);
+        }
+        if (
+          isTerminalAttachConflictClose(lastCloseReason) &&
+          attachConflictRetries < MAX_TERMINAL_ATTACH_CONFLICT_RETRIES
+        ) {
+          // Usually a bridge restart or reattach racing the daemon's cleanup
+          // of the previous connection; retry briefly before concluding a
+          // genuine external client holds the attach.
+          attachConflictRetries += 1;
+          debugReconnect("attach-conflict-retry", { attempt: attachConflictRetries });
+          scheduleSocketReconnect("close", currentSocketGeneration);
+          return;
         }
         if (isNonRetryableTerminalClose(lastCloseReason)) {
           reconnectStopped = true;

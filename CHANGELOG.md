@@ -18,6 +18,12 @@
 - Stopped detached terminal attach connections from leaking a blocked reader thread and an open
   socket on both the bridge and daemon sides after every pane switch.
   [PR #26](https://github.com/kcosr/herdr-web/pull/26)
+- Serialized concurrent first attaches per terminal in the bridge and made the web client briefly
+  retry `already has an attached client` rejections, so multiple viewers reconnecting at once
+  (for example after a bridge restart) no longer strand a terminal on a permanent
+  `Attached elsewhere` error. The bridge also now logs daemon-initiated attach connection closes,
+  which were previously recorded nowhere.
+  [PR #26](https://github.com/kcosr/herdr-web/pull/26)
 
 ### Removed
 
