@@ -61,6 +61,7 @@ const MAX_NOTES_REQUEST_BYTES: usize = 512 * 1024;
 const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
 const MAX_QUEUED_TERMINAL_INPUT_BYTES: usize = 8 * 1024 * 1024;
 const TERMINAL_DETACH_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_TERMINAL_DETACH_DRAIN_WAITS: usize = 4;
 const DEFAULT_TERMINAL_OUTPUT_COALESCE_MS: u64 = 16;
 const MAX_TERMINAL_OUTPUT_COALESCE_MS: u64 = 256;
 const TERMINAL_OUTPUT_COALESCE_MAX_BYTES: usize = 32 * 1024;
@@ -2668,25 +2669,35 @@ async fn acquire_terminal_session(
     takeover: bool,
 ) -> Result<SharedTerminalSession, BridgeError> {
     tokio::task::spawn_blocking(move || {
-        // Fast path: join an existing session, counting the client while the
-        // map lock is held so a concurrent release cannot detach it first.
-        let draining = {
-            let sessions = state
-                .terminal_sessions
-                .lock()
-                .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
-            if let Some(session) = sessions.active.get(&terminal_id) {
-                session.client_count.fetch_add(1, Ordering::AcqRel);
-                return Ok(session.clone());
+        // Join an existing session or wait out draining connections, looping
+        // because both maps can change while this thread waits without the
+        // lock: a session attached during the wait must be joined, and a
+        // *newer* draining connection installed during the wait must also be
+        // drained before attaching, or the fresh attach races its teardown
+        // and the daemon rejects it as a second concurrent client.
+        let mut drain_waits = 0;
+        loop {
+            let draining = {
+                let sessions = state.terminal_sessions.lock().map_err(|_| {
+                    BridgeError::Protocol("terminal session lock poisoned".to_string())
+                })?;
+                if let Some(session) = sessions.active.get(&terminal_id) {
+                    session.client_count.fetch_add(1, Ordering::AcqRel);
+                    return Ok(session.clone());
+                }
+                sessions.draining.get(&terminal_id).cloned()
+            };
+            let Some(draining) = draining else {
+                break;
+            };
+            if drain_waits >= MAX_TERMINAL_DETACH_DRAIN_WAITS {
+                warn!(
+                    terminal_id = %terminal_id,
+                    "reattaching despite pending detach teardown after repeated drain waits"
+                );
+                break;
             }
-            sessions.draining.get(&terminal_id).cloned()
-        };
-
-        // A previous attach for this terminal is still tearing down. Wait
-        // for its connection to close before attaching again, otherwise the
-        // daemon may still count the old connection as the attach owner and
-        // reject the new attach as a second concurrent client.
-        if let Some(draining) = draining {
+            drain_waits += 1;
             if !draining.wait_closed(TERMINAL_DETACH_DRAIN_TIMEOUT) {
                 warn!(
                     terminal_id = %terminal_id,
@@ -2703,11 +2714,6 @@ async fn acquire_terminal_session(
                 .is_some_and(|entry| Arc::ptr_eq(entry, &draining))
             {
                 sessions.draining.remove(&terminal_id);
-            }
-            // Another connection may have attached while we waited.
-            if let Some(session) = sessions.active.get(&terminal_id) {
-                session.client_count.fetch_add(1, Ordering::AcqRel);
-                return Ok(session.clone());
             }
         }
 
