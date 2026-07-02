@@ -1077,6 +1077,7 @@ function DraftNumberInput({
   onCommit: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
+  const skipDraftBlurCommitRef = useRef(false);
 
   useEffect(() => {
     setDraft(String(value));
@@ -1085,7 +1086,9 @@ function DraftNumberInput({
   const commit = () => {
     const next = Number(draft);
     if (Number.isFinite(next)) {
-      onCommit(next);
+      const clamped = Math.min(max, Math.max(min, next));
+      setDraft(String(clamped));
+      onCommit(clamped);
       return;
     }
     setDraft(String(value));
@@ -1102,11 +1105,22 @@ function DraftNumberInput({
       aria-label={ariaLabel}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => setDraft(event.currentTarget.value)}
-      onBlur={commit}
+      onBlur={() => {
+        if (skipDraftBlurCommitRef.current) {
+          skipDraftBlurCommitRef.current = false;
+          return;
+        }
+        commit();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
           event.currentTarget.blur();
         } else if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          skipDraftBlurCommitRef.current = true;
           setDraft(String(value));
           event.currentTarget.blur();
         }

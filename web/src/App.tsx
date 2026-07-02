@@ -948,24 +948,24 @@ export function App() {
         }
         return true;
       }
-      if (notesPanelOpen) {
-        setNotesPanelOpen(false);
-        return true;
-      }
-      if (backendSettingsOpen) {
-        setBackendSettingsOpen(false);
-        return true;
-      }
-      if (launchTarget) {
-        setLaunchTarget(null);
+      if (menu) {
+        setMenu(null);
         return true;
       }
       if (dialog) {
         setDialog(null);
         return true;
       }
-      if (menu) {
-        setMenu(null);
+      if (launchTarget) {
+        setLaunchTarget(null);
+        return true;
+      }
+      if (backendSettingsOpen) {
+        setBackendSettingsOpen(false);
+        return true;
+      }
+      if (notesPanelOpen) {
+        setNotesPanelOpen(false);
         return true;
       }
       return false;
@@ -1221,7 +1221,14 @@ export function App() {
     }
     const restoredPaneId = selectedPanesByBridgeId[selectedRuntime.id] ?? null;
     const nextPaneId = chooseSelectedPane(snapshot, restoredPaneId);
-    setSelectedPaneRefState(nextPaneId ? { bridgeId: selectedRuntime.id, paneId: nextPaneId } : null);
+    setSelectedPaneRefState((current) => {
+      if (!nextPaneId) {
+        return current === null ? current : null;
+      }
+      return current?.bridgeId === selectedRuntime.id && current.paneId === nextPaneId
+        ? current
+        : { bridgeId: selectedRuntime.id, paneId: nextPaneId };
+    });
     if (nextPaneId) {
       setSelectedPanesByBridgeId((current) =>
         current[selectedRuntime.id] === nextPaneId
@@ -1230,10 +1237,11 @@ export function App() {
       );
       const pane = snapshot?.panes.find((item) => item.pane_id === nextPaneId);
       if (pane) {
-        setActiveWorkspaceRefState({
-          bridgeId: selectedRuntime.id,
-          workspaceId: pane.workspace_id,
-        });
+        setActiveWorkspaceRefState((current) =>
+          current?.bridgeId === selectedRuntime.id && current.workspaceId === pane.workspace_id
+            ? current
+            : { bridgeId: selectedRuntime.id, workspaceId: pane.workspace_id },
+        );
         setActiveWorkspacesByBridgeId((current) =>
           current[selectedRuntime.id] === pane.workspace_id
             ? current
@@ -1243,11 +1251,14 @@ export function App() {
       return;
     }
     const restoredWorkspaceId = activeWorkspacesByBridgeId[selectedRuntime.id];
-    setActiveWorkspaceRefState(
-      restoredWorkspaceId
-        ? { bridgeId: selectedRuntime.id, workspaceId: restoredWorkspaceId }
-        : null,
-    );
+    setActiveWorkspaceRefState((current) => {
+      if (!restoredWorkspaceId) {
+        return current === null ? current : null;
+      }
+      return current?.bridgeId === selectedRuntime.id && current.workspaceId === restoredWorkspaceId
+        ? current
+        : { bridgeId: selectedRuntime.id, workspaceId: restoredWorkspaceId };
+    });
   }, [
     activeWorkspacesByBridgeId,
     selectedPanesByBridgeId,
@@ -1632,7 +1643,9 @@ export function App() {
     selectedRuntime && notesStates[selectedRuntime.id]?.connectionKey === selectedRuntime.connectionKey
       ? notesStates[selectedRuntime.id]
       : null;
-  const selectedBridgeNotes = notesEnabled ? selectedNotesState?.response?.notes ?? [] : [];
+  const selectedBridgeNotes = notesEnabled
+    ? selectedNotesState?.response?.notes ?? EMPTY_PANE_NOTES
+    : EMPTY_PANE_NOTES;
   const selectedPaneNotes = useMemo(
     () => notesForPane(selectedBridgeNotes, selectedPane?.pane_id),
     [selectedBridgeNotes, selectedPane?.pane_id],
@@ -1646,7 +1659,9 @@ export function App() {
     const paneChanged = selectedNotePaneKeyRef.current !== selectedPaneKey;
     selectedNotePaneKeyRef.current = selectedPaneKey;
     if (!selectedPaneKey || !selectedRuntimeId) {
-      setSelectedNoteRef(null);
+      if (paneChanged) {
+        setSelectedNoteRef(null);
+      }
       return;
     }
     setSelectedNoteRef((current) => {
@@ -4110,6 +4125,7 @@ export function activeWorkspaceForBridgeView(
   );
 }
 
+const EMPTY_PANE_NOTES: PaneNote[] = [];
 const EMPTY_AGENT_PIN_KEYS = new Set<string>();
 const EMPTY_AGENT_ACTIVITY_TRANSITIONS = new Map<string, number>();
 

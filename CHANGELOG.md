@@ -36,6 +36,19 @@
 
 ### Fixed
 
+- Kept the selected note open while no pane is selected, so notes no longer deselect mid-edit when
+  a bridge disconnects, has zero panes, or a notes refresh lands.
+- Made Escape in settings number fields discard the typed value instead of committing it, and stop
+  it from closing the whole settings dialog; out-of-range numbers now snap back to the clamped
+  value in the field.
+- Reordered Android hardware-back handling so open menus and dialogs close before the notes panel
+  underneath them.
+- Made Escape cancel the rename dialog from any focused control, not just the text input.
+- Extended long-press text-selection prevention to the stage header pane title.
+- Restored the intended drop shadow and muted URL color on the terminal selection sheet, which
+  referenced undefined CSS variables.
+- Validated agent-pins responses at the fetch boundary so a malformed bridge response degrades
+  gracefully instead of crashing the sidebar render.
 - Prevented sidebar row labels and terminal tab labels from being text-selected during long-press
   context-menu gestures.
 - Added Mobile settings for an expanding terminal command input and Enter-as-newline

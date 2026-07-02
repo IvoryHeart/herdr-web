@@ -72,7 +72,65 @@ async function parseAgentPinsResponse(response: Response) {
   if (!response.ok) {
     throw await agentPinsApiError(response);
   }
-  return (await response.json()) as AgentPinsListResponse;
+  return parseAgentPinsListResponse(await response.json());
+}
+
+export function parseAgentPinsListResponse(value: unknown): AgentPinsListResponse {
+  if (!isRecord(value) || typeof value.session_key !== "string" || !Array.isArray(value.pins)) {
+    throw new Error("agent pins response is invalid");
+  }
+  return {
+    session_key: value.session_key,
+    pins: value.pins.map(parseAgentPin),
+  };
+}
+
+function parseAgentPin(value: unknown): AgentPin {
+  if (
+    !isRecord(value) ||
+    typeof value.pane_id !== "string" ||
+    typeof value.terminal_id !== "string" ||
+    typeof value.workspace_id !== "string" ||
+    typeof value.tab_id !== "string" ||
+    typeof value.created_at !== "string"
+  ) {
+    throw new Error("agent pin record is invalid");
+  }
+  return {
+    pane_id: value.pane_id,
+    terminal_id: value.terminal_id,
+    workspace_id: value.workspace_id,
+    tab_id: value.tab_id,
+    created_at: value.created_at,
+    context: parseAgentPinContext(value.context),
+  };
+}
+
+const agentPinContextFields = [
+  "pane_label",
+  "pane_title",
+  "agent",
+  "display_agent",
+  "cwd",
+  "foreground_cwd",
+] as const;
+
+function parseAgentPinContext(value: unknown): AgentPinContext {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const context: AgentPinContext = {};
+  for (const field of agentPinContextFields) {
+    const fieldValue = value[field];
+    if (typeof fieldValue === "string") {
+      context[field] = fieldValue;
+    }
+  }
+  return context;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function agentPinsApiError(response: Response) {

@@ -16,14 +16,16 @@ export default function NoteMarkdownPreview({ body }: NoteMarkdownPreviewProps) 
       remarkPlugins={[remarkGfm]}
       urlTransform={safeMarkdownUrl}
       components={{
-        a: ({ children, href, ...props }) =>
-          href ? (
+        a: ({ node, children, href, ...props }) => {
+          void node;
+          return href ? (
             <a {...props} href={href} target="_blank" rel="noopener noreferrer">
               {children}
             </a>
           ) : (
             <span>{children}</span>
-          ),
+          );
+        },
       }}
     >
       {body}
