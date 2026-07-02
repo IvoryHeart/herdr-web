@@ -36,7 +36,7 @@
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view. [PR #23](https://github.com/kcosr/herdr-web/pull/23)
 - Notes created from the notes panel now open in Edit mode with the title selected, so the default
-  title can be replaced immediately.
+  title can be replaced immediately. [PR #24](https://github.com/kcosr/herdr-web/pull/24)
 
 ### Fixed
 
@@ -90,7 +90,7 @@
   gracefully instead of crashing the sidebar render.
   [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Prevented sidebar row labels and terminal tab labels from being text-selected during long-press
-  context-menu gestures.
+  context-menu gestures. [PR #24](https://github.com/kcosr/herdr-web/pull/24)
 - Fixed notes editor selection and autosave edge cases so switching to panes without notes clears
   the editor, deleting the selected note no longer shows a deleted note, and stale local save
   refreshes do not appear as external note changes. Also fixed mobile delete-dialog back handling
