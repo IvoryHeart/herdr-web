@@ -70,6 +70,13 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
   }
 
   compare_wire_body() {
+    local wire_file
+    for wire_file in "$HERDR_SRC/src/protocol/wire.rs" "$COMPAT/src/protocol/wire.rs"; do
+      if ! grep -q '^use std::collections::HashMap;' "$wire_file"; then
+        echo "wire.rs anchor line missing in $wire_file; update compare_wire_body" >&2
+        exit 1
+      fi
+    done
     if ! diff -q \
       <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$HERDR_SRC/src/protocol/wire.rs") \
       <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$COMPAT/src/protocol/wire.rs") \
