@@ -26,6 +26,11 @@ describe("terminalConnectionStatus", () => {
     expect(isNonRetryableTerminalClose("terminal attach failed: terminal abc missing")).toBe(true);
     expect(isNonRetryableTerminalClose("temporary network close")).toBe(false);
     expect(isNonRetryableTerminalClose(null)).toBe(false);
+    // The bridge emits this when an attach loses to sustained detach churn;
+    // it must stay retryable so the client's backoff resolves it.
+    expect(
+      isNonRetryableTerminalClose("terminal attach conflicted with a pending detach; retry shortly"),
+    ).toBe(false);
   });
 
   it("maps terminal connection states to status copy", () => {

@@ -2754,17 +2754,26 @@ async fn acquire_terminal_session(
                 let _ = session.write_tx.send(ClientMessage::Detach);
                 return Ok(existing);
             }
-            if sessions.draining.contains_key(&terminal_id)
-                && handshake_retries < MAX_ATTACH_HANDSHAKE_RETRIES
-            {
+            if sessions.draining.contains_key(&terminal_id) {
                 // A connection attached and began detaching while we were
                 // handshaking, so the daemon may have rejected our attach as
-                // a second concurrent client. Tear ours down and start over
-                // rather than publishing a possibly dead session.
+                // a second concurrent client. Never publish the possibly dead
+                // session: retry from the drain wait, and once the retry
+                // budget is spent fail with a reason the web client treats
+                // as retryable, handing pacing back to its backoff.
                 drop(sessions);
                 let _ = session.write_tx.send(ClientMessage::Detach);
-                handshake_retries += 1;
-                continue 'attach;
+                if handshake_retries < MAX_ATTACH_HANDSHAKE_RETRIES {
+                    handshake_retries += 1;
+                    continue 'attach;
+                }
+                warn!(
+                    terminal_id = %terminal_id,
+                    "giving up terminal attach amid sustained detach churn"
+                );
+                return Err(BridgeError::Protocol(
+                    "terminal attach conflicted with a pending detach; retry shortly".to_string(),
+                ));
             }
             session.client_count.fetch_add(1, Ordering::AcqRel);
             sessions.active.insert(terminal_id, session.clone());
