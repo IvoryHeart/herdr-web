@@ -32,9 +32,9 @@ This is a lightweight internal onboarding note for agents working in this repo.
 - Run `npm run lint:web` for ESLint.
 - Run `npm run test:web` for Vitest.
 - Run `npm run build:web` for the frontend production build.
-- Run `npm run bridge:test` for bridge unit tests when Zig is available.
+- Run `npm run bridge:test` for bridge unit tests when a Rust toolchain (cargo) is available.
 - Run `npm run check` before committing or releasing.
-- If Zig is missing, call out that bridge build/test verification could not run.
+- If cargo/Rust is missing, call out that bridge build/test verification could not run.
 
 ## Build And Packaging
 

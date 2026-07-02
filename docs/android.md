@@ -45,7 +45,7 @@ The web app validates backend URLs before saving them:
 
 - accepted URLs must be origin-style HTTP or HTTPS URLs;
 - credentials, paths, query strings, and fragments are rejected;
-- HTTP URLs to public IP literals are rejected;
+- HTTP and HTTPS URLs may use any valid hostname or IP literal;
 - hostnames are syntax-validated in the app and still must be accepted by the bridge Host policy.
 
 The Android WebView app origin is `http://localhost`. A LAN bridge must allow that origin before
@@ -189,7 +189,8 @@ On a trusted LAN:
 4. Open Settings and select the Bridge area.
 5. Add a backend such as `http://192.168.1.20:4000`.
 6. Use `Test` and confirm it reports reachable.
-7. Use `Save & enable` and confirm the bridge chip appears in the sidebar.
+7. Use `Save`, enable the saved bridge with its Enable toggle, and confirm the bridge chip appears
+   in the sidebar.
 8. Confirm snapshot, event updates, terminal attach, text input, stage-only input, uploads, and pane controls work.
 9. Open the Terminal area, change input transport and batching delay, and confirm terminal input
    still works.
