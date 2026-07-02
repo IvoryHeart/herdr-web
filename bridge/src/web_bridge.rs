@@ -546,18 +546,20 @@ impl TerminalWriter {
         self.tx.send(message)
     }
 
-    fn send_input(&self, data: Vec<u8>) -> Result<(), String> {
-        let len = data.len();
+    /// Reserve queue budget for a whole input frame before any of its chunks
+    /// are enqueued, so an oversized frame is rejected atomically instead of
+    /// delivering truncated input to the pty.
+    fn reserve_input_bytes(&self, len: usize) -> Result<(), String> {
         let queued = self.queued_input_bytes.fetch_add(len, Ordering::AcqRel);
         if queued + len > MAX_QUEUED_TERMINAL_INPUT_BYTES {
             self.queued_input_bytes.fetch_sub(len, Ordering::AcqRel);
             return Err("terminal input backlog exceeded".to_string());
         }
-        if self.tx.send(ClientMessage::Input { data }).is_err() {
-            self.queued_input_bytes.fetch_sub(len, Ordering::AcqRel);
-            return Err("terminal writer closed".to_string());
-        }
         Ok(())
+    }
+
+    fn release_input_bytes(&self, len: usize) {
+        self.queued_input_bytes.fetch_sub(len, Ordering::AcqRel);
     }
 }
 
@@ -3046,8 +3048,14 @@ fn send_terminal_input_chunks(
     write_tx: &TerminalWriter,
     data: &[u8],
 ) -> Result<TerminalInputChunkStats, String> {
+    write_tx.reserve_input_bytes(data.len())?;
     if data.is_empty() {
-        write_tx.send_input(Vec::new())?;
+        if write_tx
+            .send(ClientMessage::Input { data: Vec::new() })
+            .is_err()
+        {
+            return Err("terminal writer closed".to_string());
+        }
         return Ok(TerminalInputChunkStats {
             chunks: 1,
             max_chunk_bytes: 0,
@@ -3058,10 +3066,20 @@ fn send_terminal_input_chunks(
         chunks: 0,
         max_chunk_bytes: 0,
     };
+    let mut sent_bytes = 0usize;
     for chunk in data.chunks(MAX_TERMINAL_INPUT_CHUNK_BYTES) {
         stats.chunks += 1;
         stats.max_chunk_bytes = stats.max_chunk_bytes.max(chunk.len());
-        write_tx.send_input(chunk.to_vec())?;
+        if write_tx
+            .send(ClientMessage::Input {
+                data: chunk.to_vec(),
+            })
+            .is_err()
+        {
+            write_tx.release_input_bytes(data.len() - sent_bytes);
+            return Err("terminal writer closed".to_string());
+        }
+        sent_bytes += chunk.len();
     }
     Ok(stats)
 }
@@ -3607,12 +3625,25 @@ mod tests {
     }
 
     #[test]
-    fn rejects_terminal_input_over_queue_budget() {
+    fn rejects_oversized_terminal_input_frame_atomically() {
         let (tx, rx) = test_terminal_writer();
         let data = vec![b'x'; MAX_QUEUED_TERMINAL_INPUT_BYTES + 1];
 
-        // Nothing drains the queue, so the final chunk must be refused.
+        // The frame exceeds the whole budget: no chunk may reach the pty.
         assert!(send_terminal_input_chunks(&tx, &data).is_err());
+        assert_eq!(rx.try_iter().count(), 0);
+    }
+
+    #[test]
+    fn rejects_terminal_input_frame_exceeding_remaining_budget_atomically() {
+        let (tx, rx) = test_terminal_writer();
+        let first = vec![b'x'; MAX_QUEUED_TERMINAL_INPUT_BYTES - 1024];
+        let second = vec![b'y'; 4096];
+
+        // Nothing drains the queue, so the second frame must be refused
+        // whole even though part of it would still fit.
+        assert!(send_terminal_input_chunks(&tx, &first).is_ok());
+        assert!(send_terminal_input_chunks(&tx, &second).is_err());
         let queued: usize = rx
             .try_iter()
             .map(|message| match message {
@@ -3620,7 +3651,7 @@ mod tests {
                 other => panic!("unexpected terminal message: {other:?}"),
             })
             .sum();
-        assert!(queued <= MAX_QUEUED_TERMINAL_INPUT_BYTES);
+        assert_eq!(queued, first.len());
     }
 
     #[test]
