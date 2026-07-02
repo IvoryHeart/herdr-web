@@ -75,7 +75,7 @@ function readChangelogForRelease() {
   if (!unreleased) {
     fail("CHANGELOG.md is missing an Unreleased section");
   }
-  if (!unreleased[1].trim()) {
+  if (!removeEmptyChangelogSubsections(unreleased[1]).trim()) {
     fail("CHANGELOG.md has no release notes under Unreleased");
   }
   return changelog;
@@ -138,16 +138,17 @@ function escapeRegex(value) {
 try {
   validatePreflight();
   const changelog = readChangelogForRelease();
-  const released = stampChangelog(changelog);
 
   run("npm", ["run", "check"]);
+
+  const released = stampChangelog(changelog);
+  writeFileSync(notesFile, extractReleaseNotes(released));
 
   run("git", ["add", "CHANGELOG.md"]);
   run("git", ["commit", "-m", `Release ${tag}`]);
   run("git", ["tag", tag]);
   run("git", ["push", "--atomic", "origin", RELEASE_BRANCH, tag]);
 
-  writeFileSync(notesFile, extractReleaseNotes(released));
   run("gh", ["release", "create", tag, "--notes-file", notesFile]);
 
   openNextUnreleased(released);

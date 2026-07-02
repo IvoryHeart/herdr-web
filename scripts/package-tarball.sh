@@ -31,7 +31,7 @@ NAME="herdr-web-${VERSION}-${PLATFORM}"
 STAGE="$PKG_ROOT/$NAME"
 ARCHIVE="$PKG_ROOT/$NAME.tar.gz"
 
-npm run build:web
+npm --prefix "$ROOT" run build:web
 cargo build --release --manifest-path "$ROOT/bridge/Cargo.toml" --bin herdr-web-bridge
 
 rm -rf "$STAGE" "$ARCHIVE"

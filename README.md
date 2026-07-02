@@ -149,6 +149,8 @@ for HTTP/cleartext behavior, Android SDK setup, and APK verification notes.
 Settings are grouped by area:
 
 - Bridge: same-origin and saved bridge profiles, reachability testing, and bridge enablement.
+- Features: client feature toggles such as Notes.
+- Display: top/bottom app padding and mobile terminal controls size.
 - Terminal: browser-to-bridge terminal input transport and input batching delay.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 
@@ -255,6 +257,8 @@ The bridge exposes:
 - `POST /api/command`: allow-listed workspace/tab/pane commands
 - `POST /api/selection`: bridge-owned selected pane for syncing browser clients
 - `GET /api/notes` and `POST /api/notes...`: bridge-owned pane notes
+- `GET /api/agent-activity`: bridge-tracked agent status transition activity
+- `GET /api/agent-pins` and `POST /api/agent-pins/{pane_id}/pin|unpin`: bridge-owned agent pins
 - `POST /api/uploads`: save uploaded files into the configured upload directory
 - `GET /ws/activity`: bridge-owned pane activity deltas
 - `GET /ws/events`: Herdr structural events

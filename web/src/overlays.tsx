@@ -174,7 +174,15 @@ export function RenameDialog({
   return (
     <div className="overlay-root">
       <button className="overlay-scrim" type="button" aria-label="Cancel" onClick={onCancel} />
-      <form className="modal" onSubmit={submit}>
+      <form
+        className="modal"
+        onSubmit={submit}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onCancel();
+          }
+        }}
+      >
         <div className="modal-title">{title}</div>
         <input
           ref={inputRef}
@@ -184,11 +192,6 @@ export function RenameDialog({
           spellCheck={false}
           autoComplete="off"
           onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              onCancel();
-            }
-          }}
         />
         <div className="modal-actions">
           {onClear ? (

@@ -36,6 +36,9 @@ The app expects these bridge routes:
 - `/api/snapshot`
 - `/api/command`
 - `/api/selection`
+- `/api/notes` (and `/api/notes/{note_id}/...` actions)
+- `/api/agent-pins` (and `/api/agent-pins/{pane_id}/pin|unpin`)
+- `/api/agent-activity`
 - `/api/uploads`
 - `/ws/activity`
 - `/ws/events`

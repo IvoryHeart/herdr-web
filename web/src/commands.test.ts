@@ -3,7 +3,6 @@ import {
   commands,
   createCommands,
   createdPaneId,
-  probeSupportedCommands,
 } from "./commands";
 
 describe("command helpers", () => {
@@ -19,34 +18,21 @@ describe("command helpers", () => {
     expect(createdPaneId({})).toBeNull();
   });
 
-  it("returns supported command names from bridge capabilities", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ commands: ["pane.split", "pane.move", 42] }), {
-        status: 200,
-      }),
-    );
-
-    await expect(probeSupportedCommands()).resolves.toEqual(new Set(["pane.split", "pane.move"]));
-    expect(fetch).toHaveBeenCalledWith("/api/capabilities");
-  });
-
-  it("uses injected bridge URLs for commands and capability probes", async () => {
+  it("uses injected bridge URLs for commands", async () => {
     const httpUrl = (path: string) => `http://192.168.1.20:4000${path}`;
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ commands: ["pane.split"], type: "ok" }), {
+      new Response(JSON.stringify({ type: "ok" }), {
         status: 200,
       }),
     );
 
     await createCommands(httpUrl).closePane("pane-1");
-    await probeSupportedCommands(httpUrl);
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
       "http://192.168.1.20:4000/api/command",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(fetch).toHaveBeenNthCalledWith(2, "http://192.168.1.20:4000/api/capabilities");
   });
 
   it("creates launch tabs without a tab label and renames the root pane", async () => {

@@ -178,7 +178,7 @@ export function aggregateStatus(panes: PaneInfo[]): AgentStatus {
   return "unknown";
 }
 
-function basename(path?: string) {
+export function basename(path?: string) {
   if (!path) {
     return "";
   }

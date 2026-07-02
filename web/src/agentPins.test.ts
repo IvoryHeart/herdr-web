@@ -3,6 +3,8 @@ import {
   AgentPinsApiError,
   agentPinKey,
   agentPinKeys,
+  fetchAgentPins,
+  parseAgentPinsListResponse,
   pinAgent,
   supportsAgentPins,
 } from "./agentPins";
@@ -35,6 +37,58 @@ describe("agent pin helpers", () => {
         ],
       })],
     ).toEqual(["bridge-a:pane-a"]);
+  });
+
+  it("rejects malformed 200 responses at the fetch boundary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ session_key: "session:default", pins: "nope" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(fetchAgentPins((path) => `http://bridge${path}`)).rejects.toThrow(
+      "agent pins response is invalid",
+    );
+  });
+
+  it("validates pin records and tolerates missing context", () => {
+    expect(
+      parseAgentPinsListResponse({
+        session_key: "session:default",
+        pins: [
+          {
+            pane_id: "pane-a",
+            terminal_id: "terminal-a",
+            workspace_id: "workspace-a",
+            tab_id: "tab-a",
+            created_at: "100",
+            context: { pane_label: "build", ignored: 3 },
+          },
+        ],
+      }),
+    ).toEqual({
+      session_key: "session:default",
+      pins: [
+        {
+          pane_id: "pane-a",
+          terminal_id: "terminal-a",
+          workspace_id: "workspace-a",
+          tab_id: "tab-a",
+          created_at: "100",
+          context: { pane_label: "build" },
+        },
+      ],
+    });
+    expect(() =>
+      parseAgentPinsListResponse({
+        session_key: "session:default",
+        pins: [{ pane_id: 5 }],
+      }),
+    ).toThrow("agent pin record is invalid");
   });
 
   it("preserves HTTP status for pin errors", async () => {

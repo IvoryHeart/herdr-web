@@ -557,10 +557,11 @@ export function TerminalView({
         publishReady();
       })
       .catch((error: unknown) => {
-        console.error("failed to mount terminal renderer", error);
-        if (!disposed) {
-          setConnectionState("error");
+        if (disposed) {
+          return;
         }
+        console.error("failed to mount terminal renderer", error);
+        setConnectionState("error");
       });
 
     return () => {

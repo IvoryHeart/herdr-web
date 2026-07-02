@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use herdr_compat::api::schema::{AgentStatus, PaneInfo};
 use serde::Serialize;
+
+use crate::store_util::session_key;
 
 const STARTUP_ACTIVITY_BASELINE_GRACE_MS: u128 = 1_000;
 
@@ -268,26 +268,6 @@ fn now_ms() -> u128 {
 
 fn ms_string(value: u128) -> String {
     value.to_string()
-}
-
-fn session_key() -> String {
-    if let Some(name) = crate::session::active_name() {
-        return format!("session:{name}");
-    }
-    if let Ok(path) = std::env::var(herdr_compat::api::SOCKET_PATH_ENV_VAR) {
-        if !path.is_empty() && !crate::session::explicit_session_requested() {
-            let canonical = fs::canonicalize(&path).unwrap_or_else(|_| PathBuf::from(path));
-            return format!("socket:{:016x}", stable_path_hash(&canonical));
-        }
-    }
-    "default".to_string()
-}
-
-fn stable_path_hash(path: &std::path::Path) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    path.hash(&mut hasher);
-    hasher.finish()
 }
 
 #[cfg(test)]

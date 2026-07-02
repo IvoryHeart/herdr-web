@@ -1,5 +1,6 @@
 // Mutating commands proxied through the bridge's allow-listed /api/command.
 
+import type { BridgeHttpUrl } from "./bridgeApi";
 import { agentArgv } from "./launch";
 import type { LaunchSpec, SplitDirection } from "./launch";
 import { shellCommand } from "./shell";
@@ -7,7 +8,7 @@ import { shellCommand } from "./shell";
 export type CommandResult = { type?: string; [key: string]: unknown };
 export type PaneFocusDirection = "left" | "right" | "up" | "down";
 export type { LaunchSpec, SplitDirection };
-export type BridgeHttpUrl = (path: string, query?: URLSearchParams) => string;
+export type { BridgeHttpUrl } from "./bridgeApi";
 
 const sameOriginHttpUrl: BridgeHttpUrl = (path, query) => {
   const suffix = query && query.toString() ? `?${query.toString()}` : "";
@@ -142,21 +143,3 @@ export function createCommands(httpUrl: BridgeHttpUrl = sameOriginHttpUrl) {
 }
 
 export const commands = createCommands();
-
-export async function probeSupportedCommands(
-  httpUrl: BridgeHttpUrl = sameOriginHttpUrl,
-): Promise<Set<string>> {
-  try {
-    const response = await fetch(httpUrl("/api/capabilities"));
-    if (!response.ok) {
-      return new Set();
-    }
-    const body = (await response.json()) as { commands?: unknown };
-    if (!Array.isArray(body.commands)) {
-      return new Set();
-    }
-    return new Set(body.commands.filter((command): command is string => typeof command === "string"));
-  } catch {
-    return new Set();
-  }
-}
