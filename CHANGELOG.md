@@ -32,6 +32,7 @@
 
 - Unified the `session_key` reported by `/api/agent-activity` with the notes and agent-pins
   endpoints (`session:default` and FNV-1a socket hashes instead of a divergent local format).
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view. [PR #23](https://github.com/kcosr/herdr-web/pull/23)
 - Notes created from the notes panel now open in Edit mode with the title selected, so the default
@@ -41,37 +42,53 @@
 
 - Made the bridge close and cleanly reattach terminal sockets that fall behind fast output instead
   of silently dropping frames and corrupting the rendered stream.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Moved the bridge's remaining blocking daemon round-trips (snapshot, selection, agent activity,
   rename-label lookups) off async worker threads, so a stalled daemon no longer freezes unrelated
   requests and terminal websockets.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Bounded the bridge's per-terminal input queue so a client sending faster than the pty drains no
   longer grows bridge memory without limit.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Fixed terminal session races where a client connecting while the previous one disconnected could
   be handed an already-detached session, and where the daemon handshake blocked all other terminal
   clients.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Stopped the bridge from silently tightening permissions on a pre-existing operator-supplied
   `--upload-dir`; only directories the bridge creates itself are set to 0700.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Applied the standard 120-byte label validation to `pane.rename` requests, matching every other
   rename/create command.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Stopped a cancelled terminal mount from leaking an orphaned renderer and duplicated canvas when
   the pane changes while the terminal module is still loading.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Made single-cell touch selections highlight correctly instead of silently storing a wrong
   scrollback row.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Preserved combining characters and multi-codepoint emoji when copying terminal text via touch
   selection.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Kept the selected note open while no pane is selected, so notes no longer deselect mid-edit when
   a bridge disconnects, has zero panes, or a notes refresh lands.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Made Escape in settings number fields discard the typed value instead of committing it, and stop
   it from closing the whole settings dialog; out-of-range numbers now snap back to the clamped
   value in the field.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Reordered Android hardware-back handling so open menus and dialogs close before the notes panel
   underneath them.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Made Escape cancel the rename dialog from any focused control, not just the text input.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Extended long-press text-selection prevention to the stage header pane title.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Restored the intended drop shadow and muted URL color on the terminal selection sheet, which
   referenced undefined CSS variables.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Validated agent-pins responses at the fetch boundary so a malformed bridge response degrades
   gracefully instead of crashing the sidebar render.
+  [PR #25](https://github.com/kcosr/herdr-web/pull/25)
 - Prevented sidebar row labels and terminal tab labels from being text-selected during long-press
   context-menu gestures.
 - Fixed notes editor selection and autosave edge cases so switching to panes without notes clears
