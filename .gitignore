@@ -8,6 +8,7 @@
 /vendor/herdr-compat/target/
 /dist-packages/
 .specs/
+.scratch/
 *.log
 *.swp
 .DS_Store

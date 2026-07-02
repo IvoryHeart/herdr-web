@@ -507,6 +507,15 @@ button {
   transition: background 120ms ease, border-color 120ms ease;
 }
 
+.space-row,
+.pane-row,
+.tab-head,
+.tabbar-tab {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .space-row:hover {
   background: var(--row-hover);
 }
@@ -2254,6 +2263,26 @@ button {
   font-size: 13px;
   line-height: 1.5;
   color: var(--subtext0);
+}
+
+.quick-note-modal {
+  width: min(420px, 100%);
+}
+
+.quick-note-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-note-expand {
+  align-self: flex-start;
+}
+
+.quick-note-body {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .launch-modal {

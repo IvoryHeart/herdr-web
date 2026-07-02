@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added an `Add note` action to pane and agent sidebar context menus, creating a new note attached
+  to the target pane and opening it in the notes editor.
+  [PR #24](https://github.com/kcosr/herdr-web/pull/24)
 - Added bridge-tracked agent status transition activity with an Agents view sort option for
   `Last status change`, using semantic status changes rather than terminal output activity.
   [PR #23](https://github.com/kcosr/herdr-web/pull/23)
@@ -26,9 +29,15 @@
 
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view.
+- Pane context menu `Add note` now opens a quick-create dialog with a focused title and optional body
+  instead of switching to the notes panel.
+- Notes created from the notes panel now open in Edit mode with the title selected, so the default
+  title can be replaced immediately.
 
 ### Fixed
 
+- Prevented sidebar row labels and terminal tab labels from being text-selected during long-press
+  context-menu gestures.
 - Added Mobile settings for an expanding terminal command input and Enter-as-newline
   editing, allowing long prompts to wrap and remain viewable while preserving send-on-Enter
   by default. [PR #21](https://github.com/kcosr/herdr-web/pull/21)
