@@ -62,6 +62,7 @@ const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
 const MAX_QUEUED_TERMINAL_INPUT_BYTES: usize = 8 * 1024 * 1024;
 const TERMINAL_DETACH_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_TERMINAL_DETACH_DRAIN_WAITS: usize = 4;
+const MAX_ATTACH_HANDSHAKE_RETRIES: usize = 2;
 const DEFAULT_TERMINAL_OUTPUT_COALESCE_MS: u64 = 16;
 const MAX_TERMINAL_OUTPUT_COALESCE_MS: u64 = 256;
 const TERMINAL_OUTPUT_COALESCE_MAX_BYTES: usize = 32 * 1024;
@@ -2671,89 +2672,104 @@ async fn acquire_terminal_session(
     takeover: bool,
 ) -> Result<SharedTerminalSession, BridgeError> {
     tokio::task::spawn_blocking(move || {
-        // Join an existing session or wait out draining connections, looping
-        // because both maps can change while this thread waits without the
-        // lock: a session attached during the wait must be joined, and a
-        // *newer* draining connection installed during the wait must also be
-        // drained before attaching, or the fresh attach races its teardown
-        // and the daemon rejects it as a second concurrent client.
         let mut drain_waits = 0;
-        loop {
-            let draining = {
-                let sessions = state.terminal_sessions.lock().map_err(|_| {
+        let mut handshake_retries = 0;
+        'attach: loop {
+            // Join an existing session or wait out draining connections,
+            // looping because both maps can change while this thread waits
+            // without the lock: a session attached during the wait must be
+            // joined, and a *newer* draining connection installed during the
+            // wait must also be drained before attaching, or the fresh attach
+            // races its teardown and the daemon rejects it as a second
+            // concurrent client.
+            loop {
+                let draining = {
+                    let sessions = state.terminal_sessions.lock().map_err(|_| {
+                        BridgeError::Protocol("terminal session lock poisoned".to_string())
+                    })?;
+                    if let Some(session) = sessions.active.get(&terminal_id) {
+                        session.client_count.fetch_add(1, Ordering::AcqRel);
+                        return Ok(session.clone());
+                    }
+                    sessions.draining.get(&terminal_id).cloned()
+                };
+                let Some(draining) = draining else {
+                    break;
+                };
+                if drain_waits >= MAX_TERMINAL_DETACH_DRAIN_WAITS {
+                    warn!(
+                        terminal_id = %terminal_id,
+                        "reattaching despite pending detach teardown after repeated drain waits"
+                    );
+                    break;
+                }
+                drain_waits += 1;
+                if !draining.wait_closed(TERMINAL_DETACH_DRAIN_TIMEOUT) {
+                    warn!(
+                        terminal_id = %terminal_id,
+                        "timed out waiting for detached terminal connection to close"
+                    );
+                }
+                let mut sessions = state.terminal_sessions.lock().map_err(|_| {
                     BridgeError::Protocol("terminal session lock poisoned".to_string())
                 })?;
-                if let Some(session) = sessions.active.get(&terminal_id) {
-                    session.client_count.fetch_add(1, Ordering::AcqRel);
-                    return Ok(session.clone());
+                if sessions
+                    .draining
+                    .get(&terminal_id)
+                    .is_some_and(|entry| Arc::ptr_eq(entry, &draining))
+                {
+                    sessions.draining.remove(&terminal_id);
                 }
-                sessions.draining.get(&terminal_id).cloned()
-            };
-            let Some(draining) = draining else {
-                break;
-            };
-            if drain_waits >= MAX_TERMINAL_DETACH_DRAIN_WAITS {
-                warn!(
-                    terminal_id = %terminal_id,
-                    "reattaching despite pending detach teardown after repeated drain waits"
-                );
-                break;
             }
-            drain_waits += 1;
-            if !draining.wait_closed(TERMINAL_DETACH_DRAIN_TIMEOUT) {
-                warn!(
-                    terminal_id = %terminal_id,
-                    "timed out waiting for detached terminal connection to close"
-                );
-            }
+
+            // Perform the daemon handshake without holding the map lock so a
+            // stalled daemon cannot wedge every other terminal client.
+            let protocol_version = terminal_attach_protocol(&state.api)?;
+            let (output_tx, _) = tokio::sync::broadcast::channel(256);
+            let attach = open_terminal_attach(
+                state.client_socket_path.clone(),
+                terminal_id.clone(),
+                cols,
+                rows,
+                takeover,
+                protocol_version,
+                output_tx.clone(),
+            )?;
+            let session = SharedTerminalSession {
+                write_tx: attach.write_tx,
+                output_tx,
+                client_count: Arc::new(AtomicUsize::new(0)),
+                connection_closed: attach.connection_closed,
+            };
+
             let mut sessions = state
                 .terminal_sessions
                 .lock()
                 .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
-            if sessions
-                .draining
-                .get(&terminal_id)
-                .is_some_and(|entry| Arc::ptr_eq(entry, &draining))
-            {
-                sessions.draining.remove(&terminal_id);
+            if let Some(existing) = sessions.active.get(&terminal_id) {
+                // Another connection attached while we were handshaking; keep
+                // the established session and detach the redundant one.
+                existing.client_count.fetch_add(1, Ordering::AcqRel);
+                let existing = existing.clone();
+                let _ = session.write_tx.send(ClientMessage::Detach);
+                return Ok(existing);
             }
+            if sessions.draining.contains_key(&terminal_id)
+                && handshake_retries < MAX_ATTACH_HANDSHAKE_RETRIES
+            {
+                // A connection attached and began detaching while we were
+                // handshaking, so the daemon may have rejected our attach as
+                // a second concurrent client. Tear ours down and start over
+                // rather than publishing a possibly dead session.
+                drop(sessions);
+                let _ = session.write_tx.send(ClientMessage::Detach);
+                handshake_retries += 1;
+                continue 'attach;
+            }
+            session.client_count.fetch_add(1, Ordering::AcqRel);
+            sessions.active.insert(terminal_id, session.clone());
+            return Ok(session);
         }
-
-        // Perform the daemon handshake without holding the map lock so a
-        // stalled daemon cannot wedge every other terminal client.
-        let protocol_version = terminal_attach_protocol(&state.api)?;
-        let (output_tx, _) = tokio::sync::broadcast::channel(256);
-        let attach = open_terminal_attach(
-            state.client_socket_path.clone(),
-            terminal_id.clone(),
-            cols,
-            rows,
-            takeover,
-            protocol_version,
-            output_tx.clone(),
-        )?;
-        let session = SharedTerminalSession {
-            write_tx: attach.write_tx,
-            output_tx,
-            client_count: Arc::new(AtomicUsize::new(0)),
-            connection_closed: attach.connection_closed,
-        };
-
-        let mut sessions = state
-            .terminal_sessions
-            .lock()
-            .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
-        if let Some(existing) = sessions.active.get(&terminal_id) {
-            // Another connection attached while we were handshaking; keep the
-            // established session and detach the redundant one.
-            existing.client_count.fetch_add(1, Ordering::AcqRel);
-            let existing = existing.clone();
-            let _ = session.write_tx.send(ClientMessage::Detach);
-            return Ok(existing);
-        }
-        session.client_count.fetch_add(1, Ordering::AcqRel);
-        sessions.active.insert(terminal_id, session.clone());
-        Ok(session)
     })
     .await
     .map_err(|err| BridgeError::Protocol(err.to_string()))?
