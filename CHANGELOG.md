@@ -10,6 +10,12 @@
 
 ### Fixed
 
+- Fixed a bridge reattach race where a client reconnecting right after the last viewer left a
+  terminal could be rejected by the daemon with `already has an attached client` and shown a
+  permanent `Attached elsewhere` error; reattaches now wait for the daemon to finish tearing down
+  the previous attach connection.
+  [PR #26](https://github.com/kcosr/herdr-web/pull/26)
+
 ### Removed
 
 ## [0.3.0] - 2026-07-02
