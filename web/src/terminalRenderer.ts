@@ -92,6 +92,8 @@ type TerminalBufferLine = {
         getCodepoint(): number;
         getWidth(): number;
         getHyperlinkId(): number;
+        // Raw ghostty cell data; grapheme_len > 0 marks a multi-codepoint cluster.
+        cell?: { grapheme_len?: number };
       }
     | undefined;
 };
@@ -136,6 +138,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     DEFAULT_MOBILE_TOUCH_SELECTION_ENDPOINT_TIMEOUT_MS;
   #textInputTapGraceUntil = 0;
   #fontSizePx: number;
+  #disposed = false;
 
   constructor(fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX) {
     this.#fontSizePx = fontSizePx;
@@ -143,6 +146,9 @@ export class GhosttyRenderer implements TerminalRenderer {
 
   async mount(container: HTMLElement) {
     const { FitAddon, Terminal } = await loadGhosttyModule();
+    if (this.#disposed) {
+      throw new Error("terminal renderer disposed");
+    }
 
     this.#container = container;
     const terminal = new Terminal({
@@ -293,6 +299,7 @@ export class GhosttyRenderer implements TerminalRenderer {
   }
 
   dispose() {
+    this.#disposed = true;
     this.#touchCleanup?.();
     this.#touchCleanup = null;
     this.#mobileInputCleanup?.();
@@ -1299,11 +1306,6 @@ function selectTerminalViewportRange(
     return;
   }
 
-  if (start.row === end.row && start.col === end.col) {
-    terminal.select(start.col, start.row, 1);
-    return;
-  }
-
   markSelectionRowsDirty(selectionManager, selectionManager.getSelectionCoords());
   selectionManager.selectionStart = {
     col: start.col,
@@ -1367,12 +1369,44 @@ function terminalSelectedTextFromViewportRange(
     const line = terminal.buffer.active.getLine(bufferRow) as TerminalBufferLine | undefined;
     const startCol = row === range.from.row ? range.from.col : 0;
     const endCol = row === range.to.row ? range.to.col : terminal.cols - 1;
-    selectedLines.push(line ? terminalBufferLineCellText(line, startCol, endCol).trimEnd() : "");
+    selectedLines.push(
+      line
+        ? terminalBufferLineCellText(
+            line,
+            startCol,
+            endCol,
+            terminalGraphemeReader(terminal, bufferRow),
+          ).trimEnd()
+        : "",
+    );
   }
   return selectedLines.join("\n");
 }
 
-function terminalBufferLineCellText(line: TerminalBufferLine, startCol: number, endCol: number) {
+// Cells holding multi-codepoint grapheme clusters (combining marks, emoji with
+// modifiers/ZWJ) store only the first codepoint; the full cluster has to be
+// read back through the wasm terminal, mirroring the vendored getSelection().
+function terminalGraphemeReader(terminal: Terminal, bufferRow: number) {
+  const wasmTerm = terminal.wasmTerm;
+  if (
+    typeof wasmTerm?.getGraphemeString !== "function" ||
+    typeof wasmTerm.getScrollbackGraphemeString !== "function"
+  ) {
+    return null;
+  }
+  const scrollbackLength = terminal.getScrollbackLength();
+  return (col: number) =>
+    bufferRow < scrollbackLength
+      ? wasmTerm.getScrollbackGraphemeString(bufferRow, col)
+      : wasmTerm.getGraphemeString(bufferRow - scrollbackLength, col);
+}
+
+function terminalBufferLineCellText(
+  line: TerminalBufferLine,
+  startCol: number,
+  endCol: number,
+  readGrapheme: ((col: number) => string) | null = null,
+) {
   let text = "";
   for (let col = startCol; col <= endCol && col < line.length; col += 1) {
     const cell = line.getCell(col);
@@ -1380,7 +1414,13 @@ function terminalBufferLineCellText(line: TerminalBufferLine, startCol: number, 
     if (codepoint === 0 && cell?.getWidth() === 0) {
       continue;
     }
-    text += codepoint === 0 || codepoint < 32 ? " " : String.fromCodePoint(codepoint);
+    if (codepoint === 0 || codepoint < 32) {
+      text += " ";
+      continue;
+    }
+    const graphemeLength = cell?.cell?.grapheme_len ?? 0;
+    const cluster = graphemeLength > 0 ? readGrapheme?.(col) : null;
+    text += cluster || String.fromCodePoint(codepoint);
   }
   return text;
 }

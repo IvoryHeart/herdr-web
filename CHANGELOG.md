@@ -36,6 +36,12 @@
 
 ### Fixed
 
+- Stopped a cancelled terminal mount from leaking an orphaned renderer and duplicated canvas when
+  the pane changes while the terminal module is still loading.
+- Made single-cell touch selections highlight correctly instead of silently storing a wrong
+  scrollback row.
+- Preserved combining characters and multi-codepoint emoji when copying terminal text via touch
+  selection.
 - Kept the selected note open while no pane is selected, so notes no longer deselect mid-edit when
   a bridge disconnects, has zero panes, or a notes refresh lands.
 - Made Escape in settings number fields discard the typed value instead of committing it, and stop
