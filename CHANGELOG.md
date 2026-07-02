@@ -36,6 +36,20 @@
 
 ### Fixed
 
+- Made the bridge close and cleanly reattach terminal sockets that fall behind fast output instead
+  of silently dropping frames and corrupting the rendered stream.
+- Moved the bridge's remaining blocking daemon round-trips (snapshot, selection, agent activity,
+  rename-label lookups) off async worker threads, so a stalled daemon no longer freezes unrelated
+  requests and terminal websockets.
+- Bounded the bridge's per-terminal input queue so a client sending faster than the pty drains no
+  longer grows bridge memory without limit.
+- Fixed terminal session races where a client connecting while the previous one disconnected could
+  be handed an already-detached session, and where the daemon handshake blocked all other terminal
+  clients.
+- Stopped the bridge from silently tightening permissions on a pre-existing operator-supplied
+  `--upload-dir`; only directories the bridge creates itself are set to 0700.
+- Applied the standard 120-byte label validation to `pane.rename` requests, matching every other
+  rename/create command.
 - Stopped a cancelled terminal mount from leaking an orphaned renderer and duplicated canvas when
   the pane changes while the terminal module is still loading.
 - Made single-cell touch selections highlight correctly instead of silently storing a wrong

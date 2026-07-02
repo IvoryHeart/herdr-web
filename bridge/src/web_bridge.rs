@@ -59,6 +59,7 @@ const MIN_TERMINAL_ATTACH_PROTOCOL: u32 = 13;
 const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
 const MAX_NOTES_REQUEST_BYTES: usize = 512 * 1024;
 const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
+const MAX_QUEUED_TERMINAL_INPUT_BYTES: usize = 8 * 1024 * 1024;
 const DEFAULT_TERMINAL_OUTPUT_COALESCE_MS: u64 = 16;
 const MAX_TERMINAL_OUTPUT_COALESCE_MS: u64 = 256;
 const TERMINAL_OUTPUT_COALESCE_MAX_BYTES: usize = 32 * 1024;
@@ -526,9 +527,38 @@ fn terminal_output_coalesce_window(coalesce_ms: Option<u64>) -> Duration {
 
 #[derive(Clone)]
 struct SharedTerminalSession {
-    write_tx: mpsc::Sender<ClientMessage>,
+    write_tx: TerminalWriter,
     output_tx: tokio::sync::broadcast::Sender<TerminalOutput>,
     client_count: Arc<AtomicUsize>,
+}
+
+/// Sender for daemon-bound terminal messages that bounds how many input
+/// bytes may sit in the writer queue, so a client streaming input faster
+/// than the pty consumes it cannot balloon bridge memory.
+#[derive(Clone)]
+struct TerminalWriter {
+    tx: mpsc::Sender<ClientMessage>,
+    queued_input_bytes: Arc<AtomicUsize>,
+}
+
+impl TerminalWriter {
+    fn send(&self, message: ClientMessage) -> Result<(), mpsc::SendError<ClientMessage>> {
+        self.tx.send(message)
+    }
+
+    fn send_input(&self, data: Vec<u8>) -> Result<(), String> {
+        let len = data.len();
+        let queued = self.queued_input_bytes.fetch_add(len, Ordering::AcqRel);
+        if queued + len > MAX_QUEUED_TERMINAL_INPUT_BYTES {
+            self.queued_input_bytes.fetch_sub(len, Ordering::AcqRel);
+            return Err("terminal input backlog exceeded".to_string());
+        }
+        if self.tx.send(ClientMessage::Input { data }).is_err() {
+            self.queued_input_bytes.fetch_sub(len, Ordering::AcqRel);
+            return Err("terminal writer closed".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -1040,9 +1070,12 @@ fn expand_home(value: &str) -> PathBuf {
 }
 
 fn ensure_upload_dir(path: &Path) -> io::Result<()> {
+    // Only tighten permissions on directories the bridge itself creates; an
+    // operator-supplied pre-existing directory keeps its permissions.
+    let pre_existing = path.is_dir();
     std::fs::create_dir_all(path)?;
     #[cfg(unix)]
-    {
+    if !pre_existing {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
     }
@@ -1484,6 +1517,12 @@ fn validate_web_command(method: &Method) -> Result<(), BridgeError> {
                 }
             }
         }
+        Method::PaneRename(params) => {
+            if params.pane_id.trim().is_empty() {
+                return Err(BridgeError::BadRequest("pane_id is required".to_string()));
+            }
+            validate_optional_label(&params.label, "pane.rename label")?;
+        }
         Method::AgentStart(params) => {
             if params.name.trim().is_empty() || params.name.len() > 120 {
                 return Err(BridgeError::BadRequest(
@@ -1593,13 +1632,15 @@ async fn command_handler(
     let mut request: Request = serde_json::from_value(request_value)
         .map_err(|err| BridgeError::BadRequest(format!("invalid command: {err}")))?;
     validate_web_command(&request.method)?;
-    fill_clear_rename_labels(&state.api, &mut request.method)?;
     let should_prune_terminal_sessions = command_may_close_terminal_session(&request.method);
 
     let api = state.api.clone();
-    let response = tokio::task::spawn_blocking(move || api.request(request))
-        .await
-        .map_err(|err| BridgeError::Protocol(err.to_string()))??;
+    let response = tokio::task::spawn_blocking(move || {
+        fill_clear_rename_labels(&api, &mut request.method)?;
+        Ok::<_, BridgeError>(api.request(request)?)
+    })
+    .await
+    .map_err(|err| BridgeError::Protocol(err.to_string()))??;
     if let ResponseResult::PaneMove { move_result } = &response.result {
         if move_result.changed {
             let notes = state.notes.clone();
@@ -1696,7 +1737,10 @@ async fn selection_handler(
     if pane_id.is_empty() {
         return Err(BridgeError::BadRequest("missing pane_id".to_string()));
     }
-    let panes = current_panes(&state.api)?;
+    let api = state.api.clone();
+    let panes = tokio::task::spawn_blocking(move || current_panes(&api))
+        .await
+        .map_err(|err| BridgeError::Protocol(err.to_string()))??;
     if !panes.iter().any(|pane| pane.pane_id == pane_id) {
         return Err(BridgeError::Protocol(format!("pane not found: {pane_id}")));
     }
@@ -1823,32 +1867,39 @@ async fn snapshot_handler(
     headers: HeaderMap,
 ) -> Result<Json<Snapshot>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let workspaces = match api_request(
-        &state.api,
-        "herdr-web:workspace-list",
-        Method::WorkspaceList(EmptyParams::default()),
-    )? {
-        ResponseResult::WorkspaceList { workspaces } => workspaces,
-        other => {
-            return Err(BridgeError::Protocol(format!(
-                "unexpected response: {other:?}"
-            )))
-        }
-    };
-    let tabs = match api_request(
-        &state.api,
-        "herdr-web:tab-list",
-        Method::TabList(TabListParams::default()),
-    )? {
-        ResponseResult::TabList { tabs } => tabs,
-        other => {
-            return Err(BridgeError::Protocol(format!(
-                "unexpected response: {other:?}"
-            )))
-        }
-    };
-    let panes = current_panes(&state.api)?;
-    observe_agent_activity_snapshot(&state, &panes);
+    let api_state = state.clone();
+    let (workspaces, tabs, panes, layouts) = tokio::task::spawn_blocking(move || {
+        let workspaces = match api_request(
+            &api_state.api,
+            "herdr-web:workspace-list",
+            Method::WorkspaceList(EmptyParams::default()),
+        )? {
+            ResponseResult::WorkspaceList { workspaces } => workspaces,
+            other => {
+                return Err(BridgeError::Protocol(format!(
+                    "unexpected response: {other:?}"
+                )))
+            }
+        };
+        let tabs = match api_request(
+            &api_state.api,
+            "herdr-web:tab-list",
+            Method::TabList(TabListParams::default()),
+        )? {
+            ResponseResult::TabList { tabs } => tabs,
+            other => {
+                return Err(BridgeError::Protocol(format!(
+                    "unexpected response: {other:?}"
+                )))
+            }
+        };
+        let panes = current_panes(&api_state.api)?;
+        observe_agent_activity_snapshot(&api_state, &panes);
+        let layouts = collect_tab_layouts(&api_state.api, &tabs, &panes);
+        Ok((workspaces, tabs, panes, layouts))
+    })
+    .await
+    .map_err(|err| BridgeError::Protocol(err.to_string()))??;
     let notes = state.notes.clone();
     let note_panes = panes.clone();
     match tokio::task::spawn_blocking(move || notes.observe_panes(&note_panes))
@@ -1859,7 +1910,6 @@ async fn snapshot_handler(
         Ok(false) => {}
         Err(err) => warn!(error = %err, "failed to update pane note observations"),
     }
-    let layouts = collect_tab_layouts(&state.api, &tabs, &panes);
     let selected_pane_id = shared_selected_pane(&state, &panes)?;
     let workspaces = workspaces
         .into_iter()
@@ -1915,9 +1965,15 @@ async fn agent_activity_list_handler(
     headers: HeaderMap,
 ) -> Result<Json<AgentActivityListResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let panes = current_panes(&state.api)?;
-    observe_agent_activity_snapshot(&state, &panes);
-    Ok(Json(state.agent_activity.list(&panes)))
+    let list_state = state.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        let panes = current_panes(&list_state.api)?;
+        observe_agent_activity_snapshot(&list_state, &panes);
+        Ok::<_, BridgeError>(list_state.agent_activity.list(&panes))
+    })
+    .await
+    .map_err(|err| BridgeError::Protocol(err.to_string()))??;
+    Ok(Json(response))
 }
 
 async fn agent_pins_list_handler(
@@ -2407,7 +2463,6 @@ async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: Te
             return;
         }
     };
-    session.client_count.fetch_add(1, Ordering::AcqRel);
 
     let write_tx = session.write_tx.clone();
     let mut terminal_rx = session.output_tx.subscribe();
@@ -2533,15 +2588,19 @@ async fn handle_terminal_output_message(
             false
         }
         Err(tokio::sync::broadcast::error::RecvError::Lagged(frames)) => {
+            // Dropped frames would silently corrupt the stateful ANSI stream.
+            // Close the socket without a "closed" frame so the client
+            // reconnects and gets a clean repaint from a fresh attach.
             output_coalescer.record_lagged(frames);
-            true
+            warn!(frames, "terminal output lagged; closing socket for resync");
+            false
         }
         Err(tokio::sync::broadcast::error::RecvError::Closed) => false,
     }
 }
 
 fn handle_terminal_client_message(
-    write_tx: &mpsc::Sender<ClientMessage>,
+    write_tx: &TerminalWriter,
     message: Result<Message, axum::Error>,
 ) -> bool {
     match message {
@@ -2561,14 +2620,21 @@ async fn acquire_terminal_session(
     takeover: bool,
 ) -> Result<SharedTerminalSession, BridgeError> {
     tokio::task::spawn_blocking(move || {
-        let mut sessions = state
-            .terminal_sessions
-            .lock()
-            .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
-        if let Some(session) = sessions.get(&terminal_id) {
-            return Ok(session.clone());
+        // Fast path: join an existing session, counting the client while the
+        // map lock is held so a concurrent release cannot detach it first.
+        {
+            let sessions = state
+                .terminal_sessions
+                .lock()
+                .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
+            if let Some(session) = sessions.get(&terminal_id) {
+                session.client_count.fetch_add(1, Ordering::AcqRel);
+                return Ok(session.clone());
+            }
         }
 
+        // Perform the daemon handshake without holding the map lock so a
+        // stalled daemon cannot wedge every other terminal client.
         let protocol_version = terminal_attach_protocol(&state.api)?;
         let (output_tx, _) = tokio::sync::broadcast::channel(256);
         let attach = open_terminal_attach(
@@ -2585,6 +2651,20 @@ async fn acquire_terminal_session(
             output_tx,
             client_count: Arc::new(AtomicUsize::new(0)),
         };
+
+        let mut sessions = state
+            .terminal_sessions
+            .lock()
+            .map_err(|_| BridgeError::Protocol("terminal session lock poisoned".to_string()))?;
+        if let Some(existing) = sessions.get(&terminal_id) {
+            // Another connection attached while we were handshaking; keep the
+            // established session and detach the redundant one.
+            existing.client_count.fetch_add(1, Ordering::AcqRel);
+            let existing = existing.clone();
+            let _ = session.write_tx.send(ClientMessage::Detach);
+            return Ok(existing);
+        }
+        session.client_count.fetch_add(1, Ordering::AcqRel);
         sessions.insert(terminal_id, session.clone());
         Ok(session)
     })
@@ -2597,14 +2677,16 @@ fn release_terminal_session(
     terminal_id: &str,
     session: &SharedTerminalSession,
 ) {
+    // Decrement while holding the map lock so a concurrent acquire cannot
+    // join the session between the last-client check and its removal.
+    let Ok(mut sessions) = state.terminal_sessions.lock() else {
+        return;
+    };
     if session.client_count.fetch_sub(1, Ordering::AcqRel) != 1 {
         return;
     }
 
     let _ = session.write_tx.send(ClientMessage::Detach);
-    let Ok(mut sessions) = state.terminal_sessions.lock() else {
-        return;
-    };
     if sessions
         .get(terminal_id)
         .is_some_and(|current| Arc::ptr_eq(&current.client_count, &session.client_count))
@@ -2969,13 +3051,11 @@ struct TerminalInputChunkStats {
 }
 
 fn send_terminal_input_chunks(
-    write_tx: &mpsc::Sender<ClientMessage>,
+    write_tx: &TerminalWriter,
     data: &[u8],
 ) -> Result<TerminalInputChunkStats, String> {
     if data.is_empty() {
-        write_tx
-            .send(ClientMessage::Input { data: Vec::new() })
-            .map_err(|_| "terminal writer closed".to_string())?;
+        write_tx.send_input(Vec::new())?;
         return Ok(TerminalInputChunkStats {
             chunks: 1,
             max_chunk_bytes: 0,
@@ -2989,19 +3069,12 @@ fn send_terminal_input_chunks(
     for chunk in data.chunks(MAX_TERMINAL_INPUT_CHUNK_BYTES) {
         stats.chunks += 1;
         stats.max_chunk_bytes = stats.max_chunk_bytes.max(chunk.len());
-        write_tx
-            .send(ClientMessage::Input {
-                data: chunk.to_vec(),
-            })
-            .map_err(|_| "terminal writer closed".to_string())?;
+        write_tx.send_input(chunk.to_vec())?;
     }
     Ok(stats)
 }
 
-fn handle_terminal_text_frame(
-    write_tx: &mpsc::Sender<ClientMessage>,
-    text: &str,
-) -> Result<(), String> {
+fn handle_terminal_text_frame(write_tx: &TerminalWriter, text: &str) -> Result<(), String> {
     let frame = parse_terminal_client_frame(text)?;
     match frame {
         TerminalClientFrame::Input { data } => {
@@ -3044,7 +3117,7 @@ fn parse_terminal_client_frame(text: &str) -> Result<TerminalClientFrame, String
 }
 
 struct TerminalAttach {
-    write_tx: mpsc::Sender<ClientMessage>,
+    write_tx: TerminalWriter,
 }
 
 fn open_terminal_attach(
@@ -3097,11 +3170,21 @@ fn open_terminal_attach(
 
     let mut read_stream = stream.try_clone()?;
     let (write_tx, write_rx) = mpsc::channel::<ClientMessage>();
+    let queued_input_bytes = Arc::new(AtomicUsize::new(0));
+    let writer_queued_input_bytes = queued_input_bytes.clone();
 
     thread::spawn(move || {
         let mut write_stream = stream;
         for message in write_rx {
-            if protocol::write_message(&mut write_stream, &message).is_err() {
+            let input_len = match &message {
+                ClientMessage::Input { data } => data.len(),
+                _ => 0,
+            };
+            let result = protocol::write_message(&mut write_stream, &message);
+            if input_len > 0 {
+                writer_queued_input_bytes.fetch_sub(input_len, Ordering::AcqRel);
+            }
+            if result.is_err() {
                 break;
             }
             let _ = write_stream.flush();
@@ -3138,7 +3221,12 @@ fn open_terminal_attach(
         }
     });
 
-    Ok(TerminalAttach { write_tx })
+    Ok(TerminalAttach {
+        write_tx: TerminalWriter {
+            tx: write_tx,
+            queued_input_bytes,
+        },
+    })
 }
 
 fn terminal_attach_protocol(api: &ApiClient) -> Result<u32, BridgeError> {
@@ -3468,9 +3556,20 @@ mod tests {
         );
     }
 
+    fn test_terminal_writer() -> (TerminalWriter, mpsc::Receiver<ClientMessage>) {
+        let (tx, rx) = mpsc::channel();
+        (
+            TerminalWriter {
+                tx,
+                queued_input_bytes: Arc::new(AtomicUsize::new(0)),
+            },
+            rx,
+        )
+    }
+
     #[test]
     fn chunks_terminal_input_below_daemon_limit() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = test_terminal_writer();
         let data = vec![b'x'; MAX_TERMINAL_INPUT_CHUNK_BYTES * 2 + 17];
 
         let stats = send_terminal_input_chunks(&tx, &data).unwrap();
@@ -3498,7 +3597,7 @@ mod tests {
 
     #[test]
     fn forwards_empty_terminal_input_as_one_message() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = test_terminal_writer();
 
         let stats = send_terminal_input_chunks(&tx, &[]).unwrap();
 
@@ -3513,6 +3612,23 @@ mod tests {
             rx.recv().unwrap(),
             ClientMessage::Input { data: Vec::new() }
         );
+    }
+
+    #[test]
+    fn rejects_terminal_input_over_queue_budget() {
+        let (tx, rx) = test_terminal_writer();
+        let data = vec![b'x'; MAX_QUEUED_TERMINAL_INPUT_BYTES + 1];
+
+        // Nothing drains the queue, so the final chunk must be refused.
+        assert!(send_terminal_input_chunks(&tx, &data).is_err());
+        let queued: usize = rx
+            .try_iter()
+            .map(|message| match message {
+                ClientMessage::Input { data } => data.len(),
+                other => panic!("unexpected terminal message: {other:?}"),
+            })
+            .sum();
+        assert!(queued <= MAX_QUEUED_TERMINAL_INPUT_BYTES);
     }
 
     #[test]
