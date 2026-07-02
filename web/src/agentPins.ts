@@ -1,3 +1,5 @@
+import { apiErrorMessage } from "./bridgeApi";
+import type { BridgeHttpUrl } from "./bridgeApi";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import type { BridgeCapabilities } from "./bridge";
 
@@ -24,7 +26,7 @@ export type AgentPinsListResponse = {
   pins: AgentPin[];
 };
 
-export type BridgeHttpUrl = (path: string, query?: URLSearchParams) => string;
+export type { BridgeHttpUrl } from "./bridgeApi";
 
 export class AgentPinsApiError extends Error {
   readonly status: number;
@@ -134,13 +136,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function agentPinsApiError(response: Response) {
-  try {
-    const parsed = (await response.json()) as { error?: unknown };
-    if (typeof parsed.error === "string" && parsed.error.trim()) {
-      return new AgentPinsApiError(parsed.error, response.status);
-    }
-  } catch {
-    // Fall through to the status-based error.
-  }
-  return new AgentPinsApiError(`agent pins failed: ${response.status}`, response.status);
+  const message = await apiErrorMessage(response);
+  return new AgentPinsApiError(
+    message ?? `agent pins failed: ${response.status}`,
+    response.status,
+  );
 }

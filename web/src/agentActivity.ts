@@ -1,3 +1,5 @@
+import { apiErrorMessage } from "./bridgeApi";
+import type { BridgeHttpUrl } from "./bridgeApi";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import type { BridgeCapabilities } from "./bridge";
 import type { AgentStatus } from "./types";
@@ -16,7 +18,7 @@ export type AgentActivityListResponse = {
   records: AgentActivityRecord[];
 };
 
-export type BridgeHttpUrl = (path: string, query?: URLSearchParams) => string;
+export type { BridgeHttpUrl } from "./bridgeApi";
 
 export class AgentActivityApiError extends Error {
   readonly status: number;
@@ -114,15 +116,11 @@ async function parseAgentActivityResponse(response: Response) {
 }
 
 async function agentActivityApiError(response: Response) {
-  try {
-    const parsed = (await response.json()) as { error?: unknown };
-    if (typeof parsed.error === "string" && parsed.error.trim()) {
-      return new AgentActivityApiError(parsed.error, response.status);
-    }
-  } catch {
-    // Fall through to the status-based error.
-  }
-  return new AgentActivityApiError(`agent activity failed: ${response.status}`, response.status);
+  const message = await apiErrorMessage(response);
+  return new AgentActivityApiError(
+    message ?? `agent activity failed: ${response.status}`,
+    response.status,
+  );
 }
 
 function isAgentStatus(value: unknown): value is AgentStatus {

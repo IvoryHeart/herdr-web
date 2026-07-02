@@ -131,6 +131,7 @@ import {
 } from "./terminalPrefs";
 import {
   aggregateStatus,
+  basename,
   canClearTabName,
   canClearWorkspaceName,
   choosePaneForTab,
@@ -193,12 +194,13 @@ export type BridgeConnectionState = {
   snapshot: Snapshot | null;
   loadState: LoadState;
 };
-type BridgeNotesState = {
+type BridgeResourceState<Response> = {
   connectionKey: string;
-  response: NotesListResponse | null;
+  response: Response | null;
   loadState: LoadState;
   error: string | null;
 };
+type BridgeNotesState = BridgeResourceState<NotesListResponse>;
 type PendingCreatedPaneNoteTarget = {
   note: PaneNote;
   pane: PaneInfo;
@@ -209,18 +211,8 @@ type PendingCreatedPaneNote = PendingCreatedPaneNoteTarget & {
 type QuickPaneNoteTarget = ScopedPaneRef & {
   label: string;
 };
-type BridgeAgentPinsState = {
-  connectionKey: string;
-  response: AgentPinsListResponse | null;
-  loadState: LoadState;
-  error: string | null;
-};
-type BridgeAgentActivityState = {
-  connectionKey: string;
-  response: AgentActivityListResponse | null;
-  loadState: LoadState;
-  error: string | null;
-};
+type BridgeAgentPinsState = BridgeResourceState<AgentPinsListResponse>;
+type BridgeAgentActivityState = BridgeResourceState<AgentActivityListResponse>;
 export type BridgeConnectionRef = {
   connectionKey: string;
   snapshot: Snapshot | null;
@@ -544,87 +536,13 @@ function readLegacyDisplayPrefs(fallback: DisplayPrefs): DisplayPrefs {
       selectedPaneId?: unknown;
       mobileTouchSelection?: unknown;
     } & Partial<DisplayPrefs>;
-    const sidebarWidth =
-      typeof parsed.sidebarWidth === "number"
-        ? clampSidebarWidth(parsed.sidebarWidth)
-        : fallback.sidebarWidth;
-    const sidebarOpen =
-      typeof parsed.sidebarOpen === "boolean" ? parsed.sidebarOpen : fallback.sidebarOpen;
-    const notesPanelWidth =
-      typeof parsed.notesPanelWidth === "number"
-        ? clampNotesPanelWidth(parsed.notesPanelWidth, sidebarWidth, sidebarOpen)
-        : fallback.notesPanelWidth;
     return {
-      ...fallback,
-      hostScope:
-        parsed.hostScope === "selected" || parsed.hostScope === "all"
-          ? parsed.hostScope
-          : fallback.hostScope,
-      scope: parsed.scope === "all" || parsed.scope === "space" ? parsed.scope : fallback.scope,
-      sidebarView:
-        parsed.sidebarView === "agents" ||
-        parsed.sidebarView === "tabs" ||
-        parsed.sidebarView === "notes"
-          ? parsed.sidebarView
-          : fallback.sidebarView,
-      agentSort:
-        parsed.agentSort === "attention" ||
-        parsed.agentSort === "status" ||
-        parsed.agentSort === "workspace" ||
-        parsed.agentSort === "lastStatusChange"
-          ? parsed.agentSort
-          : fallback.agentSort,
-      agentGroup:
-        parsed.agentGroup === "none" ||
-        parsed.agentGroup === "host" ||
-        parsed.agentGroup === "workspace" ||
-        parsed.agentGroup === "hostWorkspace"
-          ? parsed.agentGroup
-          : fallback.agentGroup,
-      agentPinnedOnly:
-        typeof parsed.agentPinnedOnly === "boolean"
-          ? parsed.agentPinnedOnly
-          : fallback.agentPinnedOnly,
-      sidebarWidth,
-      notesPanelWidth,
-      notesListPaneWidth:
-        typeof parsed.notesListPaneWidth === "number"
-          ? clampNotesListPaneWidth(parsed.notesListPaneWidth, notesPanelWidth)
-          : fallback.notesListPaneWidth,
-      notesListPaneCollapsed:
-        typeof parsed.notesListPaneCollapsed === "boolean"
-          ? parsed.notesListPaneCollapsed
-          : fallback.notesListPaneCollapsed,
-      notesEnabled:
-        typeof parsed.notesEnabled === "boolean" ? parsed.notesEnabled : fallback.notesEnabled,
-      notesPanelOpen:
-        typeof parsed.notesPanelOpen === "boolean"
-          ? parsed.notesPanelOpen
-          : fallback.notesPanelOpen,
-      sidebarOpen,
-      terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
-      terminalInputTransport: parseTerminalInputTransport(parsed.terminalInputTransport),
-      terminalInputBatchDelayMs: parseTerminalInputBatchDelayMs(parsed.terminalInputBatchDelayMs),
-      terminalOutputCoalesceMs: parseTerminalOutputCoalesceMs(
-        parsed.terminalOutputCoalesceMs,
-      ),
-      contentInsetTopPx: parseContentInsetTopPx(parsed.contentInsetTopPx),
-      contentInsetBottomPx: parseContentInsetBottomPx(parsed.contentInsetBottomPx),
-      mobileControlsScalePercent: parseMobileControlsScalePercent(
-        parsed.mobileControlsScalePercent,
-      ),
-      mobileTerminalTapTarget: parseMobileTerminalTapTarget(parsed.mobileTerminalTapTarget),
-      mobileLongPressBehavior: parseStoredMobileLongPressBehavior(parsed),
-      mobileTouchSelectionEndpointTimeoutMs: parseMobileTouchSelectionEndpointTimeoutMs(
-        parsed.mobileTouchSelectionEndpointTimeoutMs,
-      ),
-      mobileKeyboardHideRefit: parseMobileKeyboardHideRefit(parsed.mobileKeyboardHideRefit),
-      mobileCommandExpandingInput: parseMobileCommandExpandingInput(
-        parsed.mobileCommandExpandingInput,
-      ),
-      mobileCommandEnterNewline: parseMobileCommandEnterNewline(
-        parsed.mobileCommandEnterNewline,
-      ),
+      ...parseDisplayPrefsValue(parsed, fallback),
+      selectedBridgeId: fallback.selectedBridgeId,
+      selectedPane: fallback.selectedPane,
+      activeWorkspace: fallback.activeWorkspace,
+      selectedPanesByBridgeId: fallback.selectedPanesByBridgeId,
+      activeWorkspacesByBridgeId: fallback.activeWorkspacesByBridgeId,
     };
   } catch {
     return fallback;
@@ -764,6 +682,30 @@ function stripMobileHistoryState(value: unknown) {
   delete next[MOBILE_SIDEBAR_HISTORY_KEY];
   delete next[MOBILE_DETAIL_HISTORY_KEY];
   return next;
+}
+
+function usePointerDragResize(
+  active: boolean,
+  onMove: (event: PointerEvent) => void,
+  onEnd: () => void,
+) {
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd, { once: true });
+    window.addEventListener("pointercancel", onEnd, { once: true });
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [active, onMove, onEnd]);
 }
 
 export function App() {
@@ -1377,7 +1319,7 @@ export function App() {
     }
   }, [notesEnabled, sidebarView]);
 
-  const clearSidebarResizePress = () => {
+  const clearSidebarResizePress = useCallback(() => {
     const pending = sidebarResizePressRef.current;
     if (!pending) {
       return;
@@ -1387,92 +1329,43 @@ export function App() {
       pending.target.releasePointerCapture(pending.pointerId);
     }
     sidebarResizePressRef.current = null;
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!resizingSidebar) {
-      return;
-    }
-    const onPointerMove = (event: PointerEvent) => {
+  usePointerDragResize(
+    resizingSidebar,
+    useCallback((event: PointerEvent) => {
       setSidebarWidth(clampSidebarWidth(event.clientX));
-    };
-    const onPointerUp = () => setResizingSidebar(false);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-    window.addEventListener("pointercancel", onPointerUp, { once: true });
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [resizingSidebar]);
-
-  useEffect(() => {
-    if (!resizingNotesPanel) {
-      return;
-    }
-    const onPointerMove = (event: PointerEvent) => {
-      setNotesPanelWidth(
-        clampNotesPanelWidth(window.innerWidth - event.clientX, sidebarWidth, sidebarOpen),
-      );
-    };
-    const onPointerUp = () => setResizingNotesPanel(false);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-    window.addEventListener("pointercancel", onPointerUp, { once: true });
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [resizingNotesPanel, sidebarOpen, sidebarWidth]);
-
-  useEffect(() => {
-    if (!resizingNotesListPane) {
-      return;
-    }
-    const onPointerMove = (event: PointerEvent) => {
-      setNotesListPaneWidth(
-        clampNotesListPaneWidth(event.clientX - notesListResizeLeftRef.current, notesPanelWidth),
-      );
-    };
-    const onPointerUp = () => setResizingNotesListPane(false);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-    window.addEventListener("pointercancel", onPointerUp, { once: true });
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [notesPanelWidth, resizingNotesListPane]);
-
-  useEffect(
-    () => () => {
-      const pending = sidebarResizePressRef.current;
-      if (!pending) {
-        return;
-      }
-      window.clearTimeout(pending.timer);
-      if (pending.target.hasPointerCapture(pending.pointerId)) {
-        pending.target.releasePointerCapture(pending.pointerId);
-      }
-      sidebarResizePressRef.current = null;
-    },
-    [],
+    }, []),
+    useCallback(() => setResizingSidebar(false), []),
   );
+
+  usePointerDragResize(
+    resizingNotesPanel,
+    useCallback(
+      (event: PointerEvent) => {
+        setNotesPanelWidth(
+          clampNotesPanelWidth(window.innerWidth - event.clientX, sidebarWidth, sidebarOpen),
+        );
+      },
+      [sidebarOpen, sidebarWidth],
+    ),
+    useCallback(() => setResizingNotesPanel(false), []),
+  );
+
+  usePointerDragResize(
+    resizingNotesListPane,
+    useCallback(
+      (event: PointerEvent) => {
+        setNotesListPaneWidth(
+          clampNotesListPaneWidth(event.clientX - notesListResizeLeftRef.current, notesPanelWidth),
+        );
+      },
+      [notesPanelWidth],
+    ),
+    useCallback(() => setResizingNotesListPane(false), []),
+  );
+
+  useEffect(() => clearSidebarResizePress, [clearSidebarResizePress]);
 
   const rememberPaneSelection = useCallback((
     bridgeId: BridgeId,
@@ -2675,7 +2568,17 @@ export function App() {
     }
   }
 
-  async function refreshBridgeAgentActivity(runtime: BridgeRuntime, setLoading: boolean) {
+  async function refreshBridgeResource<Resource>(options: {
+    runtime: BridgeRuntime;
+    setLoading: boolean;
+    supported: boolean;
+    setState: Dispatch<SetStateAction<Record<string, BridgeResourceState<Resource>>>>;
+    fetchResponse: () => Promise<Resource>;
+    fallbackError: string;
+    isEnabled?: () => boolean;
+    transformResponse?: (response: Resource, requestConnectionKey: string) => Resource;
+  }): Promise<Resource | null> {
+    const { runtime, setLoading, supported, setState, fetchResponse, fallbackError } = options;
     ensureBridgeConnectionRef(connectionRefs, runtime);
     const requestConnectionKey = runtime.connectionKey;
     const isCurrentConnection = () =>
@@ -2683,12 +2586,8 @@ export function App() {
         connectionRefs.current[runtime.id]?.connectionKey ?? "",
         requestConnectionKey,
       );
-    if (
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
-      !supportsAgentActivity(runtime.capabilities)
-    ) {
-      setAgentActivityStates((current) => ({
+    if (!runtime.canConnect || runtime.capabilityState !== "ready" || !supported) {
+      setState((current) => ({
         ...current,
         [runtime.id]: {
           connectionKey: requestConnectionKey,
@@ -2700,7 +2599,7 @@ export function App() {
       return null;
     }
     if (setLoading) {
-      setAgentActivityStates((current) => ({
+      setState((current) => ({
         ...current,
         [runtime.id]: {
           connectionKey: requestConnectionKey,
@@ -2714,8 +2613,18 @@ export function App() {
       }));
     }
     try {
-      const response = await fetchAgentActivity(runtime.httpUrl);
-      setAgentActivityStates((current) => {
+      const response = (await fetchResponse()) as Resource;
+      if (options.isEnabled && !options.isEnabled()) {
+        return null;
+      }
+      let effectiveResponse = response;
+      if (options.transformResponse) {
+        if (!isCurrentConnection()) {
+          return null;
+        }
+        effectiveResponse = options.transformResponse(response, requestConnectionKey);
+      }
+      setState((current) => {
         if (!isCurrentConnection()) {
           return current;
         }
@@ -2723,19 +2632,22 @@ export function App() {
           ...current,
           [runtime.id]: {
             connectionKey: requestConnectionKey,
-            response,
+            response: effectiveResponse,
             loadState: "ready",
             error: null,
           },
         };
       });
-      return response;
+      return effectiveResponse;
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Agent activity unavailable";
+      const message = caught instanceof Error ? caught.message : fallbackError;
+      if (options.isEnabled && !options.isEnabled()) {
+        return null;
+      }
       if (!isCurrentConnection()) {
         return null;
       }
-      setAgentActivityStates((current) => ({
+      setState((current) => ({
         ...current,
         [runtime.id]: {
           connectionKey: requestConnectionKey,
@@ -2749,6 +2661,17 @@ export function App() {
       }));
       return null;
     }
+  }
+
+  async function refreshBridgeAgentActivity(runtime: BridgeRuntime, setLoading: boolean) {
+    return refreshBridgeResource({
+      runtime,
+      setLoading,
+      supported: supportsAgentActivity(runtime.capabilities),
+      setState: setAgentActivityStates,
+      fetchResponse: () => fetchAgentActivity(runtime.httpUrl),
+      fallbackError: "Agent activity unavailable",
+    });
   }
 
   const refreshAgentActivityForBridge = (bridgeId: BridgeId) => {
@@ -2767,79 +2690,14 @@ export function App() {
   }, [bridge.enabledRuntimes]);
 
   async function refreshBridgeAgentPins(runtime: BridgeRuntime, setLoading: boolean) {
-    ensureBridgeConnectionRef(connectionRefs, runtime);
-    const requestConnectionKey = runtime.connectionKey;
-    const isCurrentConnection = () =>
-      isConnectionResultCurrent(
-        connectionRefs.current[runtime.id]?.connectionKey ?? "",
-        requestConnectionKey,
-      );
-    if (
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
-      !supportsAgentPins(runtime.capabilities)
-    ) {
-      setAgentPinsStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response: null,
-          loadState: "ready",
-          error: null,
-        },
-      }));
-      return null;
-    }
-    if (setLoading) {
-      setAgentPinsStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response:
-            current[runtime.id]?.connectionKey === requestConnectionKey
-              ? current[runtime.id]?.response ?? null
-              : null,
-          loadState: "loading",
-          error: null,
-        },
-      }));
-    }
-    try {
-      const response = await fetchAgentPins(runtime.httpUrl);
-      setAgentPinsStates((current) => {
-        if (!isCurrentConnection()) {
-          return current;
-        }
-        return {
-          ...current,
-          [runtime.id]: {
-            connectionKey: requestConnectionKey,
-            response,
-            loadState: "ready",
-            error: null,
-          },
-        };
-      });
-      return response;
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Agent pins unavailable";
-      if (!isCurrentConnection()) {
-        return null;
-      }
-      setAgentPinsStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response:
-            current[runtime.id]?.connectionKey === requestConnectionKey
-              ? current[runtime.id]?.response ?? null
-              : null,
-          loadState: "error",
-          error: message,
-        },
-      }));
-      return null;
-    }
+    return refreshBridgeResource({
+      runtime,
+      setLoading,
+      supported: supportsAgentPins(runtime.capabilities),
+      setState: setAgentPinsStates,
+      fetchResponse: () => fetchAgentPins(runtime.httpUrl),
+      fallbackError: "Agent pins unavailable",
+    });
   }
 
   const refreshAgentPinsForBridge = (bridgeId: BridgeId) => {
@@ -2858,98 +2716,22 @@ export function App() {
   }, [bridge.enabledRuntimes]);
 
   async function refreshBridgeNotes(runtime: BridgeRuntime, setLoading: boolean) {
-    ensureBridgeConnectionRef(connectionRefs, runtime);
-    const requestConnectionKey = runtime.connectionKey;
-    const isCurrentConnection = () =>
-      isConnectionResultCurrent(
-        connectionRefs.current[runtime.id]?.connectionKey ?? "",
-        requestConnectionKey,
-      );
-    if (
-      !notesEnabled ||
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
-      !supportsNotes(runtime.capabilities)
-    ) {
-      setNotesStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response: null,
-          loadState: "ready",
-          error: null,
-        },
-      }));
-      return null;
-    }
-    if (setLoading) {
-      setNotesStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response:
-            current[runtime.id]?.connectionKey === requestConnectionKey
-              ? current[runtime.id]?.response ?? null
-              : null,
-          loadState: "loading",
-          error: null,
-        },
-      }));
-    }
-    try {
-      const response = await fetchNotes(runtime.httpUrl, {
-        includeArchived: true,
-        includeDeleted: true,
-        includeOtherSessions: true,
-      });
-      if (!notesEnabledRef.current) {
-        return null;
-      }
-      if (!isCurrentConnection()) {
-        return null;
-      }
-      const effectiveResponse = mergePendingCreatedPaneNotesForResponse(
-        runtime.id,
-        requestConnectionKey,
-        response,
-      );
-      setNotesStates((current) => {
-        if (!isCurrentConnection()) {
-          return current;
-        }
-        return {
-          ...current,
-          [runtime.id]: {
-            connectionKey: requestConnectionKey,
-            response: effectiveResponse,
-            loadState: "ready",
-            error: null,
-          },
-        };
-      });
-      return effectiveResponse;
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Notes unavailable";
-      if (!notesEnabledRef.current) {
-        return null;
-      }
-      if (!isCurrentConnection()) {
-        return null;
-      }
-      setNotesStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          response:
-            current[runtime.id]?.connectionKey === requestConnectionKey
-              ? current[runtime.id]?.response ?? null
-              : null,
-          loadState: "error",
-          error: message,
-        },
-      }));
-      return null;
-    }
+    return refreshBridgeResource({
+      runtime,
+      setLoading,
+      supported: notesEnabled && supportsNotes(runtime.capabilities),
+      setState: setNotesStates,
+      fetchResponse: () =>
+        fetchNotes(runtime.httpUrl, {
+          includeArchived: true,
+          includeDeleted: true,
+          includeOtherSessions: true,
+        }),
+      fallbackError: "Notes unavailable",
+      isEnabled: () => notesEnabledRef.current,
+      transformResponse: (response, requestConnectionKey) =>
+        mergePendingCreatedPaneNotesForResponse(runtime.id, requestConnectionKey, response),
+    });
   }
 
   const refreshNotesForBridge = (bridgeId: BridgeId) => {
@@ -5351,6 +5133,34 @@ function Switcher({
       />
     ));
   const showAgentRowBridgeLabel = showGroupedHostContext && agentGroup === "none";
+  const renderAgentRow = (entry: ScopedAgentPane, index: number) => (
+    <AgentRow
+      key={`${entry.bridgeId}:${entry.pane.pane_id}`}
+      index={index}
+      pane={entry.pane}
+      workspace={entry.workspace}
+      tabLabel={entry.tabLabel}
+      bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
+      pinned={entry.pinned === true}
+      active={
+        entry.bridgeId === selectedBridgeId &&
+        entry.pane.pane_id === selectedPane?.pane_id
+      }
+      onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
+      onMenu={(x, y) =>
+        onScopedMenu(
+          "pane",
+          entry.bridgeId,
+          entry.pane.pane_id,
+          paneTitle(entry.pane),
+          x,
+          y,
+          undefined,
+          "agent",
+        )
+      }
+    />
+  );
   const renderAgentGroupRows = () => {
     const renderGroup = (group: ScopedAgentGroup) => (
       <Fragment key={group.key}>
@@ -5359,34 +5169,7 @@ function Switcher({
           bridgeColor={agentGroup === "host" ? group.bridgeColor : undefined}
           status={agentGroup === "workspace" || agentGroup === "hostWorkspace" ? group.status : undefined}
         />
-        {group.panes.map((entry) => (
-          <AgentRow
-            key={`${entry.bridgeId}:${entry.pane.pane_id}`}
-            index={agentPaneIndex++}
-            pane={entry.pane}
-            workspace={entry.workspace}
-            tabLabel={entry.tabLabel}
-            bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
-            pinned={entry.pinned === true}
-            active={
-              entry.bridgeId === selectedBridgeId &&
-              entry.pane.pane_id === selectedPane?.pane_id
-            }
-            onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
-            onMenu={(x, y) =>
-              onScopedMenu(
-                "pane",
-                entry.bridgeId,
-                entry.pane.pane_id,
-                paneTitle(entry.pane),
-                x,
-                y,
-                undefined,
-                "agent",
-              )
-            }
-          />
-        ))}
+        {group.panes.map((entry) => renderAgentRow(entry, agentPaneIndex++))}
       </Fragment>
     );
 
@@ -5771,34 +5554,7 @@ function Switcher({
                     {renderDisconnectedBridgeRows()}
                     {agentGroup !== "none"
                       ? renderAgentGroupRows()
-                      : agentPanes.map((entry, index) => (
-                          <AgentRow
-                            key={`${entry.bridgeId}:${entry.pane.pane_id}`}
-                            index={index}
-                            pane={entry.pane}
-                            workspace={entry.workspace}
-                            tabLabel={entry.tabLabel}
-                            bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
-                            pinned={entry.pinned === true}
-                            active={
-                              entry.bridgeId === selectedBridgeId &&
-                              entry.pane.pane_id === selectedPane?.pane_id
-                            }
-                            onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
-                            onMenu={(x, y) =>
-                              onScopedMenu(
-                                "pane",
-                                entry.bridgeId,
-                                entry.pane.pane_id,
-                                paneTitle(entry.pane),
-                                x,
-                                y,
-                                undefined,
-                                "agent",
-                              )
-                            }
-                          />
-                        ))}
+                      : agentPanes.map((entry, index) => renderAgentRow(entry, index))}
                   </>
                 )
               ) : spaceGroups.every((group) => group.tabs.length === 0) ? (
@@ -7188,25 +6944,26 @@ function isAgentPane(pane: PaneInfo) {
   );
 }
 
+const AGENT_STATUS_ORDER: Record<AgentStatus, number> = {
+  blocked: 0,
+  working: 1,
+  done: 2,
+  idle: 3,
+  unknown: 4,
+};
+const AGENT_ATTENTION_ORDER: Record<AgentStatus, number> = {
+  blocked: 0,
+  done: 1,
+  working: 2,
+  idle: 3,
+  unknown: 4,
+};
+
 function sortAgentPanes(panes: PaneInfo[], sort: AgentSort, snapshot: Snapshot) {
   const workspaceNumber = new Map(
     snapshot.workspaces.map((workspace) => [workspace.workspace_id, workspace.number]),
   );
   const tabNumber = new Map(snapshot.tabs.map((tab) => [tab.tab_id, tab.number]));
-  const statusOrder: Record<AgentStatus, number> = {
-    blocked: 0,
-    working: 1,
-    done: 2,
-    idle: 3,
-    unknown: 4,
-  };
-  const attentionOrder: Record<AgentStatus, number> = {
-    blocked: 0,
-    done: 1,
-    working: 2,
-    idle: 3,
-    unknown: 4,
-  };
 
   return [...panes].sort((a, b) => {
     if (sort === "attention") {
@@ -7214,12 +6971,12 @@ function sortAgentPanes(panes: PaneInfo[], sort: AgentSort, snapshot: Snapshot) 
       if (attention !== 0) {
         return attention;
       }
-      const status = attentionOrder[a.agent_status] - attentionOrder[b.agent_status];
+      const status = AGENT_ATTENTION_ORDER[a.agent_status] - AGENT_ATTENTION_ORDER[b.agent_status];
       if (status !== 0) {
         return status;
       }
     } else if (sort === "status") {
-      const status = statusOrder[a.agent_status] - statusOrder[b.agent_status];
+      const status = AGENT_STATUS_ORDER[a.agent_status] - AGENT_STATUS_ORDER[b.agent_status];
       if (status !== 0) {
         return status;
       }
@@ -7242,21 +6999,6 @@ function sortAgentPanes(panes: PaneInfo[], sort: AgentSort, snapshot: Snapshot) 
 }
 
 export function sortScopedAgentPanes(entries: ScopedAgentPane[], sort: AgentSort) {
-  const statusOrder: Record<AgentStatus, number> = {
-    blocked: 0,
-    working: 1,
-    done: 2,
-    idle: 3,
-    unknown: 4,
-  };
-  const attentionOrder: Record<AgentStatus, number> = {
-    blocked: 0,
-    done: 1,
-    working: 2,
-    idle: 3,
-    unknown: 4,
-  };
-
   return [...entries].sort((a, b) => {
     if (sort === "attention") {
       const attention =
@@ -7264,12 +7006,14 @@ export function sortScopedAgentPanes(entries: ScopedAgentPane[], sort: AgentSort
       if (attention !== 0) {
         return attention;
       }
-      const status = attentionOrder[a.pane.agent_status] - attentionOrder[b.pane.agent_status];
+      const status =
+        AGENT_ATTENTION_ORDER[a.pane.agent_status] - AGENT_ATTENTION_ORDER[b.pane.agent_status];
       if (status !== 0) {
         return status;
       }
     } else if (sort === "status") {
-      const status = statusOrder[a.pane.agent_status] - statusOrder[b.pane.agent_status];
+      const status =
+        AGENT_STATUS_ORDER[a.pane.agent_status] - AGENT_STATUS_ORDER[b.pane.agent_status];
       if (status !== 0) {
         return status;
       }
@@ -7443,17 +7187,6 @@ function agentSubtitle(
     statusLabel(pane.agent_status);
   const dir = basename(pane.foreground_cwd || pane.cwd);
   return [stateText, bridgeLabel, workspace?.label, tabLabel, dir].filter(Boolean).join(" · ");
-}
-
-function basename(path?: string) {
-  if (!path) {
-    return "";
-  }
-  const trimmed = path.replace(/\/+$/, "");
-  if (!trimmed) {
-    return "";
-  }
-  return trimmed.split("/").pop() ?? "";
 }
 
 function SplitGlyph() {

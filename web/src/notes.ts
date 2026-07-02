@@ -1,3 +1,5 @@
+import { apiErrorMessage } from "./bridgeApi";
+import type { BridgeHttpUrl } from "./bridgeApi";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import type { PaneInfo } from "./types";
 import type { BridgeCapabilities } from "./bridge";
@@ -75,7 +77,7 @@ export type NoteRevisionInput = {
   expectedRevision: number;
 };
 
-export type BridgeHttpUrl = (path: string, query?: URLSearchParams) => string;
+export type { BridgeHttpUrl } from "./bridgeApi";
 
 export class NotesApiError extends Error {
   readonly status: number;
@@ -214,15 +216,11 @@ async function parseNoteResponse(response: Response) {
 }
 
 async function notesApiError(response: Response, fallback: string) {
-  try {
-    const parsed = (await response.json()) as { error?: unknown };
-    if (typeof parsed.error === "string" && parsed.error.trim()) {
-      return new NotesApiError(parsed.error, response.status);
-    }
-  } catch {
-    // Fall through to the status-based error.
-  }
-  return new NotesApiError(`${fallback} failed: ${response.status}`, response.status);
+  const message = await apiErrorMessage(response);
+  return new NotesApiError(
+    message ?? `${fallback} failed: ${response.status}`,
+    response.status,
+  );
 }
 
 function notePath(noteId: string, action: string) {
