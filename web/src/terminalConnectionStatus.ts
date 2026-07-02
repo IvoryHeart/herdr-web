@@ -11,10 +11,22 @@ export function parseTerminalCloseReason(message: string) {
   }
 }
 
+/**
+ * "Already attached" rejections are usually transient — a bridge restart or
+ * reattach can race the daemon's cleanup of the previous connection — so the
+ * client retries them a few times before treating them as a genuine external
+ * attach conflict.
+ */
+export const MAX_TERMINAL_ATTACH_CONFLICT_RETRIES = 3;
+
+export function isTerminalAttachConflictClose(reason: string | null) {
+  return reason !== null && reason.includes("already has an attached client");
+}
+
 export function isNonRetryableTerminalClose(reason: string | null) {
   return (
     reason !== null &&
-    (reason.includes("already has an attached client") ||
+    (isTerminalAttachConflictClose(reason) ||
       reason.includes("terminal attach taken over") ||
       reason.includes("terminal attach failed: terminal"))
   );

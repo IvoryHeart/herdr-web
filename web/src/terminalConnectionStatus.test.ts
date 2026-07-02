@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_TERMINAL_ATTACH_CONFLICT_RETRIES,
   TERMINAL_CONNECTION_OVERLAY_DELAY_MS,
   isNonRetryableTerminalClose,
+  isTerminalAttachConflictClose,
   parseTerminalCloseReason,
   terminalConnectionCopy,
   terminalConnectionOverlayDelayMs,
@@ -26,6 +28,22 @@ describe("terminalConnectionStatus", () => {
     expect(isNonRetryableTerminalClose("terminal attach failed: terminal abc missing")).toBe(true);
     expect(isNonRetryableTerminalClose("temporary network close")).toBe(false);
     expect(isNonRetryableTerminalClose(null)).toBe(false);
+    // The bridge emits this when an attach loses to sustained detach churn;
+    // it must stay retryable so the client's backoff resolves it.
+    expect(
+      isNonRetryableTerminalClose("terminal attach conflicted with a pending detach; retry shortly"),
+    ).toBe(false);
+  });
+
+  it("classifies attach conflicts for the bounded retry budget", () => {
+    expect(
+      isTerminalAttachConflictClose(
+        "terminal attach failed: terminal abc already has an attached client; retry with --takeover",
+      ),
+    ).toBe(true);
+    expect(isTerminalAttachConflictClose("terminal attach taken over")).toBe(false);
+    expect(isTerminalAttachConflictClose(null)).toBe(false);
+    expect(MAX_TERMINAL_ATTACH_CONFLICT_RETRIES).toBeGreaterThan(0);
   });
 
   it("maps terminal connection states to status copy", () => {
