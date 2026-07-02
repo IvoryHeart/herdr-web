@@ -30,6 +30,8 @@
 
 ### Changed
 
+- Unified the `session_key` reported by `/api/agent-activity` with the notes and agent-pins
+  endpoints (`session:default` and FNV-1a socket hashes instead of a divergent local format).
 - Extended the pinned-only sidebar toggle to the Tabs view so pinned panes can be found outside the
   Agents view. [PR #23](https://github.com/kcosr/herdr-web/pull/23)
 - Notes created from the notes panel now open in Edit mode with the title selected, so the default

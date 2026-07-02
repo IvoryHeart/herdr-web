@@ -1045,6 +1045,8 @@ fn default_upload_dir() -> PathBuf {
     PathBuf::from("herdr-web-uploads")
 }
 
+// Intentionally diverges from `store_util::non_empty_env_path`: upload dir
+// configuration trims whitespace and expands a leading `~`.
 fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     let value = env::var(name).ok()?;
     let trimmed = value.trim();
@@ -1982,7 +1984,7 @@ async fn agent_pins_list_handler(
 ) -> Result<Json<AgentPinsListResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     Ok(Json(
-        run_agent_pins_task(state, move |state| {
+        run_store_task(state, move |state| {
             let panes = current_panes(&state.api)?;
             Ok(state.agent_pins.list(&panes)?)
         })
@@ -1997,7 +1999,7 @@ async fn agent_pins_pin_handler(
 ) -> Result<Json<AgentPinsListResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     let event_pane_id = pane_id.clone();
-    let response = run_agent_pins_task(state.clone(), move |state| {
+    let response = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.agent_pins.pin(&pane_id, &panes)?)
     })
@@ -2013,7 +2015,7 @@ async fn agent_pins_unpin_handler(
 ) -> Result<Json<AgentPinsListResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     let event_pane_id = pane_id.clone();
-    let response = run_agent_pins_task(state.clone(), move |state| {
+    let response = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.agent_pins.unpin(&pane_id, &panes)?)
     })
@@ -2029,7 +2031,7 @@ async fn notes_list_handler(
 ) -> Result<Json<NotesListResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     Ok(Json(
-        run_notes_task(state, move |state| {
+        run_store_task(state, move |state| {
             let panes = current_panes(&state.api)?;
             Ok(state.notes.list(query, &panes)?)
         })
@@ -2043,7 +2045,7 @@ async fn notes_create_handler(
     Json(body): Json<CreateNoteRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.create(body, &panes)?)
     })
@@ -2059,7 +2061,7 @@ async fn notes_update_handler(
     Json(body): Json<UpdateNoteRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.update(&note_id, body, &panes)?)
     })
@@ -2075,7 +2077,7 @@ async fn notes_attach_handler(
     Json(body): Json<AttachNoteRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.attach(&note_id, body, &panes)?)
     })
@@ -2091,7 +2093,7 @@ async fn notes_detach_handler(
     Json(body): Json<RevisionRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.detach(&note_id, body, &panes)?)
     })
@@ -2107,7 +2109,7 @@ async fn notes_archive_handler(
     Json(body): Json<RevisionRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.archive(&note_id, body, &panes)?)
     })
@@ -2123,7 +2125,7 @@ async fn notes_restore_handler(
     Json(body): Json<RevisionRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.restore(&note_id, body, &panes)?)
     })
@@ -2139,7 +2141,7 @@ async fn notes_delete_handler(
     Json(body): Json<RevisionRequest>,
 ) -> Result<Json<NoteResponse>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
-    let note = run_notes_task(state.clone(), move |state| {
+    let note = run_store_task(state.clone(), move |state| {
         let panes = current_panes(&state.api)?;
         Ok(state.notes.delete(&note_id, body, &panes)?)
     })
@@ -2148,17 +2150,7 @@ async fn notes_delete_handler(
     Ok(Json(note))
 }
 
-async fn run_agent_pins_task<T, F>(state: BridgeState, task: F) -> Result<T, BridgeError>
-where
-    T: Send + 'static,
-    F: FnOnce(BridgeState) -> Result<T, BridgeError> + Send + 'static,
-{
-    tokio::task::spawn_blocking(move || task(state))
-        .await
-        .map_err(|err| BridgeError::Protocol(err.to_string()))?
-}
-
-async fn run_notes_task<T, F>(state: BridgeState, task: F) -> Result<T, BridgeError>
+async fn run_store_task<T, F>(state: BridgeState, task: F) -> Result<T, BridgeError>
 where
     T: Send + 'static,
     F: FnOnce(BridgeState) -> Result<T, BridgeError> + Send + 'static,
