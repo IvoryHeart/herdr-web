@@ -1,8 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
-### Breaking Changes
+## [0.3.0] - 2026-07-02
 
 ### Added
 
@@ -104,8 +102,6 @@
 - Improved terminal reconnect/resume handling so Android foregrounding and quick terminal switches
   keep the renderer stable, avoid stale tab flashes, and suppress transient connecting overlays.
   [PR #19](https://github.com/kcosr/herdr-web/pull/19)
-
-### Removed
 
 ## [0.2.1] - 2026-06-20
 
