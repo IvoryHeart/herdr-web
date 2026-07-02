@@ -528,10 +528,12 @@ fn terminal_output_coalesce_window(coalesce_ms: Option<u64>) -> Duration {
 }
 
 /// Shared attach connections keyed by terminal id. `draining` remembers
-/// connections whose `Detach` was queued but whose socket the daemon has not
-/// closed yet; a reattach must wait for that close, because the daemon frees
-/// a terminal's attach-owner slot before dropping the connection and rejects
-/// any attach that arrives earlier as a second concurrent client.
+/// connections whose `Detach` has been queued but not yet flushed to the
+/// daemon and shut down by the writer thread. A reattach waits for that
+/// teardown so the new attach cannot reach the daemon ahead of the pending
+/// `Detach` and be rejected as a second concurrent client. The daemon never
+/// closes attach sockets itself, so the close that resolves a draining entry
+/// is always the bridge's own post-`Detach` shutdown.
 #[derive(Default)]
 struct TerminalSessions {
     active: HashMap<String, SharedTerminalSession>,
@@ -3309,6 +3311,7 @@ fn open_terminal_attach(
     thread::spawn(move || {
         let mut write_stream = stream;
         for message in write_rx {
+            let is_detach = matches!(message, ClientMessage::Detach);
             let input_len = match &message {
                 ClientMessage::Input { data } => data.len(),
                 _ => 0,
@@ -3321,6 +3324,15 @@ fn open_terminal_attach(
                 break;
             }
             let _ = write_stream.flush();
+            if is_detach {
+                // The daemon unregisters the client when it processes Detach
+                // but never closes the socket. Without a local shutdown both
+                // read sides stay blocked forever: this bridge's read thread
+                // (whose exit resolves the draining marker) and the daemon's
+                // reader thread. Shutting down delivers EOF to both.
+                shutdown_terminal_attach_stream(&write_stream);
+                break;
+            }
         }
     });
 
@@ -3354,8 +3366,9 @@ fn open_terminal_attach(
                 | ServerMessage::Graphics { .. } => {}
             }
         }
-        // The daemon frees the terminal's attach-owner slot before this
-        // connection closes, so reattach waiters may proceed once it fires.
+        // By this point the Detach (if any) has been flushed and the socket
+        // shut down, so a reattach waiter that proceeds now can no longer
+        // beat the queued Detach to the daemon.
         reader_connection_closed.mark_closed();
     });
 
@@ -3366,6 +3379,20 @@ fn open_terminal_attach(
         },
         connection_closed,
     })
+}
+
+/// Shuts down a terminal attach socket so both its blocked readers (the
+/// bridge's and the daemon's) observe EOF; the daemon does not close attach
+/// connections on its own after a `Detach`.
+fn shutdown_terminal_attach_stream(stream: &herdr_compat::ipc::LocalStream) {
+    #[cfg(unix)]
+    match stream {
+        herdr_compat::ipc::LocalStream::UdSocket(inner) => {
+            let _ = inner.inner().shutdown(std::net::Shutdown::Both);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = stream; // Named pipes tear down once both processes drop handles.
 }
 
 fn terminal_attach_protocol(api: &ApiClient) -> Result<u32, BridgeError> {
@@ -3840,6 +3867,70 @@ mod tests {
         connection.mark_closed();
         assert!(handle.join().unwrap());
         assert!(connection.is_closed());
+    }
+
+    /// The daemon unregisters a client on `Detach` but keeps the socket open,
+    /// so the bridge must shut the connection down itself or the draining
+    /// marker would only ever resolve by timeout (a 2s stall on reattach).
+    #[cfg(unix)]
+    #[test]
+    fn detach_tears_down_attach_connection_without_daemon_close() {
+        let dir = std::env::temp_dir();
+        let dir = if dir.as_os_str().len() <= 40 {
+            dir
+        } else {
+            PathBuf::from("/tmp")
+        };
+        let socket_path = dir.join(format!("herdr-web-detach-test-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&socket_path);
+        let listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+
+        let (daemon_tx, daemon_rx) = mpsc::channel();
+        let daemon = thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            sock.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let hello: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(hello, ClientMessage::Hello { .. }));
+            protocol::write_message(
+                &mut sock,
+                &ServerMessage::Welcome {
+                    version: PROTOCOL_VERSION,
+                    encoding: RenderEncoding::TerminalAnsi,
+                    error: None,
+                },
+            )
+            .unwrap();
+            let attach: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(attach, ClientMessage::AttachTerminal { .. }));
+            let detach: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(detach, ClientMessage::Detach));
+            // Like the real daemon: keep the socket open after Detach and
+            // just keep reading. Only the bridge's shutdown ends this read.
+            let bridge_shut_down =
+                protocol::read_message::<_, ClientMessage>(&mut sock, MAX_FRAME_SIZE).is_err();
+            daemon_tx.send(bridge_shut_down).unwrap();
+        });
+
+        let (output_tx, _) = tokio::sync::broadcast::channel(8);
+        let attach = open_terminal_attach(
+            socket_path.clone(),
+            "term-test".to_string(),
+            80,
+            24,
+            false,
+            PROTOCOL_VERSION,
+            output_tx,
+        )
+        .unwrap();
+
+        attach.write_tx.send(ClientMessage::Detach).unwrap();
+
+        // The bridge's own post-Detach shutdown must resolve the close signal
+        // quickly; before the fix this only resolved by drain timeout.
+        assert!(attach.connection_closed.wait_closed(Duration::from_secs(2)));
+        assert!(daemon_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        daemon.join().unwrap();
+        let _ = std::fs::remove_file(&socket_path);
     }
 
     #[test]

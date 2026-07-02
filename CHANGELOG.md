@@ -12,8 +12,11 @@
 
 - Fixed a bridge reattach race where a client reconnecting right after the last viewer left a
   terminal could be rejected by the daemon with `already has an attached client` and shown a
-  permanent `Attached elsewhere` error; reattaches now wait for the daemon to finish tearing down
-  the previous attach connection.
+  permanent `Attached elsewhere` error; the bridge now shuts detached attach connections down and
+  reattaches only after the pending detach has been delivered.
+  [PR #26](https://github.com/kcosr/herdr-web/pull/26)
+- Stopped detached terminal attach connections from leaking a blocked reader thread and an open
+  socket on both the bridge and daemon sides after every pane switch.
   [PR #26](https://github.com/kcosr/herdr-web/pull/26)
 
 ### Removed
