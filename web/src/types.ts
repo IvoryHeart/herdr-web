@@ -38,8 +38,6 @@ export type PaneInfo = {
   agent_status: AgentStatus;
   custom_status?: string;
   state_labels?: Record<string, string>;
-  launcher_preset_id?: string | null;
-  custom_icon_url?: string | null;
   revision: number;
 };
 

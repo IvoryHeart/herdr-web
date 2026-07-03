@@ -24,7 +24,6 @@ export function LaunchDialog({
     label: "Shell",
     icon: "terminal",
     agent_hint: null,
-    custom_icon_url: null,
     built_in: true,
   };
   const [presetId, setPresetId] = useState(firstOption.id);
@@ -163,9 +162,6 @@ export function LaunchDialog({
 }
 
 function LaunchOptionIcon({ option }: { option: LauncherPresetOption }) {
-  if (option.custom_icon_url) {
-    return <img className="launch-option-custom-icon" src={option.custom_icon_url} alt="" />;
-  }
   if (option.icon === "claude" || option.icon === "codex" || option.icon === "pi") {
     return <AgentIcon kind={option.icon} />;
   }

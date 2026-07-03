@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 pub const LAUNCHER_PRESETS_ENV: &str = "HERDR_WEB_LAUNCHER_PRESETS";
 pub const MAX_PRESET_ID_BYTES: usize = 80;
 pub const MAX_LABEL_BYTES: usize = 120;
-pub const MAX_ICON_BYTES: u64 = 256 * 1024;
 
 const BUILTIN_SHELL_ID: &str = "builtin:shell";
 const BUILTIN_CODEX_ID: &str = "builtin:codex";
@@ -72,8 +71,6 @@ pub struct ResolvedLauncherPreset {
     pub env: HashMap<String, String>,
     pub cwd: Option<String>,
     pub icon: String,
-    pub icon_path: Option<PathBuf>,
-    pub icon_content_type: Option<&'static str>,
     pub built_in: bool,
 }
 
@@ -90,7 +87,6 @@ pub struct LauncherPresetDisplay {
     pub label: String,
     pub agent_hint: Option<String>,
     pub icon: String,
-    pub custom_icon_url: Option<String>,
     pub built_in: bool,
 }
 
@@ -118,8 +114,6 @@ struct LauncherPresetConfig {
     cwd: Option<String>,
     #[serde(default)]
     icon: Option<String>,
-    #[serde(default)]
-    icon_path: Option<String>,
 }
 
 impl LauncherPresetStore {
@@ -215,10 +209,6 @@ impl LauncherPresetStore {
                     label: preset.label.clone(),
                     agent_hint: preset.agent_hint.clone(),
                     icon: preset.icon.clone(),
-                    custom_icon_url: preset
-                        .icon_path
-                        .as_ref()
-                        .map(|_| format!("/api/launcher-presets/icons/{}", preset.id)),
                     built_in: preset.built_in,
                 })
                 .collect(),
@@ -228,11 +218,6 @@ impl LauncherPresetStore {
 
     pub fn preset(&self, id: &str) -> Option<&ResolvedLauncherPreset> {
         self.presets.iter().find(|preset| preset.id == id)
-    }
-
-    pub fn icon(&self, id: &str) -> Option<(&Path, &'static str)> {
-        let preset = self.preset(id)?;
-        Some((preset.icon_path.as_deref()?, preset.icon_content_type?))
     }
 }
 
@@ -376,8 +361,6 @@ fn builtin(
         env: HashMap::new(),
         cwd: None,
         icon: icon.into(),
-        icon_path: None,
-        icon_content_type: None,
         built_in: true,
     }
 }
@@ -422,7 +405,6 @@ fn resolve_config_preset(
         .transpose()
         .map_err(|err| format!("invalid preset {id}: {err}"))?;
     let mut warnings = Vec::new();
-    let has_icon = preset.icon.is_some();
     let icon = match preset.icon {
         Some(icon) => {
             validate_icon(&icon).map_err(|err| format!("invalid preset {id}: {err}"))?;
@@ -437,20 +419,6 @@ fn resolve_config_preset(
             ));
         }
     }
-    let (icon_path, icon_content_type) = match preset.icon_path {
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let content_type =
-                validate_icon_path(&path).map_err(|err| format!("invalid preset {id}: {err}"))?;
-            if has_icon {
-                warnings.push(format!(
-                    "preset {id}: icon_path takes precedence over icon fallback"
-                ));
-            }
-            (Some(path), Some(content_type))
-        }
-        None => (None, None),
-    };
     Ok((
         ResolvedLauncherPreset {
             id,
@@ -460,8 +428,6 @@ fn resolve_config_preset(
             env: preset.env,
             cwd,
             icon,
-            icon_path,
-            icon_content_type,
             built_in: false,
         },
         warnings,
@@ -557,24 +523,6 @@ fn validate_cwd(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_icon_path(path: &Path) -> Result<&'static str, String> {
-    if !path.is_absolute() {
-        return Err("icon_path must be absolute".into());
-    }
-    let metadata = fs::metadata(path).map_err(|err| format!("icon_path is not readable: {err}"))?;
-    if !metadata.is_file() {
-        return Err("icon_path must point to a file".into());
-    }
-    if metadata.len() > MAX_ICON_BYTES {
-        return Err("icon_path exceeds 256 KiB".into());
-    }
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some(extension) if extension.eq_ignore_ascii_case("png") => Ok("image/png"),
-        Some(extension) if extension.eq_ignore_ascii_case("webp") => Ok("image/webp"),
-        _ => Err("icon_path must be a PNG or WebP image".into()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -663,7 +611,6 @@ mod tests {
                 env: HashMap::from([("FOO".into(), "bar".into())]),
                 cwd: None,
                 icon: None,
-                icon_path: None,
             },
             &HashSet::new(),
         )
@@ -684,7 +631,6 @@ mod tests {
                 env: HashMap::from([("HERDR_AGENT".into(), "codex".into())]),
                 cwd: None,
                 icon: None,
-                icon_path: None,
             },
             &HashSet::new(),
         )
@@ -706,38 +652,11 @@ mod tests {
                 env: HashMap::new(),
                 cwd: None,
                 icon: None,
-                icon_path: None,
             },
             &used,
         )
         .unwrap_err();
         assert!(err.contains("duplicate or reserved"));
-    }
-
-    #[test]
-    fn icon_path_validation_rejects_invalid_files() {
-        let root = unique_test_dir("launcher-presets-icon");
-        fs::create_dir_all(&root).unwrap();
-
-        assert!(validate_icon_path(Path::new("relative.png"))
-            .unwrap_err()
-            .contains("absolute"));
-
-        let wrong_extension = root.join("icon.gif");
-        fs::write(&wrong_extension, b"gif").unwrap();
-        assert!(validate_icon_path(&wrong_extension)
-            .unwrap_err()
-            .contains("PNG or WebP"));
-
-        let oversize = root.join("icon.png");
-        fs::write(&oversize, vec![0; (MAX_ICON_BYTES + 1) as usize]).unwrap();
-        assert!(validate_icon_path(&oversize)
-            .unwrap_err()
-            .contains("256 KiB"));
-
-        let webp = root.join("icon.webp");
-        fs::write(&webp, b"webp").unwrap();
-        assert_eq!(validate_icon_path(&webp).unwrap(), "image/webp");
     }
 
     #[test]
@@ -750,8 +669,6 @@ mod tests {
             env: HashMap::new(),
             cwd: None,
             icon: "terminal".into(),
-            icon_path: None,
-            icon_content_type: None,
             built_in: false,
         };
         let root = LayoutNode::Pane {

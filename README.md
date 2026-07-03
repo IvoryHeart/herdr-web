@@ -192,7 +192,6 @@ Example:
     {
       "id": "team-agent",
       "label": "Team Agent",
-      "icon_path": "/home/me/.config/herdr-web/icons/team-agent.png",
       "argv": ["team-agent"]
     }
   ]

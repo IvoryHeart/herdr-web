@@ -14,8 +14,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
-    ACCESS_CONTROL_MAX_AGE, ACCESS_CONTROL_REQUEST_HEADERS, CACHE_CONTROL, CONTENT_TYPE, HOST,
-    ORIGIN, VARY,
+    ACCESS_CONTROL_MAX_AGE, ACCESS_CONTROL_REQUEST_HEADERS, HOST, ORIGIN, VARY,
 };
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
@@ -25,7 +24,6 @@ use axum::{extract::Request as AxumRequest, Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use herdr_compat::TryClone as _;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncReadExt;
 use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
@@ -50,7 +48,7 @@ use crate::agent_activity::{AgentActivityListResponse, AgentActivityManager};
 use crate::agent_pins::{AgentPinsError, AgentPinsListResponse, AgentPinsManager};
 use crate::launcher_presets::{
     layout_leaf_for_preset, split_layout_with_command_preset, LauncherPresetStore,
-    ResolvedLauncherPreset, MAX_ICON_BYTES, MAX_LABEL_BYTES,
+    ResolvedLauncherPreset, MAX_LABEL_BYTES,
 };
 use crate::notes::{
     AttachNoteRequest, CreateNoteRequest, NoteResponse, NotesError, NotesListQuery,
@@ -105,17 +103,10 @@ struct BridgeState {
     agent_activity: Arc<AgentActivityManager>,
     agent_pins: Arc<AgentPinsManager>,
     launcher_presets: Arc<LauncherPresetStore>,
-    launcher_pane_presets: Arc<Mutex<HashMap<String, LauncherPanePresetRecord>>>,
     notes: Arc<NotesManager>,
     ui_event_tx: tokio::sync::broadcast::Sender<String>,
     activity_tx: tokio::sync::broadcast::Sender<ActivityMessage>,
     upload_dir: PathBuf,
-}
-
-#[derive(Debug, Clone)]
-struct LauncherPanePresetRecord {
-    preset_id: String,
-    missing_snapshots: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -131,7 +122,7 @@ struct RequestPolicy {
 struct Snapshot {
     workspaces: Vec<SnapshotWorkspaceInfo>,
     tabs: Vec<SnapshotTabInfo>,
-    panes: Vec<SnapshotPaneInfo>,
+    panes: Vec<PaneInfo>,
     layouts: Vec<PaneLayoutSnapshot>,
     selected_pane_id: Option<String>,
 }
@@ -148,16 +139,6 @@ struct SnapshotTabInfo {
     #[serde(flatten)]
     info: TabInfo,
     can_clear_name: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct SnapshotPaneInfo {
-    #[serde(flatten)]
-    info: PaneInfo,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    launcher_preset_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    custom_icon_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -667,7 +648,6 @@ enum BridgeError {
     BadRequest(String),
     Conflict(String),
     Forbidden(String),
-    NotFound(String),
     Protocol(String),
 }
 
@@ -688,7 +668,6 @@ impl fmt::Display for BridgeError {
             Self::BadRequest(message) => write!(f, "{message}"),
             Self::Conflict(message) => write!(f, "{message}"),
             Self::Forbidden(message) => write!(f, "{message}"),
-            Self::NotFound(message) => write!(f, "{message}"),
             Self::Protocol(message) => write!(f, "{message}"),
         }
     }
@@ -700,7 +679,6 @@ impl IntoResponse for BridgeError {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
-            Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Api(_) | Self::Io(_) | Self::Protocol(_) => StatusCode::BAD_GATEWAY,
         };
         let body = Json(serde_json::json!({
@@ -976,7 +954,6 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         agent_activity,
         agent_pins,
         launcher_presets,
-        launcher_pane_presets: Arc::new(Mutex::new(HashMap::new())),
         notes,
         ui_event_tx: tokio::sync::broadcast::channel(256).0,
         activity_tx: tokio::sync::broadcast::channel(512).0,
@@ -1040,10 +1017,6 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         .route(
             "/api/launcher-presets/launch",
             post(launcher_preset_launch_handler).options(preflight_handler),
-        )
-        .route(
-            "/api/launcher-presets/icons/{preset_id}",
-            get(launcher_preset_icon_handler).options(preflight_handler),
         );
     let app = Router::new()
         .merge(agent_activity_routes)
@@ -1418,30 +1391,14 @@ fn connect_sources_for_origin(origin: &str) -> Result<Vec<String>, String> {
 fn content_security_policy(policy: &RequestPolicy) -> HeaderValue {
     let mut connect_src = vec!["'self'".to_string(), "data:".to_string()];
     connect_src.extend(policy.allowed_connect_sources.iter().cloned());
-    let mut img_src = vec![
-        "'self'".to_string(),
-        "data:".to_string(),
-        "blob:".to_string(),
-    ];
-    img_src.extend(image_sources_for_connect_sources(
-        &policy.allowed_connect_sources,
-    ));
     let value = format!(
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src {}; \
-         img-src {}; \
+         img-src 'self' data: blob:; \
          style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'; \
          frame-ancestors 'none'",
-        connect_src.join(" "),
-        img_src.join(" ")
+        connect_src.join(" ")
     );
     HeaderValue::from_str(&value).expect("connect-src sources are validated origins")
-}
-
-fn image_sources_for_connect_sources(sources: &[String]) -> impl Iterator<Item = String> + '_ {
-    sources
-        .iter()
-        .filter(|source| source.starts_with("http://") || source.starts_with("https://"))
-        .cloned()
 }
 
 fn normalize_allowed_host(host: &str) -> Result<String, String> {
@@ -1884,51 +1841,6 @@ async fn launcher_presets_handler(
     Ok(Json(response))
 }
 
-async fn launcher_preset_icon_handler(
-    State(state): State<BridgeState>,
-    headers: HeaderMap,
-    AxumPath(preset_id): AxumPath<String>,
-) -> Result<Response, BridgeError> {
-    ensure_allowed_request(&headers, &state.request_policy)?;
-    let Some((path, content_type)) = state.launcher_presets.icon(&preset_id) else {
-        return Err(BridgeError::NotFound(
-            "launcher preset icon not found".into(),
-        ));
-    };
-    let file = tokio::fs::File::open(path)
-        .await
-        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
-    let metadata = file
-        .metadata()
-        .await
-        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
-    if !metadata.is_file() || metadata.len() > MAX_ICON_BYTES {
-        return Err(BridgeError::NotFound(
-            "launcher preset icon not found".into(),
-        ));
-    }
-    let mut bytes = Vec::with_capacity(metadata.len().min(MAX_ICON_BYTES) as usize);
-    let mut limited = file.take(MAX_ICON_BYTES + 1);
-    limited
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
-    if bytes.len() as u64 > MAX_ICON_BYTES {
-        return Err(BridgeError::NotFound(
-            "launcher preset icon not found".into(),
-        ));
-    }
-    let mut response = bytes.into_response();
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
-    response.headers_mut().insert(
-        CACHE_CONTROL,
-        HeaderValue::from_static("private, max-age=300"),
-    );
-    Ok(response)
-}
-
 async fn launcher_preset_launch_handler(
     State(state): State<BridgeState>,
     headers: HeaderMap,
@@ -1943,7 +1855,6 @@ async fn launcher_preset_launch_handler(
         .cloned()
         .ok_or_else(|| LauncherPresetError::not_found("launcher preset not found"))?;
     let title = resolve_launch_title(body.title.as_deref(), &preset.label)?;
-    let annotate_launch = !preset.is_builtin_shell();
     info!(
         preset_id = %preset.id,
         title = %title,
@@ -1956,10 +1867,6 @@ async fn launcher_preset_launch_handler(
     })
     .await
     .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))??;
-    if annotate_launch {
-        observe_launcher_preset_pane(&state, &response)
-            .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
-    }
     Ok(Json(response))
 }
 
@@ -2575,8 +2482,6 @@ async fn snapshot_handler(
         })
         .collect();
 
-    let panes = snapshot_panes_with_launcher_presets(&state, panes)?;
-
     Ok(Json(Snapshot {
         workspaces,
         tabs,
@@ -2837,63 +2742,6 @@ fn observe_agent_activity_snapshot(state: &BridgeState, panes: &[PaneInfo]) {
     if state.agent_activity.observe_snapshot(panes) {
         broadcast_agent_activity_changed(state);
     }
-}
-
-fn observe_launcher_preset_pane(
-    state: &BridgeState,
-    response: &LauncherPresetLaunchResponse,
-) -> Result<(), BridgeError> {
-    let mut launched = state
-        .launcher_pane_presets
-        .lock()
-        .map_err(|_| BridgeError::Protocol("launcher preset pane lock poisoned".to_string()))?;
-    launched.insert(
-        response.pane_id.clone(),
-        LauncherPanePresetRecord {
-            preset_id: response.preset_id.clone(),
-            missing_snapshots: 0,
-        },
-    );
-    Ok(())
-}
-
-fn snapshot_panes_with_launcher_presets(
-    state: &BridgeState,
-    panes: Vec<PaneInfo>,
-) -> Result<Vec<SnapshotPaneInfo>, BridgeError> {
-    let pane_ids: HashSet<String> = panes.iter().map(|pane| pane.pane_id.clone()).collect();
-    let mut launched = state
-        .launcher_pane_presets
-        .lock()
-        .map_err(|_| BridgeError::Protocol("launcher preset pane lock poisoned".to_string()))?;
-    launched.retain(|pane_id, record| {
-        if pane_ids.contains(pane_id) {
-            record.missing_snapshots = 0;
-            true
-        } else if record.missing_snapshots == 0 {
-            record.missing_snapshots = 1;
-            true
-        } else {
-            false
-        }
-    });
-    Ok(panes
-        .into_iter()
-        .map(|pane| {
-            let launcher_preset_id = launched
-                .get(&pane.pane_id)
-                .map(|record| record.preset_id.clone());
-            let custom_icon_url = launcher_preset_id
-                .as_deref()
-                .and_then(|preset_id| state.launcher_presets.icon(preset_id).map(|_| preset_id))
-                .map(|preset_id| format!("/api/launcher-presets/icons/{preset_id}"));
-            SnapshotPaneInfo {
-                info: pane,
-                launcher_preset_id,
-                custom_icon_url,
-            }
-        })
-        .collect())
 }
 
 fn current_panes(api: &ApiClient) -> Result<Vec<PaneInfo>, BridgeError> {
@@ -5137,7 +4985,7 @@ mod tests {
         let value = header.to_str().unwrap();
 
         assert!(value.contains("connect-src 'self' data: http://srv:8787 ws://srv:8787;"));
-        assert!(value.contains("img-src 'self' data: blob: http://srv:8787;"));
+        assert!(value.contains("img-src 'self' data: blob:;"));
         assert!(value.contains("frame-ancestors 'none'"));
     }
 

@@ -7,7 +7,6 @@ export type LauncherPresetOption = {
   label: string;
   agent_hint: string | null;
   icon: string;
-  custom_icon_url: string | null;
   built_in: boolean;
 };
 
@@ -23,7 +22,6 @@ export const FALLBACK_LAUNCHER_PRESETS: LauncherPresetOption[] = [
     label: "Shell",
     agent_hint: null,
     icon: "terminal",
-    custom_icon_url: null,
     built_in: true,
   },
   {
@@ -31,7 +29,6 @@ export const FALLBACK_LAUNCHER_PRESETS: LauncherPresetOption[] = [
     label: "Codex",
     agent_hint: "codex",
     icon: "codex",
-    custom_icon_url: null,
     built_in: true,
   },
   {
@@ -39,7 +36,6 @@ export const FALLBACK_LAUNCHER_PRESETS: LauncherPresetOption[] = [
     label: "Claude",
     agent_hint: "claude",
     icon: "claude",
-    custom_icon_url: null,
     built_in: true,
   },
   {
@@ -47,7 +43,6 @@ export const FALLBACK_LAUNCHER_PRESETS: LauncherPresetOption[] = [
     label: "pi",
     agent_hint: "pi",
     icon: "pi",
-    custom_icon_url: null,
     built_in: true,
   },
 ];
@@ -99,7 +94,6 @@ function parseLauncherPreset(value: unknown): LauncherPresetOption | null {
     label: value.label,
     agent_hint: typeof value.agent_hint === "string" ? value.agent_hint : null,
     icon: typeof value.icon === "string" ? value.icon : "terminal",
-    custom_icon_url: typeof value.custom_icon_url === "string" ? value.custom_icon_url : null,
     built_in: value.built_in === true,
   };
 }

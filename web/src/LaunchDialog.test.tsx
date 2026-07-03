@@ -37,7 +37,7 @@ describe("LaunchDialog", () => {
     const { container, onSubmit } = await renderDialog([
       preset("builtin:shell", "Shell", "terminal", true),
       preset("builtin:codex", "Codex", "codex", true),
-      preset("remote-codex", "Remote Codex", "codex", false, "/icons/remote-codex.png"),
+      preset("remote-codex", "Remote Codex", "codex", false),
       preset("team-agent", "Team Agent", "terminal", false),
     ]);
 
@@ -48,9 +48,6 @@ describe("LaunchDialog", () => {
       "Remote Codex",
       "Team Agent",
     ]);
-    expect(container.querySelector<HTMLImageElement>(".launch-option-custom-icon")?.src).toContain(
-      "/icons/remote-codex.png",
-    );
 
     await act(async () => {
       options[2].click();
@@ -140,14 +137,12 @@ function preset(
   label: string,
   icon: string,
   builtIn: boolean,
-  customIconUrl: string | null = null,
 ): LauncherPresetOption {
   return {
     id,
     label,
     agent_hint: icon === "terminal" ? null : icon,
     icon,
-    custom_icon_url: customIconUrl,
     built_in: builtIn,
   };
 }

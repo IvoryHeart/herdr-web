@@ -12,7 +12,6 @@ import {
   menuItems,
   nextVisibleAgentPaneEntry,
   nextVisibleTabEntry,
-  paneCustomIconUrl,
   resolveInitialSelectedBridgeId,
   resolveCreatedPaneNoteForTarget,
   paneNoteListContains,
@@ -48,86 +47,6 @@ describe("App connection guards", () => {
 });
 
 describe("App multi-bridge helpers", () => {
-  it("resolves pane custom icon URLs through the owning bridge", () => {
-    const paneInfo = {
-      ...pane("pane-a", "workspace-a", "tab-a"),
-      custom_icon_url: "/api/launcher-presets/icons/srv-codex",
-    };
-
-    expect(
-      paneCustomIconUrl(paneInfo, {
-        httpUrl: (path) => `http://pc:8787${path}`,
-      }),
-    ).toBe("http://pc:8787/api/launcher-presets/icons/srv-codex");
-    expect(paneCustomIconUrl(paneInfo, null)).toBeNull();
-    expect(paneCustomIconUrl(pane("pane-b", "workspace-a", "tab-a"), {
-      httpUrl: (path) => `http://pc:8787${path}`,
-    })).toBeNull();
-  });
-
-  it("treats launcher preset custom-icon panes as agent entries", () => {
-    const customPane: PaneInfo = {
-      ...pane("pane-custom", "workspace-a", "tab-a", "unknown"),
-      custom_icon_url: "/api/launcher-presets/icons/team-agent",
-    };
-    const plainPane = pane("pane-plain", "workspace-a", "tab-a", "unknown");
-    const bridgeViews = [
-      bridgeView(
-        "bridge-a",
-        multiPaneSnapshot([workspace("workspace-a", 1)], [plainPane, customPane]),
-      ),
-    ];
-    const scopedWorkspaces = buildVisibleScopedWorkspaces(
-      bridgeViews,
-      "bridge-a",
-      "selected",
-      "space",
-      null,
-      { "bridge-a": "workspace-a" },
-    );
-
-    expect(
-      buildVisibleAgentPaneEntries(
-        scopedWorkspaces,
-        bridgeViews,
-        "selected",
-        "none",
-        "workspace",
-      ).map((item) => item.pane.pane_id),
-    ).toEqual(["pane-custom"]);
-  });
-
-  it("does not treat launcher preset id alone as an agent entry", () => {
-    const shellPane: PaneInfo = {
-      ...pane("pane-shell", "workspace-a", "tab-a", "unknown"),
-      launcher_preset_id: "builtin:shell",
-    };
-    const bridgeViews = [
-      bridgeView(
-        "bridge-a",
-        multiPaneSnapshot([workspace("workspace-a", 1)], [shellPane]),
-      ),
-    ];
-    const scopedWorkspaces = buildVisibleScopedWorkspaces(
-      bridgeViews,
-      "bridge-a",
-      "selected",
-      "space",
-      null,
-      { "bridge-a": "workspace-a" },
-    );
-
-    expect(
-      buildVisibleAgentPaneEntries(
-        scopedWorkspaces,
-        bridgeViews,
-        "selected",
-        "none",
-        "workspace",
-      ),
-    ).toEqual([]);
-  });
-
   it("uses display preference selection before store fallback", () => {
     expect(resolveInitialSelectedBridgeId("bridge-b", ["bridge-a", "bridge-b"], "bridge-a")).toBe(
       "bridge-b",

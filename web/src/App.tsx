@@ -1013,15 +1013,10 @@ export function App() {
       supportsLauncherPresets(launchRuntime.capabilities) &&
       launchPresetState?.response
     ) {
-      return launchPresetState.response.presets.map((preset) => ({
-        ...preset,
-        custom_icon_url: preset.custom_icon_url
-          ? launchRuntime.httpUrl(preset.custom_icon_url)
-          : null,
-      }));
+      return launchPresetState.response.presets;
     }
     return FALLBACK_LAUNCHER_PRESETS;
-  }, [launchPresetState?.response, launchRuntime?.connectionKey]);
+  }, [launchPresetState?.response, launchRuntime?.capabilities]);
 
   useEffect(() => {
     launcherPresetStatesRef.current = launcherPresetStates;
@@ -5014,10 +5009,6 @@ function Switcher({
       activeWorkspaceForBridgeView(view, selectedBridgeId, activeSpace, activeWorkspacesByBridgeId),
     [activeSpace, activeWorkspacesByBridgeId, selectedBridgeId],
   );
-  const runtimeByBridgeId = useMemo(
-    () => new Map(bridgeViews.map((view) => [view.runtime.id, view.runtime])),
-    [bridgeViews],
-  );
   const scopedWorkspaces = useMemo<ScopedWorkspace[]>(
     () =>
       buildVisibleScopedWorkspaces(
@@ -5186,7 +5177,6 @@ function Switcher({
                 key={`${group.bridgeId}:${pane.pane_id}`}
                 index={paneIndex++}
                 pane={pane}
-                customIconUrl={paneCustomIconUrl(pane, runtimeByBridgeId.get(group.bridgeId))}
                 pinned={isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id)}
                 active={group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id}
                 onSelect={() => onSelectPane(group.bridgeId, pane)}
@@ -5261,7 +5251,6 @@ function Switcher({
       workspace={entry.workspace}
       tabLabel={entry.tabLabel}
       bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
-      customIconUrl={paneCustomIconUrl(entry.pane, runtimeByBridgeId.get(entry.bridgeId))}
       pinned={entry.pinned === true}
       active={
         entry.bridgeId === selectedBridgeId &&
@@ -6883,7 +6872,6 @@ function TabDivider({
 
 function PaneRow({
   pane,
-  customIconUrl,
   pinned,
   active,
   index,
@@ -6891,7 +6879,6 @@ function PaneRow({
   onMenu,
 }: {
   pane: PaneInfo;
-  customIconUrl?: string | null;
   pinned?: boolean;
   active: boolean;
   index: number;
@@ -6911,10 +6898,7 @@ function PaneRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className={customIconUrl ? "pane-name pane-title-with-icon" : "pane-name"}>
-          {customIconUrl ? <img className="agent-custom-icon" src={customIconUrl} alt="" /> : null}
-          <span className="pane-title-text">{paneTitle(pane)}</span>
-        </span>
+        <span className="pane-name">{paneTitle(pane)}</span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
       </span>
       {isLoud(pane.agent_status) ? (
@@ -6934,7 +6918,6 @@ function AgentRow({
   workspace,
   tabLabel,
   bridgeLabel,
-  customIconUrl,
   pinned,
   active,
   index,
@@ -6945,7 +6928,6 @@ function AgentRow({
   workspace?: WorkspaceInfo;
   tabLabel?: string;
   bridgeLabel?: string;
-  customIconUrl?: string | null;
   pinned: boolean;
   active: boolean;
   index: number;
@@ -6966,11 +6948,7 @@ function AgentRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name agent-title">
-          {customIconUrl ? (
-            <img className="agent-custom-icon" src={customIconUrl} alt="" />
-          ) : iconKind ? (
-            <AgentIcon kind={iconKind} />
-          ) : null}
+          {iconKind ? <AgentIcon kind={iconKind} /> : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
           ) : null}
@@ -7070,18 +7048,10 @@ function isAgentPane(pane: PaneInfo) {
   return Boolean(
     pane.agent ||
       pane.display_agent ||
-      pane.custom_icon_url ||
       pane.custom_status ||
       pane.title ||
       pane.agent_status !== "unknown",
   );
-}
-
-export function paneCustomIconUrl(
-  pane: PaneInfo,
-  runtime: Pick<BridgeRuntime, "httpUrl"> | null | undefined,
-) {
-  return pane.custom_icon_url && runtime ? runtime.httpUrl(pane.custom_icon_url) : null;
 }
 
 const AGENT_STATUS_ORDER: Record<AgentStatus, number> = {
