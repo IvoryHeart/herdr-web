@@ -6,7 +6,6 @@ export type LauncherPresetOption = {
   id: string;
   label: string;
   agent_hint: string | null;
-  icon: string;
   built_in: boolean;
 };
 
@@ -21,28 +20,24 @@ export const FALLBACK_LAUNCHER_PRESETS: LauncherPresetOption[] = [
     id: "builtin:shell",
     label: "Shell",
     agent_hint: null,
-    icon: "terminal",
     built_in: true,
   },
   {
     id: "builtin:codex",
     label: "Codex",
     agent_hint: "codex",
-    icon: "codex",
     built_in: true,
   },
   {
     id: "builtin:claude",
     label: "Claude",
     agent_hint: "claude",
-    icon: "claude",
     built_in: true,
   },
   {
     id: "builtin:pi",
     label: "pi",
     agent_hint: "pi",
-    icon: "pi",
     built_in: true,
   },
 ];
@@ -93,7 +88,6 @@ function parseLauncherPreset(value: unknown): LauncherPresetOption | null {
     id: value.id,
     label: value.label,
     agent_hint: typeof value.agent_hint === "string" ? value.agent_hint : null,
-    icon: typeof value.icon === "string" ? value.icon : "terminal",
     built_in: value.built_in === true,
   };
 }

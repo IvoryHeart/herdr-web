@@ -22,7 +22,6 @@ export function LaunchDialog({
   const firstOption = options[0] ?? {
     id: "builtin:shell",
     label: "Shell",
-    icon: "terminal",
     agent_hint: null,
     built_in: true,
   };
@@ -162,10 +161,18 @@ export function LaunchDialog({
 }
 
 function LaunchOptionIcon({ option }: { option: LauncherPresetOption }) {
-  if (option.icon === "claude" || option.icon === "codex" || option.icon === "pi") {
-    return <AgentIcon kind={option.icon} />;
+  const kind = agentIconKindForHint(option.agent_hint);
+  if (kind) {
+    return <AgentIcon kind={kind} />;
   }
   return <Terminal size={15} />;
+}
+
+function agentIconKindForHint(agentHint: string | null): "claude" | "codex" | "pi" | null {
+  if (agentHint === "claude" || agentHint === "codex" || agentHint === "pi") {
+    return agentHint;
+  }
+  return null;
 }
 
 function launchTitle(target: LaunchTarget) {

@@ -54,8 +54,6 @@ const KNOWN_AGENT_HINTS: &[&str] = &[
     "qodercli",
 ];
 
-const BUILTIN_ICON_KEYS: &[&str] = &["terminal", "codex", "claude", "pi"];
-
 #[derive(Debug, Clone)]
 pub struct LauncherPresetStore {
     presets: Vec<ResolvedLauncherPreset>,
@@ -70,7 +68,6 @@ pub struct ResolvedLauncherPreset {
     pub argv: Option<Vec<String>>,
     pub env: HashMap<String, String>,
     pub cwd: Option<String>,
-    pub icon: String,
     pub built_in: bool,
 }
 
@@ -86,7 +83,6 @@ pub struct LauncherPresetDisplay {
     pub id: String,
     pub label: String,
     pub agent_hint: Option<String>,
-    pub icon: String,
     pub built_in: bool,
 }
 
@@ -112,8 +108,6 @@ struct LauncherPresetConfig {
     env: HashMap<String, String>,
     #[serde(default)]
     cwd: Option<String>,
-    #[serde(default)]
-    icon: Option<String>,
 }
 
 impl LauncherPresetStore {
@@ -178,9 +172,6 @@ impl LauncherPresetStore {
         }
         let mut ids: HashSet<String> = presets.iter().map(|preset| preset.id.clone()).collect();
         for config_preset in config.presets {
-            let had_icon_path = config_preset
-                .as_object()
-                .is_some_and(|preset| preset.contains_key("icon_path"));
             let config_preset = match serde_json::from_value::<LauncherPresetConfig>(config_preset)
             {
                 Ok(config_preset) => config_preset,
@@ -190,15 +181,8 @@ impl LauncherPresetStore {
                 }
             };
             match resolve_config_preset(config_preset, &ids) {
-                Ok((preset, preset_warnings)) => {
+                Ok(preset) => {
                     ids.insert(preset.id.clone());
-                    if had_icon_path {
-                        warnings.push(format!(
-                            "preset {}: icon_path is no longer supported and was ignored",
-                            preset.id
-                        ));
-                    }
-                    warnings.extend(preset_warnings);
                     presets.push(preset);
                 }
                 Err(message) => warnings.push(message),
@@ -217,7 +201,6 @@ impl LauncherPresetStore {
                     id: preset.id.clone(),
                     label: preset.label.clone(),
                     agent_hint: preset.agent_hint.clone(),
-                    icon: preset.icon.clone(),
                     built_in: preset.built_in,
                 })
                 .collect(),
@@ -330,28 +313,20 @@ fn replace_layout_leaf(
 
 fn builtin_presets() -> Vec<ResolvedLauncherPreset> {
     vec![
-        builtin(BUILTIN_SHELL_ID, "Shell", None, None, "terminal"),
+        builtin(BUILTIN_SHELL_ID, "Shell", None, None),
         builtin(
             BUILTIN_CODEX_ID,
             "Codex",
             Some("codex"),
             Some(vec!["codex".into()]),
-            "codex",
         ),
         builtin(
             BUILTIN_CLAUDE_ID,
             "Claude",
             Some("claude"),
             Some(vec!["claude".into()]),
-            "claude",
         ),
-        builtin(
-            BUILTIN_PI_ID,
-            "pi",
-            Some("pi"),
-            Some(vec!["pi".into()]),
-            "pi",
-        ),
+        builtin(BUILTIN_PI_ID, "pi", Some("pi"), Some(vec!["pi".into()])),
     ]
 }
 
@@ -360,7 +335,6 @@ fn builtin(
     label: &str,
     agent_hint: Option<&str>,
     argv: Option<Vec<String>>,
-    icon: &str,
 ) -> ResolvedLauncherPreset {
     ResolvedLauncherPreset {
         id: id.into(),
@@ -369,7 +343,6 @@ fn builtin(
         argv,
         env: HashMap::new(),
         cwd: None,
-        icon: icon.into(),
         built_in: true,
     }
 }
@@ -377,7 +350,7 @@ fn builtin(
 fn resolve_config_preset(
     preset: LauncherPresetConfig,
     used_ids: &HashSet<String>,
-) -> Result<(ResolvedLauncherPreset, Vec<String>), String> {
+) -> Result<ResolvedLauncherPreset, String> {
     let id = preset
         .id
         .ok_or_else(|| "invalid preset: id is required".to_string())?
@@ -413,34 +386,15 @@ fn resolve_config_preset(
         .map(|cwd| validate_cwd(&cwd).map(|_| cwd))
         .transpose()
         .map_err(|err| format!("invalid preset {id}: {err}"))?;
-    let mut warnings = Vec::new();
-    let icon = match preset.icon {
-        Some(icon) => {
-            validate_icon(&icon).map_err(|err| format!("invalid preset {id}: {err}"))?;
-            icon
-        }
-        None => agent_hint.clone().unwrap_or_else(|| "terminal".into()),
-    };
-    if let Some(agent_hint) = &agent_hint {
-        if BUILTIN_ICON_KEYS.contains(&icon.as_str()) && icon != *agent_hint {
-            warnings.push(format!(
-                "preset {id}: icon {icon} differs from agent_hint {agent_hint}"
-            ));
-        }
-    }
-    Ok((
-        ResolvedLauncherPreset {
-            id,
-            label,
-            agent_hint,
-            argv: Some(argv),
-            env: preset.env,
-            cwd,
-            icon,
-            built_in: false,
-        },
-        warnings,
-    ))
+    Ok(ResolvedLauncherPreset {
+        id,
+        label,
+        agent_hint,
+        argv: Some(argv),
+        env: preset.env,
+        cwd,
+        built_in: false,
+    })
 }
 
 fn default_launcher_presets_path() -> PathBuf {
@@ -505,16 +459,6 @@ fn normalize_agent_hint(value: &str) -> Result<String, String> {
         Ok(hint)
     } else {
         Err(format!("agent_hint {value:?} is not a known Herdr agent"))
-    }
-}
-
-fn validate_icon(value: &str) -> Result<(), String> {
-    let icon = value.trim();
-    validate_slug(icon, "icon")?;
-    if BUILTIN_ICON_KEYS.contains(&icon) {
-        Ok(())
-    } else {
-        Err(format!("icon {value:?} is not a known built-in icon"))
     }
 }
 
@@ -610,34 +554,6 @@ mod tests {
     }
 
     #[test]
-    fn obsolete_icon_path_is_ignored_with_warning() {
-        let root = unique_test_dir("launcher-presets-obsolete-icon-path");
-        fs::create_dir_all(&root).unwrap();
-        let path = root.join("presets.json");
-        fs::write(
-            &path,
-            r#"{"version":1,"presets":[
-                {
-                    "id":"remote-codex",
-                    "label":"Remote Codex",
-                    "agent_hint":"codex",
-                    "icon_path":"/tmp/codex.png",
-                    "argv":["codex"]
-                }
-            ]}"#,
-        )
-        .unwrap();
-
-        let store = LauncherPresetStore::load_from_path(&path).unwrap();
-        let preset = store.preset("remote-codex").unwrap();
-        assert_eq!(preset.icon, "codex");
-        assert_eq!(
-            store.response().warnings,
-            vec!["preset remote-codex: icon_path is no longer supported and was ignored"]
-        );
-    }
-
-    #[test]
     fn agent_hint_injects_herdr_agent() {
         let preset = resolve_config_preset(
             LauncherPresetConfig {
@@ -647,12 +563,10 @@ mod tests {
                 agent_hint: Some("codex".into()),
                 env: HashMap::from([("FOO".into(), "bar".into())]),
                 cwd: None,
-                icon: None,
             },
             &HashSet::new(),
         )
-        .unwrap()
-        .0;
+        .unwrap();
         assert_eq!(preset.launch_env()["HERDR_AGENT"], "codex");
         assert_eq!(preset.launch_env()["FOO"], "bar");
     }
@@ -667,12 +581,10 @@ mod tests {
                 agent_hint: None,
                 env: HashMap::from([("HERDR_AGENT".into(), "codex".into())]),
                 cwd: None,
-                icon: None,
             },
             &HashSet::new(),
         )
-        .unwrap()
-        .0;
+        .unwrap();
         assert!(preset.agent_hint.is_none());
         assert_eq!(preset.launch_env()["HERDR_AGENT"], "codex");
     }
@@ -688,7 +600,6 @@ mod tests {
                 agent_hint: None,
                 env: HashMap::new(),
                 cwd: None,
-                icon: None,
             },
             &used,
         )
@@ -705,7 +616,6 @@ mod tests {
             argv: Some(vec!["custom".into()]),
             env: HashMap::new(),
             cwd: None,
-            icon: "terminal".into(),
             built_in: false,
         };
         let root = LayoutNode::Pane {

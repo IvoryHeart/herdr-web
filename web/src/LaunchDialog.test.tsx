@@ -35,10 +35,10 @@ afterEach(async () => {
 describe("LaunchDialog", () => {
   it("renders dynamic launcher presets and submits the selected preset", async () => {
     const { container, onSubmit } = await renderDialog([
-      preset("builtin:shell", "Shell", "terminal", true),
+      preset("builtin:shell", "Shell", null, true),
       preset("builtin:codex", "Codex", "codex", true),
       preset("remote-codex", "Remote Codex", "codex", false),
-      preset("team-agent", "Team Agent", "terminal", false),
+      preset("team-agent", "Team Agent", null, false),
     ]);
 
     const options = launchOptions(container);
@@ -66,10 +66,10 @@ describe("LaunchDialog", () => {
 
   it("wraps keyboard navigation and scrolls the focused option into view", async () => {
     const { container } = await renderDialog([
-      preset("builtin:shell", "Shell", "terminal", true),
+      preset("builtin:shell", "Shell", null, true),
       preset("builtin:codex", "Codex", "codex", true),
       preset("remote-codex", "Remote Codex", "codex", false),
-      preset("team-agent", "Team Agent", "terminal", false),
+      preset("team-agent", "Team Agent", null, false),
     ]);
     const scrollIntoView = window.HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
     const options = launchOptions(container);
@@ -135,14 +135,13 @@ function createButton(container: HTMLElement) {
 function preset(
   id: string,
   label: string,
-  icon: string,
+  agentHint: string | null,
   builtIn: boolean,
 ): LauncherPresetOption {
   return {
     id,
     label,
-    agent_hint: icon === "terminal" ? null : icon,
-    icon,
+    agent_hint: agentHint,
     built_in: builtIn,
   };
 }
