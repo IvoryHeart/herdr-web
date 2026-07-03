@@ -137,6 +137,7 @@ import {
   choosePaneForTab,
   choosePaneForWorkspace,
   chooseSelectedPane,
+  chooseSelectedPaneForActiveWorkspace,
   countAttention,
   displayTabLabel,
   isAttention,
@@ -1162,7 +1163,12 @@ export function App() {
       return;
     }
     const restoredPaneId = selectedPanesByBridgeId[selectedRuntime.id] ?? null;
-    const nextPaneId = chooseSelectedPane(snapshot, restoredPaneId);
+    const restoredWorkspaceId = activeWorkspacesByBridgeId[selectedRuntime.id] ?? null;
+    const nextPaneId = chooseSelectedPaneForActiveWorkspace(
+      snapshot,
+      restoredPaneId,
+      restoredWorkspaceId,
+    );
     setSelectedPaneRefState((current) => {
       if (!nextPaneId) {
         return current === null ? current : null;
@@ -1192,7 +1198,6 @@ export function App() {
       }
       return;
     }
-    const restoredWorkspaceId = activeWorkspacesByBridgeId[selectedRuntime.id];
     setActiveWorkspaceRefState((current) => {
       if (!restoredWorkspaceId) {
         return current === null ? current : null;
@@ -1795,7 +1800,7 @@ export function App() {
     setActiveWorkspacesByBridgeId((current) =>
       current[bridgeId] === workspaceId ? current : { ...current, [bridgeId]: workspaceId },
     );
-    if (!isCompactLayout && bridgeSnapshot) {
+    if (bridgeSnapshot) {
       const paneId = choosePaneForWorkspace(bridgeSnapshot, workspaceId);
       if (paneId) {
         const pane = bridgeSnapshot.panes.find((item) => item.pane_id === paneId);
