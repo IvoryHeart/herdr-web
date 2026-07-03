@@ -178,6 +178,9 @@ impl LauncherPresetStore {
         }
         let mut ids: HashSet<String> = presets.iter().map(|preset| preset.id.clone()).collect();
         for config_preset in config.presets {
+            let had_icon_path = config_preset
+                .as_object()
+                .is_some_and(|preset| preset.contains_key("icon_path"));
             let config_preset = match serde_json::from_value::<LauncherPresetConfig>(config_preset)
             {
                 Ok(config_preset) => config_preset,
@@ -189,6 +192,12 @@ impl LauncherPresetStore {
             match resolve_config_preset(config_preset, &ids) {
                 Ok((preset, preset_warnings)) => {
                     ids.insert(preset.id.clone());
+                    if had_icon_path {
+                        warnings.push(format!(
+                            "preset {}: icon_path is no longer supported and was ignored",
+                            preset.id
+                        ));
+                    }
                     warnings.extend(preset_warnings);
                     presets.push(preset);
                 }
@@ -598,6 +607,34 @@ mod tests {
         assert!(store.preset("bad-type").is_none());
         assert!(store.preset("ok").is_some());
         assert_eq!(store.response().warnings.len(), 3);
+    }
+
+    #[test]
+    fn obsolete_icon_path_is_ignored_with_warning() {
+        let root = unique_test_dir("launcher-presets-obsolete-icon-path");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("presets.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"presets":[
+                {
+                    "id":"remote-codex",
+                    "label":"Remote Codex",
+                    "agent_hint":"codex",
+                    "icon_path":"/tmp/codex.png",
+                    "argv":["codex"]
+                }
+            ]}"#,
+        )
+        .unwrap();
+
+        let store = LauncherPresetStore::load_from_path(&path).unwrap();
+        let preset = store.preset("remote-codex").unwrap();
+        assert_eq!(preset.icon, "codex");
+        assert_eq!(
+            store.response().warnings,
+            vec!["preset remote-codex: icon_path is no longer supported and was ignored"]
+        );
     }
 
     #[test]
