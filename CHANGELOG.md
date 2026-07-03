@@ -1,8 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
-### Breaking Changes
+## [0.3.1] - 2026-07-03
 
 ### Added
 
@@ -14,8 +12,6 @@
   [PR #30](https://github.com/kcosr/herdr-web/pull/30)
 - Refreshed the vendored Herdr compatibility baseline to `v0.7.1` for launcher preset agent hints.
   [PR #30](https://github.com/kcosr/herdr-web/pull/30)
-
-### Changed
 
 ### Fixed
 
@@ -36,8 +32,6 @@
   `Attached elsewhere` error. The bridge also now logs daemon-initiated attach connection closes,
   which were previously recorded nowhere.
   [PR #26](https://github.com/kcosr/herdr-web/pull/26)
-
-### Removed
 
 ## [0.3.0] - 2026-07-02
 
