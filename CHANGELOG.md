@@ -8,9 +8,12 @@
 
 - Added bridge-owned configurable launcher presets for the create menu, including argv-based custom
   agent commands, optional Herdr agent hints, and horizontally scrollable launch choices.
+  [PR #30](https://github.com/kcosr/herdr-web/pull/30)
 - Documented macOS x86_64 desktop tarball support alongside Linux x86_64 and macOS ARM64 release
   artifacts.
+  [PR #30](https://github.com/kcosr/herdr-web/pull/30)
 - Refreshed the vendored Herdr compatibility baseline to `v0.7.1` for launcher preset agent hints.
+  [PR #30](https://github.com/kcosr/herdr-web/pull/30)
 
 ### Changed
 
