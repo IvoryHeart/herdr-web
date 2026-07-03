@@ -87,6 +87,7 @@ pub struct LauncherPresetDisplay {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LauncherPresetFile {
     #[serde(default)]
     version: Option<u32>,
@@ -95,6 +96,7 @@ struct LauncherPresetFile {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LauncherPresetConfig {
     #[serde(default)]
     id: Option<String>,
@@ -551,6 +553,29 @@ mod tests {
         assert!(store.preset("bad-type").is_none());
         assert!(store.preset("ok").is_some());
         assert_eq!(store.response().warnings.len(), 3);
+    }
+
+    #[test]
+    fn unknown_preset_fields_are_omitted_with_warnings() {
+        let root = unique_test_dir("launcher-presets-unknown-field");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("presets.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"presets":[
+                {"id":"unknown","label":"Unknown","argv":["agent"],"unexpected":true},
+                {"id":"ok","label":"OK","agent_hint":"codex","argv":["codex"]}
+            ]}"#,
+        )
+        .unwrap();
+
+        let store = LauncherPresetStore::load_from_path(&path).unwrap();
+        let response = store.response();
+
+        assert!(store.preset("unknown").is_none());
+        assert!(store.preset("ok").is_some());
+        assert_eq!(response.warnings.len(), 1);
+        assert!(response.warnings[0].contains("unknown field `unexpected`"));
     }
 
     #[test]
