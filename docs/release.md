@@ -33,7 +33,12 @@ Do not cut a release without bridge test/build coverage.
 
 ## Package Artifacts
 
-Build platform artifacts before or immediately after cutting the GitHub release.
+Build or provide platform artifacts immediately after cutting the GitHub release, using the final
+release commit or tag created by the release script. If you made any pre-release artifacts before
+the release script stamped `CHANGELOG.md`, rebuild them from the released `main`/tag with the final
+`vX.Y.Z` value before upload. Use the documented packaging commands and any supplemental local build
+instructions for the release operator's environment. Do not commit generated tarballs, APKs, or
+build-service outputs.
 
 Linux desktop tarball:
 
@@ -51,6 +56,14 @@ npm ci --prefix web
 scripts/package-tarball.sh vX.Y.Z macos-arm64
 ```
 
+macOS Intel desktop tarball, run on an Intel Mac:
+
+```bash
+npm ci
+npm ci --prefix web
+scripts/package-tarball.sh vX.Y.Z macos-x86_64
+```
+
 Android debug APK:
 
 ```bash
@@ -61,6 +74,11 @@ npm run android:build:debug
 
 The desktop tarballs are written to `dist-packages/`. The debug APK is written to
 `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Before uploading or distributing any tarball or APK, inspect the artifact and confirm it matches the
+documented release layout, platform, version, and source commit/tag. For desktop tarballs, list the
+archive contents and verify the wrapper, bridge binary, bundled `web/dist`, and README are present.
+For APKs, inspect the package listing or metadata with available local tools.
 
 To stage the current debug APK under the release asset name for private testing:
 
@@ -122,8 +140,8 @@ The script:
 - creates a GitHub release with notes extracted from `CHANGELOG.md`
 - opens the next `## [Unreleased]` changelog section and pushes it
 
-The release script does not upload binary artifacts. Upload tarballs and APKs manually after the
-release exists.
+The release script does not upload binary artifacts. Upload separately packaged tarballs and APKs
+manually after the release exists.
 
 ## Android Validation
 
@@ -135,7 +153,8 @@ adding any pairing token or other secret storage.
 ## Upload Artifacts
 
 Upload release artifacts manually with GitHub CLI after `node scripts/release.mjs vX.Y.Z` creates
-the release.
+the release. Upload only artifacts built from the final release commit or tag, and inspect each
+artifact before upload.
 
 Upload the Linux tarball from the Linux build host:
 
@@ -152,6 +171,15 @@ operator machine first:
 gh release upload vX.Y.Z \
   dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz \
   dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
+```
+
+Upload the macOS Intel tarball from the Intel Mac build host, or copy it to the release operator
+machine first:
+
+```bash
+gh release upload vX.Y.Z \
+  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz \
+  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
 ```
 
 Upload the Android debug APK after it has the final debug asset name:

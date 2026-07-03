@@ -6,6 +6,11 @@
 
 ### Added
 
+- Added bridge-owned configurable launcher presets for the create menu, including argv-based custom
+  agent commands, optional Herdr agent hints, custom icons, and horizontally scrollable launch
+  choices.
+- Refreshed the vendored Herdr compatibility baseline to `v0.7.1` for launcher preset agent hints.
+
 ### Changed
 
 ### Fixed

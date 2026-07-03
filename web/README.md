@@ -35,6 +35,9 @@ The app expects these bridge routes:
 - `/api/capabilities`
 - `/api/snapshot`
 - `/api/command`
+- `/api/launcher-presets`
+- `/api/launcher-presets/launch`
+- `/api/launcher-presets/icons/{preset_id}`
 - `/api/selection`
 - `/api/notes` (and `/api/notes/{note_id}/...` actions)
 - `/api/agent-pins` (and `/api/agent-pins/{pane_id}/pin|unpin`)

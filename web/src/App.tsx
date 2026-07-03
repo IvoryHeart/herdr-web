@@ -74,6 +74,12 @@ import {
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
+import {
+  FALLBACK_LAUNCHER_PRESETS,
+  fetchLauncherPresets,
+  supportsLauncherPresets,
+} from "./launcherPresets";
+import type { LauncherPresetsResponse } from "./launcherPresets";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
   DEFAULT_MOBILE_COMMAND_ENTER_NEWLINE,
@@ -202,6 +208,7 @@ type BridgeResourceState<Response> = {
   error: string | null;
 };
 type BridgeNotesState = BridgeResourceState<NotesListResponse>;
+type BridgeLauncherPresetsState = BridgeResourceState<LauncherPresetsResponse>;
 type PendingCreatedPaneNoteTarget = {
   note: PaneNote;
   pane: PaneInfo;
@@ -719,6 +726,10 @@ export function App() {
     useState<Record<string, BridgeAgentActivityState>>({});
   const [agentPinsStates, setAgentPinsStates] = useState<Record<string, BridgeAgentPinsState>>({});
   const [notesStates, setNotesStates] = useState<Record<string, BridgeNotesState>>({});
+  const [launcherPresetStates, setLauncherPresetStates] = useState<
+    Record<string, BridgeLauncherPresetsState>
+  >({});
+  const launcherPresetStatesRef = useRef(launcherPresetStates);
   const [selectedBridgeId, setSelectedBridgeId] = useState<BridgeId | null>(
     initialPrefs.selectedBridgeId,
   );
@@ -990,6 +1001,94 @@ export function App() {
     () => (selectedRuntime ? createCommands(selectedHttpUrl) : null),
     [selectedHttpUrl, selectedRuntime?.id],
   );
+  const launchRuntime = launchTarget ? bridge.getRuntime(launchTarget.bridgeId) : null;
+  const launchPresetState =
+    launchRuntime &&
+    launcherPresetStates[launchRuntime.id]?.connectionKey === launchRuntime.connectionKey
+      ? launcherPresetStates[launchRuntime.id]
+      : null;
+  const launchOptions = useMemo(() => {
+    if (
+      launchRuntime &&
+      supportsLauncherPresets(launchRuntime.capabilities) &&
+      launchPresetState?.response
+    ) {
+      return launchPresetState.response.presets.map((preset) => ({
+        ...preset,
+        custom_icon_url: preset.custom_icon_url
+          ? launchRuntime.httpUrl(preset.custom_icon_url)
+          : null,
+      }));
+    }
+    return FALLBACK_LAUNCHER_PRESETS;
+  }, [launchPresetState?.response, launchRuntime?.connectionKey]);
+
+  useEffect(() => {
+    launcherPresetStatesRef.current = launcherPresetStates;
+  }, [launcherPresetStates]);
+
+  useEffect(() => {
+    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
+      return;
+    }
+    const current = launcherPresetStatesRef.current[launchRuntime.id];
+    if (
+      current?.connectionKey === launchRuntime.connectionKey &&
+      current.loadState === "loading"
+    ) {
+      return;
+    }
+    const runtime = launchRuntime;
+    setLauncherPresetStates((states) => ({
+      ...states,
+      [runtime.id]: {
+        connectionKey: runtime.connectionKey,
+        response:
+          current?.connectionKey === runtime.connectionKey ? current.response : null,
+        loadState: "loading",
+        error: null,
+      },
+    }));
+    void fetchLauncherPresets(runtime.httpUrl)
+      .then((response) => {
+        setLauncherPresetStates((states) => {
+          const current = states[runtime.id];
+          if (current && current.connectionKey !== runtime.connectionKey) {
+            return states;
+          }
+          return {
+            ...states,
+            [runtime.id]: {
+              connectionKey: runtime.connectionKey,
+              response,
+              loadState: "ready",
+              error: null,
+            },
+          };
+        });
+      })
+      .catch((err: unknown) => {
+        setLauncherPresetStates((states) => {
+          const current = states[runtime.id];
+          if (current && current.connectionKey !== runtime.connectionKey) {
+            return states;
+          }
+          return {
+            ...states,
+            [runtime.id]: {
+              connectionKey: runtime.connectionKey,
+              response: null,
+              loadState: "error",
+              error: err instanceof Error ? err.message : String(err),
+            },
+          };
+        });
+      });
+  }, [
+    launchRuntime?.connectionKey,
+    launchRuntime?.id,
+    launchRuntime?.capabilities,
+  ]);
   const menuRuntime = menu ? bridge.getRuntime(menu.bridgeId) : null;
   const menuConnectionState =
     menuRuntime && connectionStates[menuRuntime.id]?.connectionKey === menuRuntime.connectionKey
@@ -2985,8 +3084,18 @@ export function App() {
       connectionRefs.current[launchTarget.bridgeId]?.snapshot ??
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
-    const action =
-      launchTarget.mode === "tab"
+    const usePresetEndpoint = supportsLauncherPresets(runtime.capabilities);
+    const action = usePresetEndpoint
+      ? launchTarget.mode === "tab"
+        ? () => commands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
+        : () =>
+            commands.launchPresetSplit(
+              launchTarget.pane.pane_id,
+              launchTarget.pane.tab_id,
+              launchTarget.direction,
+              resolvedSpec,
+            )
+      : launchTarget.mode === "tab"
         ? () => commands.createLaunchTab(launchTarget.workspaceId, resolvedSpec)
         : () =>
             commands.splitLaunchPane(
@@ -3537,6 +3646,7 @@ export function App() {
         <LaunchDialog
           target={launchTarget}
           busy={busy}
+          options={launchOptions}
           onCancel={() => setLaunchTarget(null)}
           onSubmit={submitLaunch}
         />
@@ -4904,6 +5014,10 @@ function Switcher({
       activeWorkspaceForBridgeView(view, selectedBridgeId, activeSpace, activeWorkspacesByBridgeId),
     [activeSpace, activeWorkspacesByBridgeId, selectedBridgeId],
   );
+  const runtimeByBridgeId = useMemo(
+    () => new Map(bridgeViews.map((view) => [view.runtime.id, view.runtime])),
+    [bridgeViews],
+  );
   const scopedWorkspaces = useMemo<ScopedWorkspace[]>(
     () =>
       buildVisibleScopedWorkspaces(
@@ -5072,6 +5186,7 @@ function Switcher({
                 key={`${group.bridgeId}:${pane.pane_id}`}
                 index={paneIndex++}
                 pane={pane}
+                customIconUrl={paneCustomIconUrl(pane, runtimeByBridgeId.get(group.bridgeId))}
                 pinned={isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id)}
                 active={group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id}
                 onSelect={() => onSelectPane(group.bridgeId, pane)}
@@ -5146,6 +5261,7 @@ function Switcher({
       workspace={entry.workspace}
       tabLabel={entry.tabLabel}
       bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
+      customIconUrl={paneCustomIconUrl(entry.pane, runtimeByBridgeId.get(entry.bridgeId))}
       pinned={entry.pinned === true}
       active={
         entry.bridgeId === selectedBridgeId &&
@@ -6767,6 +6883,7 @@ function TabDivider({
 
 function PaneRow({
   pane,
+  customIconUrl,
   pinned,
   active,
   index,
@@ -6774,6 +6891,7 @@ function PaneRow({
   onMenu,
 }: {
   pane: PaneInfo;
+  customIconUrl?: string | null;
   pinned?: boolean;
   active: boolean;
   index: number;
@@ -6793,7 +6911,10 @@ function PaneRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className="pane-name">{paneTitle(pane)}</span>
+        <span className={customIconUrl ? "pane-name pane-title-with-icon" : "pane-name"}>
+          {customIconUrl ? <img className="agent-custom-icon" src={customIconUrl} alt="" /> : null}
+          <span className="pane-title-text">{paneTitle(pane)}</span>
+        </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
       </span>
       {isLoud(pane.agent_status) ? (
@@ -6813,6 +6934,7 @@ function AgentRow({
   workspace,
   tabLabel,
   bridgeLabel,
+  customIconUrl,
   pinned,
   active,
   index,
@@ -6823,6 +6945,7 @@ function AgentRow({
   workspace?: WorkspaceInfo;
   tabLabel?: string;
   bridgeLabel?: string;
+  customIconUrl?: string | null;
   pinned: boolean;
   active: boolean;
   index: number;
@@ -6843,7 +6966,11 @@ function AgentRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name agent-title">
-          {iconKind ? <AgentIcon kind={iconKind} /> : null}
+          {customIconUrl ? (
+            <img className="agent-custom-icon" src={customIconUrl} alt="" />
+          ) : iconKind ? (
+            <AgentIcon kind={iconKind} />
+          ) : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
           ) : null}
@@ -6943,10 +7070,18 @@ function isAgentPane(pane: PaneInfo) {
   return Boolean(
     pane.agent ||
       pane.display_agent ||
+      pane.custom_icon_url ||
       pane.custom_status ||
       pane.title ||
       pane.agent_status !== "unknown",
   );
+}
+
+export function paneCustomIconUrl(
+  pane: PaneInfo,
+  runtime: Pick<BridgeRuntime, "httpUrl"> | null | undefined,
+) {
+  return pane.custom_icon_url && runtime ? runtime.httpUrl(pane.custom_icon_url) : null;
 }
 
 const AGENT_STATUS_ORDER: Record<AgentStatus, number> = {

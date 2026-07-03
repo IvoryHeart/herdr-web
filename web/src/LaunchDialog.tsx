@@ -2,41 +2,60 @@ import { Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AgentIcon } from "./AgentIcon";
-import { LAUNCH_OPTIONS, launchLabel } from "./launch";
-import type { LaunchKind, LaunchSpec, LaunchTarget } from "./launch";
+import { launchPresetLabel } from "./launch";
+import type { LaunchSpec, LaunchTarget } from "./launch";
+import type { LauncherPresetOption } from "./launcherPresets";
 
 export function LaunchDialog({
   target,
   busy,
+  options,
   onCancel,
   onSubmit,
 }: {
   target: LaunchTarget;
   busy?: boolean;
+  options: readonly LauncherPresetOption[];
   onCancel: () => void;
   onSubmit: (spec: LaunchSpec) => void;
 }) {
-  const [kind, setKind] = useState<LaunchKind>("shell");
-  const [title, setTitle] = useState(() => launchLabel("shell"));
+  const firstOption = options[0] ?? {
+    id: "builtin:shell",
+    label: "Shell",
+    icon: "terminal",
+    agent_hint: null,
+    custom_icon_url: null,
+    built_in: true,
+  };
+  const [presetId, setPresetId] = useState(firstOption.id);
+  const [title, setTitle] = useState(() => firstOption.label);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const optionRefs = useRef(new Map<LaunchKind, HTMLButtonElement>());
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  const selectedOption = options.find((option) => option.id === presetId) ?? firstOption;
 
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, []);
 
-  const chooseKind = (nextKind: LaunchKind) => {
+  const choosePreset = (nextPresetId: string) => {
     setTitle((current) => {
       const trimmed = current.trim();
-      return trimmed === "" || trimmed === launchLabel(kind) ? launchLabel(nextKind) : current;
+      return trimmed === "" || trimmed === launchPresetLabel(presetId, options)
+        ? launchPresetLabel(nextPresetId, options)
+        : current;
     });
-    setKind(nextKind);
+    setPresetId(nextPresetId);
   };
 
-  const chooseAndFocusKind = (nextKind: LaunchKind) => {
-    chooseKind(nextKind);
-    window.requestAnimationFrame(() => optionRefs.current.get(nextKind)?.focus());
+  const chooseAndFocusPreset = (nextPresetId: string) => {
+    choosePreset(nextPresetId);
+    window.requestAnimationFrame(() => {
+      const button = optionRefs.current.get(nextPresetId);
+      button?.focus();
+      button?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
   };
 
   const submit = (event: FormEvent) => {
@@ -46,7 +65,7 @@ export function LaunchDialog({
     }
     const trimmed = title.trim();
     if (trimmed) {
-      onSubmit({ kind, title: trimmed });
+      onSubmit({ presetId, label: selectedOption.label, title: trimmed });
     }
   };
 
@@ -66,24 +85,24 @@ export function LaunchDialog({
       >
         <div className="modal-title">{launchTitle(target)}</div>
         <div className="launch-grid" role="radiogroup" aria-label="Launch type">
-          {LAUNCH_OPTIONS.map((option, index) => (
+          {options.map((option, index) => (
             <button
-              key={option.kind}
+              key={option.id}
               ref={(button) => {
                 if (button) {
-                  optionRefs.current.set(option.kind, button);
+                  optionRefs.current.set(option.id, button);
                 } else {
-                  optionRefs.current.delete(option.kind);
+                  optionRefs.current.delete(option.id);
                 }
               }}
               type="button"
               className="launch-option"
               role="radio"
-              aria-checked={kind === option.kind}
-              data-active={kind === option.kind}
+              aria-checked={presetId === option.id}
+              data-active={presetId === option.id}
               disabled={busy}
-              tabIndex={kind === option.kind ? 0 : -1}
-              onClick={() => chooseKind(option.kind)}
+              tabIndex={presetId === option.id ? 0 : -1}
+              onClick={() => choosePreset(option.id)}
               onKeyDown={(event) => {
                 if (
                   event.key !== "ArrowRight" &&
@@ -96,7 +115,7 @@ export function LaunchDialog({
                   return;
                 }
                 event.preventDefault();
-                const lastIndex = LAUNCH_OPTIONS.length - 1;
+                const lastIndex = options.length - 1;
                 const nextIndex =
                   event.key === "Home"
                     ? 0
@@ -109,10 +128,10 @@ export function LaunchDialog({
                         : index === 0
                           ? lastIndex
                           : index - 1;
-                chooseAndFocusKind(LAUNCH_OPTIONS[nextIndex].kind);
+                chooseAndFocusPreset(options[nextIndex].id);
               }}
             >
-              {option.kind === "shell" ? <Terminal size={15} /> : <AgentIcon kind={option.kind} />}
+              <LaunchOptionIcon option={option} />
               <span>{option.label}</span>
             </button>
           ))}
@@ -123,7 +142,7 @@ export function LaunchDialog({
             ref={inputRef}
             className="field"
             value={title}
-            placeholder={launchLabel(kind)}
+            placeholder={selectedOption.label}
             disabled={busy}
             spellCheck={false}
             autoComplete="off"
@@ -141,6 +160,16 @@ export function LaunchDialog({
       </form>
     </div>
   );
+}
+
+function LaunchOptionIcon({ option }: { option: LauncherPresetOption }) {
+  if (option.custom_icon_url) {
+    return <img className="launch-option-custom-icon" src={option.custom_icon_url} alt="" />;
+  }
+  if (option.icon === "claude" || option.icon === "codex" || option.icon === "pi") {
+    return <AgentIcon kind={option.icon} />;
+  }
+  return <Terminal size={15} />;
 }
 
 function launchTitle(target: LaunchTarget) {

@@ -68,7 +68,7 @@ For release tarball users:
 
 - A running Herdr daemon/session
 - A supported host for the downloaded bridge tarball. Current planned desktop release artifacts are
-  Linux x86_64 and macOS ARM64.
+  Linux x86_64, macOS ARM64, and macOS x86_64.
 
 For source development:
 
@@ -136,6 +136,8 @@ npm run bridge:build
 npm run android:sync
 npm run android:build:debug
 scripts/package-tarball.sh vX.Y.Z linux-x86_64
+scripts/package-tarball.sh vX.Y.Z macos-arm64
+scripts/package-tarball.sh vX.Y.Z macos-x86_64
 scripts/check-vendor.sh
 ```
 
@@ -158,6 +160,49 @@ Terminal input payloads can be sent as JSON or binary WebSocket frames. JSON rem
 binary is available for comparing terminal input performance. Terminal input batching is off by
 default. When enabled, short input chunks are coalesced for `32`, `64`, `128`, or `256` ms and are
 flushed early once the pending UTF-8 input reaches 32 bytes, so paste-like input bypasses the delay.
+
+## Launcher Presets
+
+The bridge can load local launcher presets from:
+
+```text
+${XDG_CONFIG_HOME:-~/.config}/herdr-web/launcher-presets.json
+```
+
+Override the path with `--launcher-presets PATH` or `HERDR_WEB_LAUNCHER_PRESETS=PATH`.
+
+Example:
+
+```json
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "codex-gpt5",
+      "label": "Codex GPT-5",
+      "agent_hint": "codex",
+      "argv": ["codex", "--model", "gpt-5"]
+    },
+    {
+      "id": "remote-codex",
+      "label": "Remote Codex",
+      "agent_hint": "codex",
+      "argv": ["ssh", "-t", "host", "cd ~/repo && exec codex --model gpt-5"]
+    },
+    {
+      "id": "team-agent",
+      "label": "Team Agent",
+      "icon_path": "/home/me/.config/herdr-web/icons/team-agent.png",
+      "argv": ["team-agent"]
+    }
+  ]
+}
+```
+
+Presets use explicit argv, not multi-step terminal typing. Use `["bash", "-lc", "... && exec codex"]`
+when shell sequencing is needed. `agent_hint` injects `HERDR_AGENT=<agent>` for the launched process;
+Herdr `v0.7.1+` on Linux uses that hint to detect agents behind wrappers, SSH, containers, and VMs.
+Older Herdr versions still launch the command, but may display ordinary process detection.
 
 ## Run Locally
 

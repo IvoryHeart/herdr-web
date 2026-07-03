@@ -1,10 +1,13 @@
 import type { PaneInfo } from "./types";
+import type { LauncherPresetOption } from "./launcherPresets";
+import { FALLBACK_LAUNCHER_PRESETS, legacyKindForPresetId } from "./launcherPresets";
 
 export type SplitDirection = "right" | "down";
 export type LaunchKind = "shell" | "codex" | "claude" | "pi";
 
 export type LaunchSpec = {
-  kind: LaunchKind;
+  presetId: string;
+  label: string;
   title: string;
 };
 
@@ -29,6 +32,10 @@ export function launchLabel(kind: LaunchKind) {
   return LAUNCH_OPTIONS.find((option) => option.kind === kind)?.label ?? "Shell";
 }
 
+export function launchPresetLabel(presetId: string, options: readonly LauncherPresetOption[]) {
+  return options.find((option) => option.id === presetId)?.label ?? "Shell";
+}
+
 export function agentArgv(kind: LaunchKind): string[] {
   if (kind === "shell") {
     throw new Error("shell does not have an agent argv");
@@ -36,8 +43,21 @@ export function agentArgv(kind: LaunchKind): string[] {
   return AGENT_ARGV[kind];
 }
 
+export function legacyKindForLaunchSpec(spec: LaunchSpec): LaunchKind | null {
+  return legacyKindForPresetId(spec.presetId);
+}
+
+export function fallbackLaunchSpec(kind: LaunchKind, title = launchLabel(kind)): LaunchSpec {
+  const option = FALLBACK_LAUNCHER_PRESETS.find((preset) => legacyKindForPresetId(preset.id) === kind);
+  return {
+    presetId: option?.id ?? "builtin:shell",
+    label: option?.label ?? title,
+    title,
+  };
+}
+
 export function resolveLaunchSpec(spec: LaunchSpec, existingPanes: readonly PaneInfo[]): LaunchSpec {
-  if (spec.kind === "shell" || spec.title !== launchLabel(spec.kind)) {
+  if (legacyKindForLaunchSpec(spec) === "shell" || spec.title !== spec.label) {
     return spec;
   }
 

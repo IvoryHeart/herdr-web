@@ -679,6 +679,20 @@ button {
   font-weight: 550;
 }
 
+.pane-title-with-icon {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.pane-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-row {
   grid-template-columns: 16px minmax(0, 1fr) auto;
 }
@@ -708,6 +722,14 @@ button {
   flex: 0 0 auto;
   fill: currentColor;
   color: var(--subtext1);
+}
+
+.agent-custom-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  object-fit: contain;
 }
 
 .agent-pin-indicator {
@@ -2291,14 +2313,20 @@ button {
 }
 
 .launch-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 
 .launch-option {
   display: inline-flex;
-  min-width: 0;
+  flex: 0 0 96px;
+  min-width: 96px;
+  max-width: 112px;
   height: 38px;
   align-items: center;
   justify-content: center;
@@ -2329,6 +2357,13 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.launch-option-custom-icon {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 .backend-modal {
