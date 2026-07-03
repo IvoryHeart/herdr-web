@@ -43,7 +43,12 @@ This is a lightweight internal onboarding note for agents working in this repo.
   `android/app/build/outputs/apk/debug/app-debug.apk`.
 - Desktop release tarball: `scripts/package-tarball.sh vX.Y.Z PLATFORM`; outputs go under
   `dist-packages/`.
-- Build Linux tarballs on Linux. Build `macos-arm64` tarballs on an Apple Silicon Mac host.
+- Build or provide `linux-x86_64` tarballs from Linux, `macos-arm64` tarballs from an Apple Silicon
+  Mac, and `macos-x86_64` tarballs from an Intel Mac. Supplemental local build-service notes may
+  describe the release operator's available build hosts, but the repo-owned packaging script remains
+  the source of truth for tarball layout.
+- Build final release artifacts from the final release commit/tag after `scripts/release.mjs`
+  stamps the changelog and creates the release. Inspect tarball/APK contents before upload.
 - Desktop tarballs include only `herdr-web-bridge`, bundled `web/dist` assets, a wrapper script, and
   docs. They do not include Herdr itself.
 

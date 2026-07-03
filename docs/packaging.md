@@ -14,11 +14,16 @@ herdr-web-vX.Y.Z-linux-x86_64.tar.gz
 herdr-web-vX.Y.Z-linux-x86_64.tar.gz.sha256
 herdr-web-vX.Y.Z-macos-arm64.tar.gz
 herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
+herdr-web-vX.Y.Z-macos-x86_64.tar.gz
+herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
 herdr-web-vX.Y.Z-android-debug.apk
 ```
 
-Build Linux artifacts on Linux. Build macOS ARM artifacts on an Apple Silicon Mac. Build the APK
-from any machine with the documented Android SDK setup.
+Build or provide Linux artifacts from a Linux environment, macOS ARM artifacts from an Apple Silicon
+Mac environment, and macOS x86_64 artifacts from an Intel Mac environment. Build the APK from a
+machine with the documented Android SDK setup. Local release operators may use supplemental
+build-service instructions for those environments, but the artifact names and layouts below remain
+the source of truth.
 
 ## Desktop Tarball Shape
 
@@ -59,12 +64,28 @@ On macOS ARM:
 scripts/package-tarball.sh vX.Y.Z macos-arm64
 ```
 
+On macOS Intel:
+
+```bash
+scripts/package-tarball.sh vX.Y.Z macos-x86_64
+```
+
 The output is written under `dist-packages/`:
 
 ```text
 dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz
 dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
 ```
+
+Before uploading or distributing a desktop tarball, inspect it:
+
+```bash
+tar -tzf dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz
+cat dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
+```
+
+Confirm the archive contains the expected root directory, `bin/herdr-web`,
+`bin/herdr-web-bridge`, bundled `share/herdr-web/web/` assets, and `README.md`.
 
 ## Build Android APK
 
@@ -81,6 +102,9 @@ The debug build artifact is:
 ```text
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Before uploading or distributing an APK, inspect the package listing or metadata with available
+local tools, and confirm it was built from the intended release commit or tag.
 
 To stage the current debug APK under the release asset name for private testing:
 
@@ -153,8 +177,8 @@ WebSocket.
 
 ## Manual Release Upload
 
-The release script creates the GitHub release from changelog notes. Tarballs and APKs are uploaded
-manually after the release exists.
+The release script creates the GitHub release from changelog notes. Separately packaged tarballs and
+APKs are uploaded manually after the release exists.
 
 Upload the Linux tarball from the Linux build host:
 
@@ -171,6 +195,15 @@ operator machine first:
 gh release upload vX.Y.Z \
   dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz \
   dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
+```
+
+Upload the macOS Intel tarball from the Intel Mac build host, or copy it to the release operator
+machine first:
+
+```bash
+gh release upload vX.Y.Z \
+  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz \
+  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
 ```
 
 Upload the Android debug APK after it has the final debug asset name:

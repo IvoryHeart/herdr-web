@@ -4,6 +4,7 @@ import {
   createCommands,
   createdPaneId,
 } from "./commands";
+import { fallbackLaunchSpec } from "./launch";
 
 describe("command helpers", () => {
   afterEach(() => {
@@ -11,6 +12,7 @@ describe("command helpers", () => {
   });
 
   it("finds created pane ids from supported response shapes", () => {
+    expect(createdPaneId({ pane_id: "top" })).toBe("top");
     expect(createdPaneId({ root_pane: { pane_id: "root" } })).toBe("root");
     expect(createdPaneId({ pane: { pane_id: "pane" } })).toBe("pane");
     expect(createdPaneId({ agent: { pane_id: "agent" } })).toBe("agent");
@@ -48,7 +50,7 @@ describe("command helpers", () => {
       return new Response(JSON.stringify({ type: "ok" }), { status: 200 });
     });
 
-    await commands.createLaunchTab("space-1", { kind: "shell", title: "Review" });
+    await commands.createLaunchTab("space-1", { ...fallbackLaunchSpec("shell"), title: "Review" });
 
     expect(requests).toEqual([
       { method: "tab.create", params: { workspace_id: "space-1", focus: true } },
@@ -69,6 +71,45 @@ describe("command helpers", () => {
     expect(requests).toEqual([
       { method: "workspace.rename", params: { workspace_id: "space-1", label: null } },
       { method: "tab.rename", params: { tab_id: "tab-1", label: null } },
+    ]);
+  });
+
+  it("launches presets through the bridge-owned launch endpoint", async () => {
+    const requests: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      requests.push({ input, body: JSON.parse(String(init?.body)) });
+      return new Response(
+        JSON.stringify({
+          preset_id: "remote-codex",
+          title: "Remote Codex",
+          workspace_id: "space-1",
+          tab_id: "tab-1",
+          pane_id: "pane-1",
+        }),
+        { status: 200 },
+      );
+    });
+
+    await commands.launchPresetSplit("pane-0", "tab-0", "right", {
+      presetId: "remote-codex",
+      label: "Remote Codex",
+      title: "Remote Codex",
+    });
+
+    expect(requests).toEqual([
+      {
+        input: "/api/launcher-presets/launch",
+        body: {
+          preset_id: "remote-codex",
+          title: "Remote Codex",
+          target: {
+            mode: "split",
+            target_pane_id: "pane-0",
+            tab_id: "tab-0",
+            direction: "right",
+          },
+        },
+      },
     ]);
   });
 });

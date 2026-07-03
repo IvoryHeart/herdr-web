@@ -32,10 +32,11 @@ use tracing::{debug, info, warn};
 
 use herdr_compat::api::client::{ApiClient, ApiClientError};
 use herdr_compat::api::schema::{
-    AgentStatus, EmptyParams, EventsSubscribeParams, Method, PaneInfo, PaneLayoutParams,
-    PaneLayoutSnapshot, PaneListParams, PaneMoveDestination, Request, ResponseResult,
-    SplitDirection, Subscription, SubscriptionEventData, SubscriptionEventEnvelope,
-    SubscriptionEventKind, TabInfo, TabListParams, WorkspaceInfo,
+    AgentStartParams, AgentStatus, EmptyParams, EventsSubscribeParams, LayoutApplyParams,
+    LayoutExportParams, Method, PaneInfo, PaneLayoutParams, PaneLayoutSnapshot, PaneListParams,
+    PaneMoveDestination, PaneSplitParams, Request, ResponseResult, SplitDirection, Subscription,
+    SubscriptionEventData, SubscriptionEventEnvelope, SubscriptionEventKind, TabCreateParams,
+    TabInfo, TabListParams, WorkspaceInfo,
 };
 use herdr_compat::protocol::{
     self, AttachScrollDirection, AttachScrollSource, ClientKeybindings, ClientLaunchMode,
@@ -45,6 +46,10 @@ use herdr_compat::protocol::{
 
 use crate::agent_activity::{AgentActivityListResponse, AgentActivityManager};
 use crate::agent_pins::{AgentPinsError, AgentPinsListResponse, AgentPinsManager};
+use crate::launcher_presets::{
+    layout_leaf_for_preset, split_layout_with_command_preset, LauncherPresetStore,
+    ResolvedLauncherPreset, MAX_LABEL_BYTES,
+};
 use crate::notes::{
     AttachNoteRequest, CreateNoteRequest, NoteResponse, NotesError, NotesListQuery,
     NotesListResponse, NotesManager, RevisionRequest, UpdateNoteRequest,
@@ -81,6 +86,7 @@ struct BridgeOptions {
     port: u16,
     static_dir: PathBuf,
     upload_dir: PathBuf,
+    launcher_presets_path: Option<PathBuf>,
     allowed_hosts: Vec<String>,
     allowed_origins: Vec<String>,
     allowed_connect_sources: Vec<String>,
@@ -91,10 +97,12 @@ struct BridgeState {
     api: ApiClient,
     client_socket_path: PathBuf,
     request_policy: RequestPolicy,
+    daemon_version: Option<String>,
     terminal_sessions: Arc<Mutex<TerminalSessions>>,
     selected_pane_id: Arc<Mutex<Option<String>>>,
     agent_activity: Arc<AgentActivityManager>,
     agent_pins: Arc<AgentPinsManager>,
+    launcher_presets: Arc<LauncherPresetStore>,
     notes: Arc<NotesManager>,
     ui_event_tx: tokio::sync::broadcast::Sender<String>,
     activity_tx: tokio::sync::broadcast::Sender<ActivityMessage>,
@@ -138,6 +146,7 @@ struct Capabilities {
     commands: &'static [&'static str],
     agent_activity: AgentActivityCapability,
     agent_pins: AgentPinsCapability,
+    launcher_presets: LauncherPresetsCapability,
     notes: NotesCapability,
 }
 
@@ -148,6 +157,11 @@ struct AgentActivityCapability {
 
 #[derive(Debug, Serialize)]
 struct AgentPinsCapability {
+    version: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct LauncherPresetsCapability {
     version: u32,
 }
 
@@ -752,7 +766,7 @@ pub(crate) fn run_command(args: &[String]) -> io::Result<i32> {
         Err(message) => {
             eprintln!("{message}");
             eprintln!(
-                "usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]"
+                "usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--launcher-presets PATH] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]"
             );
             return Ok(2);
         }
@@ -778,6 +792,7 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
     let mut port = DEFAULT_PORT;
     let mut static_dir = PathBuf::from(DEFAULT_STATIC_DIR);
     let mut upload_dir = default_upload_dir();
+    let mut launcher_presets_path = None;
     let mut allowed_hosts = Vec::new();
     let mut allowed_origins = Vec::new();
     let mut allowed_connect_sources = Vec::new();
@@ -828,6 +843,13 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
                 upload_dir = expand_home(value);
                 index += 2;
             }
+            "--launcher-presets" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --launcher-presets".into());
+                };
+                launcher_presets_path = Some(expand_home(value));
+                index += 2;
+            }
             "--allow-host" => {
                 let Some(value) = args.get(index + 1) else {
                     return Err("missing value for --allow-host".into());
@@ -865,6 +887,7 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
         port,
         static_dir,
         upload_dir,
+        launcher_presets_path,
         allowed_hosts,
         allowed_origins,
         allowed_connect_sources,
@@ -878,7 +901,7 @@ fn print_help() {
 fn help_text() -> &'static str {
     "herdr-web-bridge\n\
 \n\
-Usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--upload-dir DIR] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]\n\
+Usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--upload-dir DIR] [--launcher-presets PATH] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]\n\
 \n\
 Runs the local HTTP/WebSocket bridge for herdr-web.\n\
 Defaults to the active Herdr daemon sockets and 127.0.0.1:8787.\n\
@@ -887,6 +910,7 @@ Use --host 0.0.0.0 to listen on non-loopback interfaces.\n\
 Use --allow-origin http://localhost for bundled Android app access.\n\
 Use --allow-host HOSTNAME to accept that exact DNS hostname in Host headers.\n\
 Use --allow-connect-origin ORIGIN to let the served web app connect to another bridge origin.\n\
+Use --launcher-presets PATH or HERDR_WEB_LAUNCHER_PRESETS to load custom launch presets.\n\
 Uploads default to HERDR_WEB_UPLOAD_DIR, XDG_DATA_HOME/herdr-web/uploads, or ~/.local/share/herdr-web/uploads."
 }
 
@@ -901,6 +925,10 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
     ensure_upload_dir(&options.upload_dir)?;
     let agent_activity = Arc::new(AgentActivityManager::new());
     let agent_pins = Arc::new(AgentPinsManager::new()?);
+    let launcher_presets = Arc::new(
+        LauncherPresetStore::load(options.launcher_presets_path.clone())
+            .map_err(|message| io::Error::new(ErrorKind::InvalidInput, message))?,
+    );
     let notes = Arc::new(NotesManager::new()?);
     let request_policy = RequestPolicy {
         bind_host: options.host.clone(),
@@ -910,7 +938,8 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         allowed_connect_sources: options.allowed_connect_sources.clone(),
     };
     let api = ApiClient::for_socket_path(crate::session::active_api_socket_path());
-    let daemon_protocol = startup_daemon_protocol(&api)?;
+    let daemon_status = startup_daemon_status(&api)?;
+    let daemon_protocol = daemon_status.protocol.unwrap_or(PROTOCOL_VERSION);
     info!(
         protocol = daemon_protocol,
         "herdr-web bridge connected to compatible Herdr daemon"
@@ -919,10 +948,12 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         api,
         client_socket_path: crate::session::active_client_socket_path(),
         request_policy: request_policy.clone(),
+        daemon_version: daemon_status.version,
         terminal_sessions: Arc::new(Mutex::new(TerminalSessions::default())),
         selected_pane_id: Arc::new(Mutex::new(None)),
         agent_activity,
         agent_pins,
+        launcher_presets,
         notes,
         ui_event_tx: tokio::sync::broadcast::channel(256).0,
         activity_tx: tokio::sync::broadcast::channel(512).0,
@@ -978,10 +1009,20 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
             post(notes_delete_handler).options(preflight_handler),
         )
         .layer(DefaultBodyLimit::max(MAX_NOTES_REQUEST_BYTES));
+    let launcher_preset_routes = Router::new()
+        .route(
+            "/api/launcher-presets",
+            get(launcher_presets_handler).options(preflight_handler),
+        )
+        .route(
+            "/api/launcher-presets/launch",
+            post(launcher_preset_launch_handler).options(preflight_handler),
+        );
     let app = Router::new()
         .merge(agent_activity_routes)
         .merge(agent_pins_routes)
         .merge(notes_routes)
+        .merge(launcher_preset_routes)
         .route(
             "/api/snapshot",
             get(snapshot_handler).options(preflight_handler),
@@ -1235,16 +1276,12 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "tab.focus",
     "pane.rename",
     "pane.close",
-    // Narrow input path used to run a selected launch command in a just-created tab.
-    "pane.send_input",
     // Layout-mutating: the web client builds splits directly.
     "pane.split",
     // Directional pane focus: explicit pane_id only, matching the web selection.
     "pane.focus_direction",
     // Narrow live pane moves: new tab or new workspace destinations only.
     "pane.move",
-    // Agent creation: exposes Herdr's native agent.start placement and argv path.
-    "agent.start",
 ];
 
 fn ensure_allowed_request(headers: &HeaderMap, policy: &RequestPolicy) -> Result<(), BridgeError> {
@@ -1503,21 +1540,6 @@ fn validate_web_command(method: &Method) -> Result<(), BridgeError> {
             }
             validate_optional_label(&params.label, "tab.rename label")?;
         }
-        Method::PaneSendInput(params) => {
-            if params.pane_id.trim().is_empty() {
-                return Err(BridgeError::BadRequest("pane_id is required".to_string()));
-            }
-            if params.keys.len() != 1 || params.keys[0] != "Enter" {
-                return Err(BridgeError::BadRequest(
-                    "pane.send_input is limited to Enter-submitted launch commands".to_string(),
-                ));
-            }
-            if !is_allowed_agent_command(&params.text) {
-                return Err(BridgeError::BadRequest(
-                    "pane.send_input launch command is not allowed".to_string(),
-                ));
-            }
-        }
         Method::PaneSplit(params) => {
             if params
                 .target_pane_id
@@ -1591,32 +1613,6 @@ fn validate_web_command(method: &Method) -> Result<(), BridgeError> {
             }
             validate_optional_label(&params.label, "pane.rename label")?;
         }
-        Method::AgentStart(params) => {
-            if params.name.trim().is_empty() || params.name.len() > 120 {
-                return Err(BridgeError::BadRequest(
-                    "agent.start requires a non-empty launch name up to 120 bytes".to_string(),
-                ));
-            }
-            if params
-                .tab_id
-                .as_deref()
-                .is_none_or(|tab_id| tab_id.trim().is_empty())
-                || params.workspace_id.is_some()
-                || params.cwd.is_some()
-                || !params.env.is_empty()
-                || !params.focus
-                || !matches!(
-                    params.split.as_ref(),
-                    Some(SplitDirection::Right) | Some(SplitDirection::Down)
-                )
-                || !is_allowed_agent_argv(&params.argv)
-            {
-                return Err(BridgeError::BadRequest(
-                    "agent.start is limited to focused Codex, Claude, or pi splits in an existing tab"
-                        .to_string(),
-                ));
-            }
-        }
         _ => {}
     }
     Ok(())
@@ -1632,14 +1628,6 @@ fn validate_optional_label(label: &Option<String>, field: &str) -> Result<(), Br
         )));
     }
     Ok(())
-}
-
-fn is_allowed_agent_command(text: &str) -> bool {
-    matches!(text, "codex" | "claude" | "pi")
-}
-
-fn is_allowed_agent_argv(argv: &[String]) -> bool {
-    matches!(argv, [command] if is_allowed_agent_command(command))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1672,6 +1660,106 @@ struct UploadEntry {
 #[derive(Debug, Serialize)]
 struct UploadResponse {
     file: UploadEntry,
+}
+
+#[derive(Debug, Deserialize)]
+struct LauncherPresetLaunchRequest {
+    preset_id: String,
+    target: LauncherPresetLaunchTarget,
+    #[serde(default)]
+    title: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+enum LauncherPresetLaunchTarget {
+    Tab {
+        workspace_id: String,
+    },
+    Split {
+        tab_id: String,
+        target_pane_id: String,
+        direction: SplitDirection,
+    },
+}
+
+#[derive(Debug, Serialize)]
+struct LauncherPresetLaunchResponse {
+    preset_id: String,
+    title: String,
+    workspace_id: String,
+    tab_id: String,
+    pane_id: String,
+}
+
+#[derive(Debug)]
+struct LauncherPresetError {
+    status: StatusCode,
+    code: &'static str,
+    message: String,
+}
+
+impl LauncherPresetError {
+    fn invalid(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "invalid_preset_launch",
+            message: message.into(),
+        }
+    }
+
+    fn forbidden(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "forbidden",
+            message: message.into(),
+        }
+    }
+
+    fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            code: "preset_not_found",
+            message: message.into(),
+        }
+    }
+
+    fn layout_changed(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "layout_changed",
+            message: message.into(),
+        }
+    }
+
+    fn launch_failed(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            code: "herdr_launch_failed",
+            message: message.into(),
+        }
+    }
+
+    fn from_request_policy_error(err: BridgeError) -> Self {
+        match err {
+            BridgeError::Forbidden(message) => Self::forbidden(message),
+            BridgeError::BadRequest(message) => Self::invalid(message),
+            other => Self::invalid(other.to_string()),
+        }
+    }
+}
+
+impl IntoResponse for LauncherPresetError {
+    fn into_response(self) -> Response {
+        (
+            self.status,
+            Json(serde_json::json!({
+                "code": self.code,
+                "error": self.message,
+            })),
+        )
+            .into_response()
+    }
 }
 
 async fn command_handler(
@@ -1733,6 +1821,399 @@ async fn command_handler(
         tokio::task::spawn_blocking(move || prune_detached_terminal_sessions(&prune_state));
     }
     Ok(Json(value))
+}
+
+async fn launcher_presets_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+) -> Result<Json<crate::launcher_presets::LauncherPresetsResponse>, BridgeError> {
+    ensure_allowed_request(&headers, &state.request_policy)?;
+    let mut response = state.launcher_presets.response();
+    if state
+        .daemon_version
+        .as_deref()
+        .is_some_and(herdr_version_before_launcher_hint_support)
+    {
+        response.warnings.push(
+            "connected Herdr is older than v0.7.1; agent_hint launches still run, but wrapper/SSH detection may ignore HERDR_AGENT".to_string(),
+        );
+    }
+    Ok(Json(response))
+}
+
+async fn launcher_preset_launch_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<LauncherPresetLaunchResponse>, LauncherPresetError> {
+    ensure_allowed_request(&headers, &state.request_policy)
+        .map_err(LauncherPresetError::from_request_policy_error)?;
+    let body = parse_launcher_preset_launch_request(&body)?;
+    let preset = state
+        .launcher_presets
+        .preset(&body.preset_id)
+        .cloned()
+        .ok_or_else(|| LauncherPresetError::not_found("launcher preset not found"))?;
+    let title = resolve_launch_title(body.title.as_deref(), &preset.label)?;
+    info!(
+        preset_id = %preset.id,
+        title = %title,
+        target = body.target.kind(),
+        "launching configured preset"
+    );
+    let api = state.api.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        launch_preset_blocking(&api, &preset, &title, body.target)
+    })
+    .await
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))??;
+    Ok(Json(response))
+}
+
+fn parse_launcher_preset_launch_request(
+    body: &[u8],
+) -> Result<LauncherPresetLaunchRequest, LauncherPresetError> {
+    serde_json::from_slice(body).map_err(|err| LauncherPresetError::invalid(err.to_string()))
+}
+
+fn resolve_launch_title(
+    requested: Option<&str>,
+    fallback: &str,
+) -> Result<String, LauncherPresetError> {
+    let title = requested
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback)
+        .trim()
+        .to_string();
+    if title.is_empty() || title.len() > MAX_LABEL_BYTES || title.contains('\0') {
+        return Err(LauncherPresetError::invalid(
+            "launch title must be non-empty, NUL-free, and up to 120 bytes",
+        ));
+    }
+    Ok(title)
+}
+
+fn launch_preset_blocking(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    target: LauncherPresetLaunchTarget,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    match target {
+        LauncherPresetLaunchTarget::Tab { workspace_id } => {
+            if workspace_id.trim().is_empty() {
+                return Err(LauncherPresetError::invalid("workspace_id is required"));
+            }
+            if preset.is_builtin_shell() {
+                launch_builtin_shell_tab(api, preset, title, workspace_id)
+            } else {
+                launch_layout_tab(api, preset, title, workspace_id)
+            }
+        }
+        LauncherPresetLaunchTarget::Split {
+            tab_id,
+            target_pane_id,
+            direction,
+        } => {
+            if tab_id.trim().is_empty() || target_pane_id.trim().is_empty() {
+                return Err(LauncherPresetError::invalid(
+                    "tab_id and target_pane_id are required",
+                ));
+            }
+            if preset.is_builtin_shell() {
+                launch_builtin_shell_split(api, preset, title, target_pane_id, direction)
+            } else if preset.agent_hint.is_some() {
+                launch_agent_split(api, preset, title, tab_id, direction)
+            } else {
+                launch_layout_split(api, preset, title, tab_id, target_pane_id, direction)
+            }
+        }
+    }
+}
+
+impl LauncherPresetLaunchTarget {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Tab { .. } => "tab",
+            Self::Split { .. } => "split",
+        }
+    }
+}
+
+fn launch_builtin_shell_tab(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    workspace_id: String,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    let result = api_request(
+        api,
+        "herdr-web:launcher:builtin-shell-tab",
+        Method::TabCreate(TabCreateParams {
+            workspace_id: Some(workspace_id),
+            cwd: None,
+            focus: true,
+            label: None,
+            env: HashMap::new(),
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::TabCreated { tab, root_pane } = result else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for shell tab launch",
+        ));
+    };
+    rename_launched_pane(api, &root_pane.pane_id, title)?;
+    Ok(LauncherPresetLaunchResponse {
+        preset_id: preset.id.clone(),
+        title: title.into(),
+        workspace_id: tab.workspace_id,
+        tab_id: tab.tab_id,
+        pane_id: root_pane.pane_id,
+    })
+}
+
+fn launch_builtin_shell_split(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    target_pane_id: String,
+    direction: SplitDirection,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    let result = api_request(
+        api,
+        "herdr-web:launcher:builtin-shell-split",
+        Method::PaneSplit(PaneSplitParams {
+            workspace_id: None,
+            target_pane_id: Some(target_pane_id),
+            direction,
+            ratio: None,
+            cwd: None,
+            focus: true,
+            env: HashMap::new(),
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::PaneInfo { pane } = result else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for shell split launch",
+        ));
+    };
+    rename_launched_pane(api, &pane.pane_id, title)?;
+    Ok(LauncherPresetLaunchResponse {
+        preset_id: preset.id.clone(),
+        title: title.into(),
+        workspace_id: pane.workspace_id,
+        tab_id: pane.tab_id,
+        pane_id: pane.pane_id,
+    })
+}
+
+fn launch_agent_split(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    tab_id: String,
+    direction: SplitDirection,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    let argv = preset
+        .argv
+        .clone()
+        .ok_or_else(|| LauncherPresetError::invalid("preset argv is required"))?;
+    let result = api_request(
+        api,
+        "herdr-web:launcher:agent-split",
+        Method::AgentStart(AgentStartParams {
+            name: title.into(),
+            cwd: preset.cwd.clone(),
+            workspace_id: None,
+            tab_id: Some(tab_id),
+            split: Some(direction),
+            focus: true,
+            argv,
+            env: preset.launch_env(),
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::AgentStarted { agent, .. } = result else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for agent split launch",
+        ));
+    };
+    Ok(LauncherPresetLaunchResponse {
+        preset_id: preset.id.clone(),
+        title: title.into(),
+        workspace_id: agent.workspace_id,
+        tab_id: agent.tab_id,
+        pane_id: agent.pane_id,
+    })
+}
+
+fn launch_layout_tab(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    workspace_id: String,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    let result = api_request(
+        api,
+        "herdr-web:launcher:layout-tab",
+        Method::LayoutApply(LayoutApplyParams {
+            workspace_id: Some(workspace_id),
+            tab_id: None,
+            tab_label: Some(title.into()),
+            focus: true,
+            root: layout_leaf_for_preset(preset, title),
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::LayoutApply { layout } = result else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for layout tab launch",
+        ));
+    };
+    Ok(LauncherPresetLaunchResponse {
+        preset_id: preset.id.clone(),
+        title: title.into(),
+        workspace_id: layout.workspace_id,
+        tab_id: layout.tab_id,
+        pane_id: layout.focused_pane_id,
+    })
+}
+
+fn launch_layout_split(
+    api: &ApiClient,
+    preset: &ResolvedLauncherPreset,
+    title: &str,
+    tab_id: String,
+    target_pane_id: String,
+    direction: SplitDirection,
+) -> Result<LauncherPresetLaunchResponse, LauncherPresetError> {
+    let exported = api_request(
+        api,
+        "herdr-web:launcher:layout-export",
+        Method::LayoutExport(LayoutExportParams {
+            tab_id: Some(tab_id.clone()),
+            pane_id: None,
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::LayoutExport { layout } = exported else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for layout export",
+        ));
+    };
+    if !layout_contains_pane(&layout.root, &target_pane_id) {
+        return Err(LauncherPresetError::layout_changed(
+            "target pane is no longer present in the tab layout",
+        ));
+    }
+    let original_root = layout.root.clone();
+    let before_panes = layout_pane_ids(&original_root);
+    let root =
+        split_layout_with_command_preset(layout.root, &target_pane_id, direction, preset, title)
+            .map_err(|_| {
+                LauncherPresetError::layout_changed("target pane changed before launch")
+            })?;
+    let latest = api_request(
+        api,
+        "herdr-web:launcher:layout-export-check",
+        Method::LayoutExport(LayoutExportParams {
+            tab_id: Some(tab_id.clone()),
+            pane_id: None,
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::LayoutExport { layout: latest } = latest else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for layout export check",
+        ));
+    };
+    if latest.root != original_root {
+        return Err(LauncherPresetError::layout_changed(
+            "tab layout changed before launch",
+        ));
+    }
+    let result = api_request(
+        api,
+        "herdr-web:launcher:layout-split",
+        Method::LayoutApply(LayoutApplyParams {
+            workspace_id: None,
+            tab_id: Some(tab_id),
+            tab_label: None,
+            focus: true,
+            root,
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    let ResponseResult::LayoutApply { layout } = result else {
+        return Err(LauncherPresetError::launch_failed(
+            "unexpected response for layout split launch",
+        ));
+    };
+    let pane_id = layout_pane_ids(&layout.root)
+        .into_iter()
+        .find(|pane_id| !before_panes.contains(pane_id))
+        .unwrap_or_else(|| layout.focused_pane_id.clone());
+    Ok(LauncherPresetLaunchResponse {
+        preset_id: preset.id.clone(),
+        title: title.into(),
+        workspace_id: layout.workspace_id,
+        tab_id: layout.tab_id,
+        pane_id,
+    })
+}
+
+fn rename_launched_pane(
+    api: &ApiClient,
+    pane_id: &str,
+    title: &str,
+) -> Result<(), LauncherPresetError> {
+    api_request(
+        api,
+        "herdr-web:launcher:rename-pane",
+        Method::PaneRename(herdr_compat::api::schema::PaneRenameParams {
+            pane_id: pane_id.into(),
+            label: Some(title.into()),
+        }),
+    )
+    .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))?;
+    Ok(())
+}
+
+fn layout_contains_pane(root: &herdr_compat::api::schema::LayoutNode, pane_id: &str) -> bool {
+    match root {
+        herdr_compat::api::schema::LayoutNode::Pane { pane } => {
+            pane.pane_id.as_deref() == Some(pane_id)
+        }
+        herdr_compat::api::schema::LayoutNode::Split { first, second, .. } => {
+            layout_contains_pane(first, pane_id) || layout_contains_pane(second, pane_id)
+        }
+    }
+}
+
+fn layout_pane_ids(root: &herdr_compat::api::schema::LayoutNode) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    collect_layout_pane_ids(root, &mut ids);
+    ids
+}
+
+fn collect_layout_pane_ids(
+    root: &herdr_compat::api::schema::LayoutNode,
+    ids: &mut HashSet<String>,
+) {
+    match root {
+        herdr_compat::api::schema::LayoutNode::Pane { pane } => {
+            if let Some(pane_id) = &pane.pane_id {
+                ids.insert(pane_id.clone());
+            }
+        }
+        herdr_compat::api::schema::LayoutNode::Split { first, second, .. } => {
+            collect_layout_pane_ids(first, ids);
+            collect_layout_pane_ids(second, ids);
+        }
+    }
 }
 
 fn command_may_close_terminal_session(method: &Method) -> bool {
@@ -2024,6 +2505,7 @@ async fn capabilities_handler(
         commands: ALLOWED_COMMANDS,
         agent_activity: AgentActivityCapability { version: 1 },
         agent_pins: AgentPinsCapability { version: 1 },
+        launcher_presets: LauncherPresetsCapability { version: 1 },
         notes: NotesCapability { version: 1 },
     }))
 }
@@ -3516,6 +3998,15 @@ fn terminal_attach_protocol(api: &ApiClient) -> Result<u32, BridgeError> {
     daemon_protocol_from_status(api.status_with_timeout(DAEMON_STATUS_TIMEOUT)?)
 }
 
+fn startup_daemon_status(api: &ApiClient) -> io::Result<herdr_compat::api::RuntimeStatus> {
+    let status = api
+        .status_with_timeout(DAEMON_STATUS_TIMEOUT)
+        .map_err(BridgeError::from)
+        .map_err(startup_daemon_error)?;
+    daemon_protocol_from_status(status.clone()).map_err(startup_daemon_error)?;
+    Ok(status)
+}
+
 fn daemon_protocol_from_status(
     status: herdr_compat::api::RuntimeStatus,
 ) -> Result<u32, BridgeError> {
@@ -3531,8 +4022,22 @@ fn daemon_protocol_from_status(
     }
 }
 
-fn startup_daemon_protocol(api: &ApiClient) -> io::Result<u32> {
-    terminal_attach_protocol(api).map_err(startup_daemon_error)
+fn herdr_version_before_launcher_hint_support(version: &str) -> bool {
+    let Some((major, minor, patch)) = parse_version_triplet(version) else {
+        return false;
+    };
+    (major, minor, patch) < (0, 7, 1)
+}
+
+fn parse_version_triplet(version: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = version
+        .trim()
+        .trim_start_matches('v')
+        .split(['.', '-', '+']);
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    Some((major, minor, patch))
 }
 
 fn startup_daemon_error(err: BridgeError) -> io::Error {
@@ -4148,12 +4653,12 @@ mod tests {
         assert!(ALLOWED_COMMANDS.contains(&"pane.rename"));
         assert!(!ALLOWED_COMMANDS.contains(&"server.stop"));
         assert!(!ALLOWED_COMMANDS.contains(&"pane.send_keys"));
-        assert!(ALLOWED_COMMANDS.contains(&"pane.send_input"));
+        assert!(!ALLOWED_COMMANDS.contains(&"pane.send_input"));
         // pane.split is intentionally allowed so the web client can create splits.
         assert!(ALLOWED_COMMANDS.contains(&"pane.split"));
         assert!(ALLOWED_COMMANDS.contains(&"pane.focus_direction"));
         assert!(ALLOWED_COMMANDS.contains(&"pane.move"));
-        assert!(ALLOWED_COMMANDS.contains(&"agent.start"));
+        assert!(!ALLOWED_COMMANDS.contains(&"agent.start"));
     }
 
     #[test]
@@ -4480,39 +4985,8 @@ mod tests {
         let value = header.to_str().unwrap();
 
         assert!(value.contains("connect-src 'self' data: http://srv:8787 ws://srv:8787;"));
+        assert!(value.contains("img-src 'self' data: blob:;"));
         assert!(value.contains("frame-ancestors 'none'"));
-    }
-
-    #[test]
-    fn validates_narrow_agent_start_commands() {
-        let request: Request = serde_json::from_value(serde_json::json!({
-            "id": "test",
-            "method": "agent.start",
-            "params": {
-                "name": "Codex 2",
-                "tab_id": "1-1",
-                "split": "right",
-                "focus": true,
-                "argv": ["codex"]
-            }
-        }))
-        .unwrap();
-        assert!(validate_web_command(&request.method).is_ok());
-
-        let request: Request = serde_json::from_value(serde_json::json!({
-            "id": "test",
-            "method": "agent.start",
-            "params": {
-                "name": "server",
-                "tab_id": "1-1",
-                "split": "right",
-                "focus": true,
-                "argv": ["sh", "-c", "date"],
-                "env": { "X": "1" }
-            }
-        }))
-        .unwrap();
-        assert!(validate_web_command(&request.method).is_err());
     }
 
     #[test]
@@ -4595,33 +5069,6 @@ mod tests {
             "params": {
                 "tab_id": "w1:t1",
                 "label": "   "
-            }
-        }))
-        .unwrap();
-        assert!(validate_web_command(&request.method).is_err());
-    }
-
-    #[test]
-    fn validates_narrow_pane_launch_commands() {
-        let request: Request = serde_json::from_value(serde_json::json!({
-            "id": "test",
-            "method": "pane.send_input",
-            "params": {
-                "pane_id": "1-1",
-                "text": "claude",
-                "keys": ["Enter"]
-            }
-        }))
-        .unwrap();
-        assert!(validate_web_command(&request.method).is_ok());
-
-        let request: Request = serde_json::from_value(serde_json::json!({
-            "id": "test",
-            "method": "pane.send_input",
-            "params": {
-                "pane_id": "1-1",
-                "text": "rm -rf /tmp/nope",
-                "keys": ["Enter"]
             }
         }))
         .unwrap();
@@ -4791,6 +5238,39 @@ mod tests {
                 .to_string()
                 .contains("newer")
         );
+    }
+
+    #[test]
+    fn validates_launcher_preset_titles() {
+        assert_eq!(
+            resolve_launch_title(Some("  Custom  "), "Fallback").unwrap(),
+            "Custom"
+        );
+        assert_eq!(
+            resolve_launch_title(Some("   "), "Fallback").unwrap(),
+            "Fallback"
+        );
+        assert!(resolve_launch_title(Some("bad\0title"), "Fallback").is_err());
+        assert!(resolve_launch_title(Some(&"x".repeat(MAX_LABEL_BYTES + 1)), "Fallback").is_err());
+    }
+
+    #[test]
+    fn malformed_launcher_preset_launch_payloads_are_invalid_preset_launch() {
+        let err = parse_launcher_preset_launch_request(
+            br#"{"preset_id":"remote","target":{"mode":"unknown"}}"#,
+        )
+        .unwrap_err();
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(err.code, "invalid_preset_launch");
+    }
+
+    #[test]
+    fn detects_herdr_versions_before_launcher_hint_support() {
+        assert!(herdr_version_before_launcher_hint_support("0.7.0"));
+        assert!(herdr_version_before_launcher_hint_support("v0.7.0"));
+        assert!(!herdr_version_before_launcher_hint_support("0.7.1"));
+        assert!(!herdr_version_before_launcher_hint_support("0.8.0"));
+        assert!(!herdr_version_before_launcher_hint_support("not-a-version"));
     }
 
     #[test]

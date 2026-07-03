@@ -45,6 +45,9 @@ export type BridgeCapabilities = {
   notes?: {
     version: 1;
   };
+  launcher_presets?: {
+    version: 1;
+  };
   bridge_version?: string;
   web_compat?: number;
   min_android_app_compat?: number;
@@ -1077,6 +1080,10 @@ export function parseCapabilities(value: unknown): BridgeCapabilities {
         : undefined,
     notes:
       isRecord(value.notes) && value.notes.version === 1
+        ? { version: 1 }
+        : undefined,
+    launcher_presets:
+      isRecord(value.launcher_presets) && value.launcher_presets.version === 1
         ? { version: 1 }
         : undefined,
   };

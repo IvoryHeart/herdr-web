@@ -2291,14 +2291,20 @@ button {
 }
 
 .launch-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 
 .launch-option {
   display: inline-flex;
-  min-width: 0;
+  flex: 0 0 96px;
+  min-width: 96px;
+  max-width: 112px;
   height: 38px;
   align-items: center;
   justify-content: center;

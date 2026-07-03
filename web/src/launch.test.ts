@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentArgv, resolveLaunchSpec } from "./launch";
+import { agentArgv, fallbackLaunchSpec, resolveLaunchSpec } from "./launch";
 import { shellCommand, shellQuote } from "./shell";
 import type { PaneInfo } from "./types";
 
@@ -24,19 +24,22 @@ describe("launch helpers", () => {
   });
 
   it("keeps custom launch titles", () => {
-    expect(resolveLaunchSpec({ kind: "codex", title: "reviewer" }, [pane("1", "Codex")])).toEqual({
-      kind: "codex",
+    expect(resolveLaunchSpec({ ...fallbackLaunchSpec("codex"), title: "reviewer" }, [
+      pane("1", "Codex"),
+    ])).toEqual({
+      presetId: "builtin:codex",
+      label: "Codex",
       title: "reviewer",
     });
   });
 
   it("uniquifies default agent launch titles", () => {
     expect(
-      resolveLaunchSpec({ kind: "codex", title: "Codex" }, [
+      resolveLaunchSpec(fallbackLaunchSpec("codex"), [
         pane("1", "Codex"),
         pane("2", undefined, "Codex 2"),
       ]),
-    ).toEqual({ kind: "codex", title: "Codex 3" });
+    ).toEqual({ presetId: "builtin:codex", label: "Codex", title: "Codex 3" });
   });
 });
 

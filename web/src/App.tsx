@@ -74,6 +74,12 @@ import {
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
+import {
+  FALLBACK_LAUNCHER_PRESETS,
+  fetchLauncherPresets,
+  supportsLauncherPresets,
+} from "./launcherPresets";
+import type { LauncherPresetsResponse } from "./launcherPresets";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
   DEFAULT_MOBILE_COMMAND_ENTER_NEWLINE,
@@ -202,6 +208,7 @@ type BridgeResourceState<Response> = {
   error: string | null;
 };
 type BridgeNotesState = BridgeResourceState<NotesListResponse>;
+type BridgeLauncherPresetsState = BridgeResourceState<LauncherPresetsResponse>;
 type PendingCreatedPaneNoteTarget = {
   note: PaneNote;
   pane: PaneInfo;
@@ -719,6 +726,10 @@ export function App() {
     useState<Record<string, BridgeAgentActivityState>>({});
   const [agentPinsStates, setAgentPinsStates] = useState<Record<string, BridgeAgentPinsState>>({});
   const [notesStates, setNotesStates] = useState<Record<string, BridgeNotesState>>({});
+  const [launcherPresetStates, setLauncherPresetStates] = useState<
+    Record<string, BridgeLauncherPresetsState>
+  >({});
+  const launcherPresetStatesRef = useRef(launcherPresetStates);
   const [selectedBridgeId, setSelectedBridgeId] = useState<BridgeId | null>(
     initialPrefs.selectedBridgeId,
   );
@@ -990,6 +1001,89 @@ export function App() {
     () => (selectedRuntime ? createCommands(selectedHttpUrl) : null),
     [selectedHttpUrl, selectedRuntime?.id],
   );
+  const launchRuntime = launchTarget ? bridge.getRuntime(launchTarget.bridgeId) : null;
+  const launchPresetState =
+    launchRuntime &&
+    launcherPresetStates[launchRuntime.id]?.connectionKey === launchRuntime.connectionKey
+      ? launcherPresetStates[launchRuntime.id]
+      : null;
+  const launchOptions = useMemo(() => {
+    if (
+      launchRuntime &&
+      supportsLauncherPresets(launchRuntime.capabilities) &&
+      launchPresetState?.response
+    ) {
+      return launchPresetState.response.presets;
+    }
+    return FALLBACK_LAUNCHER_PRESETS;
+  }, [launchPresetState?.response, launchRuntime?.capabilities]);
+
+  useEffect(() => {
+    launcherPresetStatesRef.current = launcherPresetStates;
+  }, [launcherPresetStates]);
+
+  useEffect(() => {
+    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
+      return;
+    }
+    const current = launcherPresetStatesRef.current[launchRuntime.id];
+    if (
+      current?.connectionKey === launchRuntime.connectionKey &&
+      current.loadState === "loading"
+    ) {
+      return;
+    }
+    const runtime = launchRuntime;
+    setLauncherPresetStates((states) => ({
+      ...states,
+      [runtime.id]: {
+        connectionKey: runtime.connectionKey,
+        response:
+          current?.connectionKey === runtime.connectionKey ? current.response : null,
+        loadState: "loading",
+        error: null,
+      },
+    }));
+    void fetchLauncherPresets(runtime.httpUrl)
+      .then((response) => {
+        setLauncherPresetStates((states) => {
+          const current = states[runtime.id];
+          if (current && current.connectionKey !== runtime.connectionKey) {
+            return states;
+          }
+          return {
+            ...states,
+            [runtime.id]: {
+              connectionKey: runtime.connectionKey,
+              response,
+              loadState: "ready",
+              error: null,
+            },
+          };
+        });
+      })
+      .catch((err: unknown) => {
+        setLauncherPresetStates((states) => {
+          const current = states[runtime.id];
+          if (current && current.connectionKey !== runtime.connectionKey) {
+            return states;
+          }
+          return {
+            ...states,
+            [runtime.id]: {
+              connectionKey: runtime.connectionKey,
+              response: null,
+              loadState: "error",
+              error: err instanceof Error ? err.message : String(err),
+            },
+          };
+        });
+      });
+  }, [
+    launchRuntime?.connectionKey,
+    launchRuntime?.id,
+    launchRuntime?.capabilities,
+  ]);
   const menuRuntime = menu ? bridge.getRuntime(menu.bridgeId) : null;
   const menuConnectionState =
     menuRuntime && connectionStates[menuRuntime.id]?.connectionKey === menuRuntime.connectionKey
@@ -2985,8 +3079,18 @@ export function App() {
       connectionRefs.current[launchTarget.bridgeId]?.snapshot ??
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
-    const action =
-      launchTarget.mode === "tab"
+    const usePresetEndpoint = supportsLauncherPresets(runtime.capabilities);
+    const action = usePresetEndpoint
+      ? launchTarget.mode === "tab"
+        ? () => commands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
+        : () =>
+            commands.launchPresetSplit(
+              launchTarget.pane.pane_id,
+              launchTarget.pane.tab_id,
+              launchTarget.direction,
+              resolvedSpec,
+            )
+      : launchTarget.mode === "tab"
         ? () => commands.createLaunchTab(launchTarget.workspaceId, resolvedSpec)
         : () =>
             commands.splitLaunchPane(
@@ -3537,6 +3641,7 @@ export function App() {
         <LaunchDialog
           target={launchTarget}
           busy={busy}
+          options={launchOptions}
           onCancel={() => setLaunchTarget(null)}
           onSubmit={submitLaunch}
         />
