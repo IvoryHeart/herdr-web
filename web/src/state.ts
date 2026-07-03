@@ -24,6 +24,26 @@ export function chooseSelectedPane(snapshot: Snapshot | null, currentPaneId: str
   return snapshot.panes.find((pane) => pane.focused)?.pane_id ?? snapshot.panes[0].pane_id;
 }
 
+export function chooseSelectedPaneForActiveWorkspace(
+  snapshot: Snapshot | null,
+  currentPaneId: string | null,
+  activeWorkspaceId: string | null,
+) {
+  if (!snapshot || !activeWorkspaceId) {
+    return chooseSelectedPane(snapshot, currentPaneId);
+  }
+  if (!snapshot.workspaces.some((workspace) => workspace.workspace_id === activeWorkspaceId)) {
+    return chooseSelectedPane(snapshot, currentPaneId);
+  }
+  const currentPane = currentPaneId
+    ? snapshot.panes.find((pane) => pane.pane_id === currentPaneId)
+    : null;
+  if (currentPane?.workspace_id === activeWorkspaceId) {
+    return chooseSelectedPane(snapshot, currentPaneId);
+  }
+  return choosePaneForWorkspace(snapshot, activeWorkspaceId);
+}
+
 export function choosePaneForWorkspace(snapshot: Snapshot, workspaceId: string) {
   const workspace = snapshot.workspaces.find((item) => item.workspace_id === workspaceId);
   const preferredTabId =

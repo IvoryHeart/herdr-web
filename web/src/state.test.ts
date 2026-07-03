@@ -5,6 +5,7 @@ import {
   choosePaneForTab,
   choosePaneForWorkspace,
   chooseSelectedPane,
+  chooseSelectedPaneForActiveWorkspace,
   displayTabLabel,
   paneTitle,
   sortPanesForPicker,
@@ -130,6 +131,26 @@ describe("chooseSelectedPane", () => {
   });
 });
 
+describe("chooseSelectedPaneForActiveWorkspace", () => {
+  it("keeps a selected pane that already belongs to the active workspace", () => {
+    const data = multiWorkspaceSnapshot();
+
+    expect(chooseSelectedPaneForActiveWorkspace(data, "2-1", "2")).toBe("2-1");
+  });
+
+  it("chooses from the active workspace instead of keeping a stale pane from another workspace", () => {
+    const data = multiWorkspaceSnapshot();
+
+    expect(chooseSelectedPaneForActiveWorkspace(data, "1-1", "2")).toBe("2-2");
+  });
+
+  it("falls back to normal pane selection when the active workspace is gone", () => {
+    const data = multiWorkspaceSnapshot();
+
+    expect(chooseSelectedPaneForActiveWorkspace(data, "1-1", "missing")).toBe("1-1");
+  });
+});
+
 describe("projection selection helpers", () => {
   it("chooses a pane from the workspace active tab", () => {
     const data = snapshot([
@@ -149,6 +170,68 @@ describe("projection selection helpers", () => {
     expect(choosePaneForTab(data, "1-2")).toBe("1-3");
   });
 });
+
+function multiWorkspaceSnapshot(): Snapshot {
+  return {
+    workspaces: [
+      {
+        workspace_id: "1",
+        number: 1,
+        label: "one",
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: "1-1",
+        agent_status: "idle",
+      },
+      {
+        workspace_id: "2",
+        number: 2,
+        label: "two",
+        focused: true,
+        pane_count: 2,
+        tab_count: 2,
+        active_tab_id: "2-2",
+        agent_status: "idle",
+      },
+    ],
+    tabs: [
+      {
+        tab_id: "1-1",
+        workspace_id: "1",
+        number: 1,
+        label: "one",
+        focused: false,
+        pane_count: 1,
+        agent_status: "idle",
+      },
+      {
+        tab_id: "2-1",
+        workspace_id: "2",
+        number: 1,
+        label: "two-a",
+        focused: false,
+        pane_count: 1,
+        agent_status: "idle",
+      },
+      {
+        tab_id: "2-2",
+        workspace_id: "2",
+        number: 2,
+        label: "two-b",
+        focused: true,
+        pane_count: 1,
+        agent_status: "idle",
+      },
+    ],
+    panes: [
+      { ...pane("1-1"), workspace_id: "1", tab_id: "1-1" },
+      { ...pane("2-1"), workspace_id: "2", tab_id: "2-1" },
+      { ...pane("2-2"), workspace_id: "2", tab_id: "2-2" },
+    ],
+    layouts: [],
+  };
+}
 
 describe("sortPanesForPicker", () => {
   it("puts urgent agent states first", () => {

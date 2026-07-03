@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- Fixed mobile sidebar space selection so tapping a space updates the scoped Tabs list instead of
+  snapping back to tabs from the previously selected pane.
+  [PR #29](https://github.com/kcosr/herdr-web/pull/29)
 - Fixed a bridge reattach race where a client reconnecting right after the last viewer left a
   terminal could be rejected by the daemon with `already has an attached client` and shown a
   permanent `Attached elsewhere` error; the bridge now shuts detached attach connections down and
