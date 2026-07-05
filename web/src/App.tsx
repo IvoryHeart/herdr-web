@@ -1,6 +1,7 @@
 import {
-  ChevronLeft,
+  Activity,
   Archive,
+  ChevronLeft,
   Link2,
   MoreVertical,
   PanelLeft,
@@ -316,6 +317,7 @@ type DisplayPrefs = {
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   agentPinnedOnly: boolean;
+  agentActiveOnly: boolean;
   sidebarWidth: number;
   notesPanelWidth: number;
   notesListPaneWidth: number;
@@ -370,6 +372,7 @@ function readDisplayPrefs(): DisplayPrefs {
     agentSort: "attention",
     agentGroup: "none",
     agentPinnedOnly: false,
+    agentActiveOnly: false,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     notesPanelWidth: DEFAULT_NOTES_PANEL_WIDTH,
     notesListPaneWidth: DEFAULT_NOTES_LIST_PANE_WIDTH,
@@ -470,6 +473,10 @@ function parseDisplayPrefsValue(
       typeof parsed.agentPinnedOnly === "boolean"
         ? parsed.agentPinnedOnly
         : fallback.agentPinnedOnly,
+    agentActiveOnly:
+      typeof parsed.agentActiveOnly === "boolean"
+        ? parsed.agentActiveOnly
+        : fallback.agentActiveOnly,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth:
@@ -761,6 +768,7 @@ export function App() {
   const [agentSort, setAgentSort] = useState<AgentSort>(initialPrefs.agentSort);
   const [agentGroup, setAgentGroup] = useState<AgentGroup>(initialPrefs.agentGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
+  const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
   const [sidebarWidth, setSidebarWidth] = useState(initialPrefs.sidebarWidth);
   const [notesPanelWidth, setNotesPanelWidth] = useState(initialPrefs.notesPanelWidth);
   const [notesListPaneWidth, setNotesListPaneWidth] = useState(initialPrefs.notesListPaneWidth);
@@ -862,6 +870,7 @@ export function App() {
       setAgentSort(prefs.agentSort);
       setAgentGroup(prefs.agentGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
+      setAgentActiveOnly(prefs.agentActiveOnly);
       setSidebarWidth(prefs.sidebarWidth);
       setNotesPanelWidth(prefs.notesPanelWidth);
       setNotesListPaneWidth(prefs.notesListPaneWidth);
@@ -1318,6 +1327,7 @@ export function App() {
       agentSort,
       agentGroup,
       agentPinnedOnly,
+      agentActiveOnly,
       sidebarWidth,
       notesPanelWidth,
       notesListPaneWidth,
@@ -1352,6 +1362,7 @@ export function App() {
     agentSort,
     agentGroup,
     agentPinnedOnly,
+    agentActiveOnly,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -2513,6 +2524,7 @@ export function App() {
           pinnedAgentKeys,
           effectiveAgentPinnedOnly,
           agentActivityTransitions,
+          agentActiveOnly,
         );
         if (agentEntries.length === 0) {
           return;
@@ -2582,6 +2594,7 @@ export function App() {
     activeSpace,
     activeWorkspacesByBridgeId,
     agentActivityTransitions,
+    agentActiveOnly,
     effectiveAgentPinnedOnly,
     agentGroup,
     agentSort,
@@ -3167,6 +3180,7 @@ export function App() {
           agentActivityTransitions={agentActivityTransitions}
           pinnedAgentKeys={pinnedAgentKeys}
           agentPinnedOnly={agentPinnedOnly}
+          agentActiveOnly={agentActiveOnly}
           agentSort={agentSort}
           agentGroup={agentGroup}
           activeSpace={activeSpace}
@@ -3178,6 +3192,7 @@ export function App() {
           onSelectNote={selectNote}
           onCreateNote={() => void createDetachedBridgeNote()}
           onAgentPinnedOnly={setAgentPinnedOnly}
+          onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
           onSelectBridge={setSelectedBridgeId}
@@ -4125,6 +4140,7 @@ export function buildVisibleAgentPaneEntries(
   pinnedAgentKeys: ReadonlySet<string> = EMPTY_AGENT_PIN_KEYS,
   pinnedOnly = false,
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+  activeOnly = false,
 ) {
   const buildRows = (sort: AgentSort) =>
     scopedWorkspaces.flatMap((entry) => {
@@ -4156,9 +4172,7 @@ export function buildVisibleAgentPaneEntries(
     });
 
   if (agentSort === "lastStatusChange" && agentGroup !== "none") {
-    const agentPanes = pinnedOnly
-      ? buildRows("workspace").filter((entry) => entry.pinned)
-      : buildRows("workspace");
+    const agentPanes = filterAgentEntries(buildRows("workspace"), pinnedOnly, activeOnly);
     const groups = buildScopedAgentGroups(agentPanes, agentGroup, hostScope).map((group) => ({
       ...group,
       panes: sortedAgentEntriesWithinGroup(sortScopedAgentPanes(group.panes, agentSort)),
@@ -4172,9 +4186,10 @@ export function buildVisibleAgentPaneEntries(
   }
 
   const sortedAgentPanes = sortScopedAgentPanes(buildRows(agentSort), agentSort);
+  const filteredAgentPanes = filterAgentEntries(sortedAgentPanes, pinnedOnly, activeOnly);
   const agentPanes = pinnedOnly
-    ? sortedAgentPanes.filter((entry) => entry.pinned)
-    : sortedAgentEntriesWithinGroup(sortedAgentPanes);
+    ? filteredAgentPanes
+    : sortedAgentEntriesWithinGroup(filteredAgentPanes);
   if (agentGroup === "none") {
     return agentPanes;
   }
@@ -4189,6 +4204,18 @@ export function buildVisibleAgentPaneEntries(
     );
   }
   return groups.flatMap((group) => group.panes);
+}
+
+function filterAgentEntries(
+  entries: ScopedAgentPane[],
+  pinnedOnly: boolean,
+  activeOnly: boolean,
+) {
+  return entries.filter(
+    (entry) =>
+      (!pinnedOnly || entry.pinned === true) &&
+      (!activeOnly || isActiveAgentStatus(entry.pane.agent_status)),
+  );
 }
 
 export function buildScopedAgentGroups(
@@ -4914,6 +4941,7 @@ function Switcher({
   agentActivityTransitions,
   pinnedAgentKeys,
   agentPinnedOnly,
+  agentActiveOnly,
   agentSort,
   agentGroup,
   activeSpace,
@@ -4925,6 +4953,7 @@ function Switcher({
   onSelectNote,
   onCreateNote,
   onAgentPinnedOnly,
+  onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
   onSelectBridge,
@@ -4958,6 +4987,7 @@ function Switcher({
   agentActivityTransitions: ReadonlyMap<string, number>;
   pinnedAgentKeys: ReadonlySet<string>;
   agentPinnedOnly: boolean;
+  agentActiveOnly: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   activeSpace: WorkspaceInfo | null;
@@ -4969,6 +4999,7 @@ function Switcher({
   onSelectNote: (bridgeId: BridgeId, noteId: string) => void;
   onCreateNote: () => void;
   onAgentPinnedOnly: (pinnedOnly: boolean) => void;
+  onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
@@ -5073,9 +5104,11 @@ function Switcher({
       pinnedAgentKeys,
       effectiveAgentPinnedOnly,
       agentActivityTransitions,
+      agentActiveOnly,
     );
   }, [
     agentActivityTransitions,
+    agentActiveOnly,
     agentGroup,
     effectiveAgentPinnedOnly,
     agentSort,
@@ -5119,6 +5152,7 @@ function Switcher({
   const canCreateNoteFromHeader = notesViewActive && notesSupported;
   const showPinnedOnlyControl =
     (sidebarView === "agents" || sidebarView === "tabs") && agentPinsSupported;
+  const showActiveOnlyControl = sidebarView === "agents";
   const pinnedOnlyLabel = sidebarView === "tabs" ? "pinned panes" : "pinned agents";
 
   useEffect(() => {
@@ -5631,6 +5665,19 @@ function Switcher({
                     <Pin size={13} />
                   </button>
                 ) : null}
+                {showActiveOnlyControl ? (
+                  <button
+                    className="sec-add sec-add-active"
+                    type="button"
+                    aria-label="Show active statuses only"
+                    title="Active statuses only"
+                    aria-pressed={agentActiveOnly}
+                    data-on={agentActiveOnly}
+                    onClick={() => onAgentActiveOnly(!agentActiveOnly)}
+                  >
+                    <Activity size={13} />
+                  </button>
+                ) : null}
                 {showOptionsControl ? (
                   <button
                     className="sec-add"
@@ -5655,9 +5702,13 @@ function Switcher({
                 agentPanes.length === 0 && disconnectedBridgeViews.length === 0 ? (
                   <div className="empty">
                     <strong>
-                      {effectiveAgentPinnedOnly ? "No pinned agents" : "No detected agents"}
+                      {emptyAgentListTitle(effectiveAgentPinnedOnly, agentActiveOnly)}
                     </strong>
-                    <span>{effectiveAgentPinnedOnly ? "" : "Open the Tabs view for plain panes."}</span>
+                    <span>
+                      {effectiveAgentPinnedOnly || agentActiveOnly
+                        ? ""
+                        : "Open the Tabs view for plain panes."}
+                    </span>
                   </div>
                 ) : (
                   <>
@@ -7052,6 +7103,23 @@ function isAgentPane(pane: PaneInfo) {
       pane.title ||
       pane.agent_status !== "unknown",
   );
+}
+
+export function isActiveAgentStatus(status: AgentStatus) {
+  return status === "working" || status === "blocked" || status === "done";
+}
+
+function emptyAgentListTitle(pinnedOnly: boolean, activeOnly: boolean) {
+  if (pinnedOnly && activeOnly) {
+    return "No pinned active status agents";
+  }
+  if (pinnedOnly) {
+    return "No pinned agents";
+  }
+  if (activeOnly) {
+    return "No active status agents";
+  }
+  return "No detected agents";
 }
 
 const AGENT_STATUS_ORDER: Record<AgentStatus, number> = {

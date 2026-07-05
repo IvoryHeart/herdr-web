@@ -2075,8 +2075,9 @@ button {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.sec-add-pin svg {
-  transform: translateX(-1px);
+.sec-add-pin svg,
+.sec-add-active svg {
+  transform: translateX(-1.5px);
 }
 
 .tab-head {

@@ -418,6 +418,74 @@ describe("App multi-bridge helpers", () => {
     ).toEqual(["workspace-a:pane-a", "workspace-b:pane-b"]);
   });
 
+  it("filters agents to active statuses before workspace grouping", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1), workspace("workspace-b", 2), workspace("workspace-c", 3)],
+      [
+        pane("pane-a", "workspace-a", "tab-a", "idle"),
+        pane("pane-b", "workspace-b", "tab-b", "working"),
+        pane("pane-c", "workspace-c", "tab-c", "done"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleAgentPaneEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "workspace",
+        "workspace",
+        new Set(),
+        false,
+        new Map(),
+        true,
+      ).map((item) => `${item.workspace?.workspace_id}:${item.pane.pane_id}`),
+    ).toEqual(["workspace-b:pane-b", "workspace-c:pane-c"]);
+  });
+
+  it("combines pinned and active-status agent filters", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [
+        pane("pane-a", "workspace-a", "tab-a", "idle"),
+        pane("pane-b", "workspace-a", "tab-b", "working"),
+        pane("pane-c", "workspace-a", "tab-c", "blocked"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleAgentPaneEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "none",
+        "workspace",
+        new Set(["bridge-a:pane-a", "bridge-a:pane-c"]),
+        true,
+        new Map(),
+        true,
+      ).map((item) => item.pane.pane_id),
+    ).toEqual(["pane-c"]);
+  });
+
   it("shows pin actions even when pane commands are not ready", () => {
     expect(menuItems("pane", false, false, true, false)).toEqual([
       { key: "pin", label: "Pin pane" },

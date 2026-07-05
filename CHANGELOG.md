@@ -6,6 +6,10 @@
 
 ### Added
 
+- Added an Agents-view active-status filter that shows only agents currently
+  marked working, blocked, or done, with grouped views hiding empty groups after
+  filtering.
+
 ### Changed
 
 ### Fixed
