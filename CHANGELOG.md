@@ -6,6 +6,7 @@
 
 - The bridge now requires a Herdr `v0.7.2` or newer daemon with protocol `16` because browser
   snapshots use Herdr's native `session.snapshot` API.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
 
 ### Added
 
@@ -17,8 +18,10 @@
 
 - Refreshed the vendored Herdr compatibility baseline to `v0.7.2`, including protocol `16`, native
   session snapshots, layout/scroll event schema drift, and terminal observe/control wire messages.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
 - Changed `/api/snapshot` to use one native Herdr `session.snapshot` request instead of separate
   workspace, tab, pane, and per-tab layout requests.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
 
 ### Fixed
 
