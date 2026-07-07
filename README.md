@@ -66,7 +66,7 @@ The top-level scripts hide that detail.
 
 For release tarball users:
 
-- A running Herdr daemon/session
+- A running Herdr `v0.7.2` or newer daemon/session
 - A supported host for the downloaded bridge tarball. Current planned desktop release artifacts are
   Linux x86_64, macOS ARM64, and macOS x86_64.
 
@@ -75,7 +75,7 @@ For source development:
 - Node.js 22 or newer
 - npm
 - Rust stable
-- A running Herdr daemon/session
+- A running Herdr `v0.7.2` or newer daemon/session
 
 Android development also needs a JDK and Android SDK. See [docs/android.md](docs/android.md).
 
@@ -97,7 +97,7 @@ http://127.0.0.1:8787
 ```
 
 The desktop tarball includes the web assets and `herdr-web-bridge`; it does not include Herdr.
-Start or attach Herdr separately before running the bridge.
+Start or attach Herdr `v0.7.2` or newer separately before running the bridge.
 
 For Android, install the APK from the same release and add the bridge URL in the Bridge area of
 Settings. LAN bridges must allow Android's app origin:
@@ -200,12 +200,11 @@ Example:
 
 Presets use explicit argv, not multi-step terminal typing. Use `["bash", "-lc", "... && exec codex"]`
 when shell sequencing is needed. `agent_hint` injects `HERDR_AGENT=<agent>` for the launched process;
-Herdr `v0.7.1+` on Linux uses that hint to detect agents behind wrappers, SSH, containers, and VMs.
-Older Herdr versions still launch the command, but may display ordinary process detection.
+Herdr `v0.7.2+` on Linux uses that hint to detect agents behind wrappers, SSH, containers, and VMs.
 
 ## Run Locally
 
-Start or attach a normal Herdr session first:
+Start or attach a normal Herdr `v0.7.2` or newer session first:
 
 ```bash
 herdr

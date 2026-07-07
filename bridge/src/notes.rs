@@ -1396,6 +1396,7 @@ mod tests {
             custom_status: None,
             state_labels: Default::default(),
             agent_session: None,
+            scroll: None,
             revision,
         }
     }

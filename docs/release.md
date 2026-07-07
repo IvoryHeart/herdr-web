@@ -95,7 +95,7 @@ dist-packages/herdr-web-vX.Y.Z-android.apk
 
 ## Browser Smoke
 
-Start or attach a Herdr session:
+Start or attach a Herdr `v0.7.2` or newer session:
 
 ```bash
 herdr

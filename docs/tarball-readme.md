@@ -2,8 +2,8 @@
 
 This bundle contains the `herdr-web` browser UI assets and the `herdr-web-bridge` executable.
 
-It does not include Herdr itself. Start or attach a Herdr session separately before running this
-bundle.
+It does not include Herdr itself. Start or attach a Herdr `v0.7.2` or newer session separately
+before running this bundle.
 
 ## Run
 
