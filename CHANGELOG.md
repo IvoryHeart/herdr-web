@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.2] - 2026-07-07
 
 ### Breaking Changes
 
@@ -23,10 +23,6 @@
 - Changed `/api/snapshot` to use one native Herdr `session.snapshot` request instead of separate
   workspace, tab, pane, and per-tab layout requests.
   [PR #32](https://github.com/kcosr/herdr-web/pull/32)
-
-### Fixed
-
-### Removed
 
 ## [0.3.1] - 2026-07-03
 
