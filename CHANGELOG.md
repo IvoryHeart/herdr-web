@@ -4,8 +4,9 @@
 
 ### Breaking Changes
 
-- The bridge now requires a Herdr `v0.7.2` or newer daemon with protocol `16` because browser
-  snapshots use Herdr's native `session.snapshot` API.
+- Users must upgrade Herdr to `v0.7.2` or newer before upgrading herdr-web. The bridge now requires
+  a Herdr daemon with protocol `16` because browser snapshots use Herdr's native
+  `session.snapshot` API.
   [PR #32](https://github.com/kcosr/herdr-web/pull/32)
 
 ### Added
