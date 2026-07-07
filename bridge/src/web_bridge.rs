@@ -33,8 +33,8 @@ use tracing::{debug, info, warn};
 use herdr_compat::api::client::{ApiClient, ApiClientError};
 use herdr_compat::api::schema::{
     AgentStartParams, AgentStatus, EmptyParams, EventsSubscribeParams, LayoutApplyParams,
-    LayoutExportParams, Method, PaneInfo, PaneLayoutParams, PaneLayoutSnapshot, PaneListParams,
-    PaneMoveDestination, PaneSplitParams, Request, ResponseResult, SplitDirection, Subscription,
+    LayoutExportParams, Method, PaneInfo, PaneLayoutSnapshot, PaneListParams, PaneMoveDestination,
+    PaneSplitParams, Request, ResponseResult, SessionSnapshot, SplitDirection, Subscription,
     SubscriptionEventData, SubscriptionEventEnvelope, SubscriptionEventKind, TabCreateParams,
     TabInfo, TabListParams, WorkspaceInfo,
 };
@@ -60,7 +60,7 @@ const DEFAULT_PORT: u16 = 8787;
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_STATIC_DIR: &str = "web/dist";
-const MIN_TERMINAL_ATTACH_PROTOCOL: u32 = 13;
+const MIN_TERMINAL_ATTACH_PROTOCOL: u32 = 16;
 const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
 const MAX_NOTES_REQUEST_BYTES: usize = 512 * 1024;
 const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
@@ -2227,12 +2227,24 @@ fn command_may_close_terminal_session(method: &Method) -> bool {
 }
 
 fn fill_clear_rename_labels(api: &ApiClient, method: &mut Method) -> Result<(), BridgeError> {
+    fill_clear_rename_labels_with(
+        method,
+        |workspace_id| default_workspace_label(api, workspace_id),
+        |tab_id| default_tab_label(api, tab_id),
+    )
+}
+
+fn fill_clear_rename_labels_with(
+    method: &mut Method,
+    mut workspace_default: impl FnMut(&str) -> Result<String, BridgeError>,
+    mut tab_default: impl FnMut(&str) -> Result<String, BridgeError>,
+) -> Result<(), BridgeError> {
     match method {
         Method::WorkspaceRename(params) if params.label.is_none() => {
-            params.label = Some(default_workspace_label(api, &params.workspace_id)?);
+            params.label = Some(workspace_default(&params.workspace_id)?);
         }
         Method::TabRename(params) if params.label.is_none() => {
-            params.label = Some(default_tab_label(api, &params.tab_id)?);
+            params.label = Some(tab_default(&params.tab_id)?);
         }
         _ => {}
     }
@@ -2245,15 +2257,20 @@ fn default_tab_label(api: &ApiClient, tab_id: &str) -> Result<String, BridgeErro
         "herdr-web:clear-tab-label",
         Method::TabList(TabListParams::default()),
     )? {
-        ResponseResult::TabList { tabs } => tabs
-            .into_iter()
-            .find(|tab| tab.tab_id == tab_id)
-            .map(|tab| tab.number.to_string())
-            .ok_or_else(|| BridgeError::BadRequest(format!("tab not found: {tab_id}"))),
+        ResponseResult::TabList { tabs } => default_tab_label_from_tabs(tab_id, tabs.iter()),
         other => Err(BridgeError::Protocol(format!(
             "unexpected response: {other:?}"
         ))),
     }
+}
+
+fn default_tab_label_from_tabs<'a>(
+    tab_id: &str,
+    mut tabs: impl Iterator<Item = &'a TabInfo>,
+) -> Result<String, BridgeError> {
+    tabs.find(|tab| tab.tab_id == tab_id)
+        .map(|tab| tab.number.to_string())
+        .ok_or_else(|| BridgeError::BadRequest(format!("tab not found: {tab_id}")))
 }
 
 fn default_workspace_label(api: &ApiClient, workspace_id: &str) -> Result<String, BridgeError> {
@@ -2417,40 +2434,23 @@ async fn snapshot_handler(
 ) -> Result<Json<Snapshot>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     let api_state = state.clone();
-    let (workspaces, tabs, panes, layouts) = tokio::task::spawn_blocking(move || {
-        let workspaces = match api_request(
+    let session_snapshot = tokio::task::spawn_blocking(move || {
+        match api_request(
             &api_state.api,
-            "herdr-web:workspace-list",
-            Method::WorkspaceList(EmptyParams::default()),
+            "herdr-web:session-snapshot",
+            Method::SessionSnapshot(EmptyParams::default()),
         )? {
-            ResponseResult::WorkspaceList { workspaces } => workspaces,
-            other => {
-                return Err(BridgeError::Protocol(format!(
-                    "unexpected response: {other:?}"
-                )))
-            }
-        };
-        let tabs = match api_request(
-            &api_state.api,
-            "herdr-web:tab-list",
-            Method::TabList(TabListParams::default()),
-        )? {
-            ResponseResult::TabList { tabs } => tabs,
-            other => {
-                return Err(BridgeError::Protocol(format!(
-                    "unexpected response: {other:?}"
-                )))
-            }
-        };
-        let panes = current_panes(&api_state.api)?;
-        observe_agent_activity_snapshot(&api_state, &panes);
-        let layouts = collect_tab_layouts(&api_state.api, &tabs, &panes);
-        Ok((workspaces, tabs, panes, layouts))
+            ResponseResult::SessionSnapshot { snapshot } => Ok(*snapshot),
+            other => Err(BridgeError::Protocol(format!(
+                "unexpected response: {other:?}"
+            ))),
+        }
     })
     .await
     .map_err(|err| BridgeError::Protocol(err.to_string()))??;
+    observe_agent_activity_snapshot(&state, &session_snapshot.panes);
     let notes = state.notes.clone();
-    let note_panes = panes.clone();
+    let note_panes = session_snapshot.panes.clone();
     match tokio::task::spawn_blocking(move || notes.observe_panes(&note_panes))
         .await
         .map_err(|err| BridgeError::Protocol(err.to_string()))?
@@ -2459,7 +2459,27 @@ async fn snapshot_handler(
         Ok(false) => {}
         Err(err) => warn!(error = %err, "failed to update pane note observations"),
     }
-    let selected_pane_id = shared_selected_pane(&state, &panes)?;
+    let selected_pane_id = shared_selected_pane(&state, &session_snapshot.panes)?;
+
+    Ok(Json(web_snapshot_from_session_snapshot(
+        session_snapshot,
+        selected_pane_id,
+    )))
+}
+
+fn web_snapshot_from_session_snapshot(
+    snapshot: SessionSnapshot,
+    selected_pane_id: Option<String>,
+) -> Snapshot {
+    let SessionSnapshot {
+        workspaces,
+        tabs,
+        panes,
+        layouts,
+        ..
+    } = snapshot;
+    let selected_pane_id = selected_pane_id
+        .filter(|pane_id| panes.iter().any(|pane| pane.pane_id == pane_id.as_str()));
     let workspaces = workspaces
         .into_iter()
         .map(|workspace| {
@@ -2482,13 +2502,13 @@ async fn snapshot_handler(
         })
         .collect();
 
-    Ok(Json(Snapshot {
+    Snapshot {
         workspaces,
         tabs,
         panes,
         layouts,
         selected_pane_id,
-    }))
+    }
 }
 
 fn is_default_tab_label(label: &str) -> bool {
@@ -2782,28 +2802,6 @@ fn api_request(api: &ApiClient, id: &str, method: Method) -> Result<ResponseResu
             method,
         })?
         .result)
-}
-
-fn collect_tab_layouts(
-    api: &ApiClient,
-    tabs: &[TabInfo],
-    panes: &[PaneInfo],
-) -> Vec<PaneLayoutSnapshot> {
-    tabs.iter()
-        .filter_map(|tab| {
-            let pane = panes.iter().find(|pane| pane.tab_id == tab.tab_id)?;
-            match api_request(
-                api,
-                &format!("herdr-web:layout:{}", tab.tab_id),
-                Method::PaneLayout(PaneLayoutParams {
-                    pane_id: Some(pane.pane_id.clone()),
-                }),
-            ) {
-                Ok(ResponseResult::PaneLayout { layout }) => Some(layout),
-                Ok(_) | Err(_) => None,
-            }
-        })
-        .collect()
 }
 
 async fn terminal_ws_handler(
@@ -3648,6 +3646,7 @@ fn structural_event_subscriptions() -> Vec<Subscription> {
         Subscription::WorkspaceCreated {},
         Subscription::WorkspaceUpdated {},
         Subscription::WorkspaceRenamed {},
+        Subscription::WorkspaceMoved {},
         Subscription::WorkspaceClosed {},
         Subscription::WorkspaceFocused {},
         Subscription::WorktreeCreated {},
@@ -3657,12 +3656,14 @@ fn structural_event_subscriptions() -> Vec<Subscription> {
         Subscription::TabClosed {},
         Subscription::TabFocused {},
         Subscription::TabRenamed {},
+        Subscription::TabMoved {},
         Subscription::PaneCreated {},
         Subscription::PaneClosed {},
         Subscription::PaneFocused {},
         Subscription::PaneMoved {},
         Subscription::PaneExited {},
         Subscription::PaneAgentDetected {},
+        Subscription::LayoutUpdated {},
     ]
 }
 
@@ -3961,6 +3962,7 @@ fn open_terminal_attach(
                 | ServerMessage::WindowTitle { .. }
                 | ServerMessage::ReloadSoundConfig
                 | ServerMessage::MouseCapture { .. }
+                | ServerMessage::PrefixInputSource { .. }
                 | ServerMessage::Frame(_)
                 | ServerMessage::Graphics { .. } => {}
             }
@@ -4702,6 +4704,64 @@ mod tests {
     }
 
     #[test]
+    fn web_snapshot_adapter_preserves_web_shape_and_clear_name_flags() {
+        let snapshot =
+            web_snapshot_from_session_snapshot(test_session_snapshot(), Some("pane-2".to_string()));
+
+        assert_eq!(snapshot.selected_pane_id.as_deref(), Some("pane-2"));
+        assert_eq!(snapshot.workspaces.len(), 2);
+        assert_eq!(snapshot.tabs.len(), 3);
+        assert_eq!(snapshot.panes.len(), 4);
+        assert_eq!(snapshot.layouts.len(), 3);
+
+        let default_workspace = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.info.workspace_id == "workspace-1")
+            .unwrap();
+        assert!(!default_workspace.can_clear_name);
+
+        let renamed_workspace = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.info.workspace_id == "workspace-2")
+            .unwrap();
+        assert!(renamed_workspace.can_clear_name);
+
+        let default_tab = snapshot
+            .tabs
+            .iter()
+            .find(|tab| tab.info.tab_id == "tab-1")
+            .unwrap();
+        assert!(!default_tab.can_clear_name);
+
+        let renamed_tab = snapshot
+            .tabs
+            .iter()
+            .find(|tab| tab.info.tab_id == "tab-2")
+            .unwrap();
+        assert!(renamed_tab.can_clear_name);
+
+        let non_focused_split_layout = snapshot
+            .layouts
+            .iter()
+            .find(|layout| layout.tab_id == "tab-2")
+            .unwrap();
+        assert_eq!(non_focused_split_layout.panes.len(), 2);
+        assert_eq!(non_focused_split_layout.splits.len(), 1);
+    }
+
+    #[test]
+    fn web_snapshot_adapter_drops_stale_selected_pane_ids() {
+        let snapshot = web_snapshot_from_session_snapshot(
+            test_session_snapshot(),
+            Some("missing".to_string()),
+        );
+
+        assert_eq!(snapshot.selected_pane_id, None);
+    }
+
+    #[test]
     fn structural_subscriptions_are_separate_from_activity_subscriptions() {
         let subscriptions = structural_event_subscriptions();
 
@@ -4711,6 +4771,15 @@ mod tests {
         assert!(subscriptions
             .iter()
             .any(|subscription| matches!(subscription, Subscription::PaneMoved {})));
+        assert!(subscriptions
+            .iter()
+            .any(|subscription| matches!(subscription, Subscription::LayoutUpdated {})));
+        assert!(subscriptions
+            .iter()
+            .any(|subscription| matches!(subscription, Subscription::WorkspaceMoved {})));
+        assert!(subscriptions
+            .iter()
+            .any(|subscription| matches!(subscription, Subscription::TabMoved {})));
         assert!(!subscriptions.iter().any(|subscription| matches!(
             subscription,
             Subscription::PaneAgentStatusChanged { .. }
@@ -4764,15 +4833,139 @@ mod tests {
         })));
     }
 
+    fn test_session_snapshot() -> SessionSnapshot {
+        SessionSnapshot {
+            version: "0.7.2".to_string(),
+            protocol: PROTOCOL_VERSION,
+            focused_workspace_id: Some("workspace-1".to_string()),
+            focused_tab_id: Some("tab-1".to_string()),
+            focused_pane_id: Some("pane-1".to_string()),
+            workspaces: vec![
+                test_workspace("workspace-1", 1, "repo", true, "tab-1", 3, 2),
+                test_workspace("workspace-2", 2, "Custom", false, "tab-3", 1, 1),
+            ],
+            tabs: vec![
+                test_tab("tab-1", "workspace-1", 1, "1", true, 1),
+                test_tab("tab-2", "workspace-1", 2, "Review", false, 2),
+                test_tab("tab-3", "workspace-2", 1, "1", false, 1),
+            ],
+            panes: vec![
+                test_pane_in("pane-1", "workspace-1", "tab-1", "/tmp/repo", true),
+                test_pane_in("pane-2", "workspace-1", "tab-2", "/tmp/repo", false),
+                test_pane_in("pane-3", "workspace-2", "tab-3", "/tmp/space", false),
+                test_pane_in("pane-4", "workspace-1", "tab-2", "/tmp/repo", false),
+            ],
+            layouts: vec![
+                test_layout("workspace-1", "tab-1", &["pane-1"]),
+                test_layout("workspace-1", "tab-2", &["pane-2", "pane-4"]),
+                test_layout("workspace-2", "tab-3", &["pane-3"]),
+            ],
+            agents: Vec::new(),
+        }
+    }
+
+    fn test_workspace(
+        workspace_id: &str,
+        number: usize,
+        label: &str,
+        focused: bool,
+        active_tab_id: &str,
+        pane_count: usize,
+        tab_count: usize,
+    ) -> WorkspaceInfo {
+        WorkspaceInfo {
+            workspace_id: workspace_id.to_string(),
+            number,
+            label: label.to_string(),
+            focused,
+            pane_count,
+            tab_count,
+            active_tab_id: active_tab_id.to_string(),
+            agent_status: AgentStatus::Idle,
+            worktree: None,
+        }
+    }
+
+    fn test_tab(
+        tab_id: &str,
+        workspace_id: &str,
+        number: usize,
+        label: &str,
+        focused: bool,
+        pane_count: usize,
+    ) -> TabInfo {
+        TabInfo {
+            tab_id: tab_id.to_string(),
+            workspace_id: workspace_id.to_string(),
+            number,
+            label: label.to_string(),
+            focused,
+            pane_count,
+            agent_status: AgentStatus::Idle,
+        }
+    }
+
+    fn test_layout(workspace_id: &str, tab_id: &str, pane_ids: &[&str]) -> PaneLayoutSnapshot {
+        let area = herdr_compat::api::schema::PaneLayoutRect {
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 40,
+        };
+        PaneLayoutSnapshot {
+            workspace_id: workspace_id.to_string(),
+            tab_id: tab_id.to_string(),
+            zoomed: false,
+            area,
+            focused_pane_id: pane_ids.first().unwrap_or(&"").to_string(),
+            panes: pane_ids
+                .iter()
+                .enumerate()
+                .map(
+                    |(index, pane_id)| herdr_compat::api::schema::PaneLayoutPane {
+                        pane_id: (*pane_id).to_string(),
+                        focused: index == 0,
+                        rect: herdr_compat::api::schema::PaneLayoutRect {
+                            x: (index as u16) * 60,
+                            y: 0,
+                            width: 60,
+                            height: 40,
+                        },
+                    },
+                )
+                .collect(),
+            splits: if pane_ids.len() > 1 {
+                vec![herdr_compat::api::schema::PaneLayoutSplit {
+                    id: "root".to_string(),
+                    direction: SplitDirection::Right,
+                    ratio: 0.5,
+                    rect: area,
+                }]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
     fn test_pane(pane_id: &str) -> PaneInfo {
+        test_pane_in(pane_id, "workspace-1", "tab-1", "/tmp/repo", false)
+    }
+
+    fn test_pane_in(
+        pane_id: &str,
+        workspace_id: &str,
+        tab_id: &str,
+        cwd: &str,
+        focused: bool,
+    ) -> PaneInfo {
         PaneInfo {
             pane_id: pane_id.to_string(),
             terminal_id: format!("terminal-{pane_id}"),
-            workspace_id: "workspace-1".to_string(),
-            tab_id: "tab-1".to_string(),
-            focused: false,
-            cwd: None,
-            foreground_cwd: None,
+            workspace_id: workspace_id.to_string(),
+            tab_id: tab_id.to_string(),
+            focused,
+            cwd: Some(cwd.to_string()),
+            foreground_cwd: Some(cwd.to_string()),
             label: None,
             agent: None,
             title: None,
@@ -4781,6 +4974,7 @@ mod tests {
             custom_status: None,
             state_labels: HashMap::new(),
             agent_session: None,
+            scroll: None,
             revision: 1,
         }
     }
@@ -5076,6 +5270,74 @@ mod tests {
     }
 
     #[test]
+    fn clear_name_rename_substitution_uses_default_labels() {
+        let panes = [test_pane_in(
+            "pane-1",
+            "workspace-1",
+            "tab-1",
+            "/tmp/herdr",
+            true,
+        )];
+        let tabs = [test_tab("tab-2", "workspace-1", 2, "Review", false, 1)];
+
+        let mut workspace_method =
+            Method::WorkspaceRename(herdr_compat::api::schema::WorkspaceRenameParams {
+                workspace_id: "workspace-1".to_string(),
+                label: None,
+            });
+        fill_clear_rename_labels_with(
+            &mut workspace_method,
+            |workspace_id| {
+                Ok(default_workspace_label_from_panes(
+                    workspace_id,
+                    panes.iter(),
+                ))
+            },
+            |tab_id| default_tab_label_from_tabs(tab_id, tabs.iter()),
+        )
+        .unwrap();
+        let Method::WorkspaceRename(workspace_params) = workspace_method else {
+            panic!("expected workspace rename");
+        };
+        assert_eq!(workspace_params.label.as_deref(), Some("herdr"));
+
+        let mut tab_method = Method::TabRename(herdr_compat::api::schema::TabRenameParams {
+            tab_id: "tab-2".to_string(),
+            label: None,
+        });
+        fill_clear_rename_labels_with(
+            &mut tab_method,
+            |workspace_id| {
+                Ok(default_workspace_label_from_panes(
+                    workspace_id,
+                    panes.iter(),
+                ))
+            },
+            |tab_id| default_tab_label_from_tabs(tab_id, tabs.iter()),
+        )
+        .unwrap();
+        let Method::TabRename(tab_params) = tab_method else {
+            panic!("expected tab rename");
+        };
+        assert_eq!(tab_params.label.as_deref(), Some("2"));
+
+        let mut named_method = Method::TabRename(herdr_compat::api::schema::TabRenameParams {
+            tab_id: "tab-2".to_string(),
+            label: Some("Keep".to_string()),
+        });
+        fill_clear_rename_labels_with(
+            &mut named_method,
+            |_| panic!("workspace default should not be requested"),
+            |_| panic!("tab default should not be requested"),
+        )
+        .unwrap();
+        let Method::TabRename(named_params) = named_method else {
+            panic!("expected tab rename");
+        };
+        assert_eq!(named_params.label.as_deref(), Some("Keep"));
+    }
+
+    #[test]
     fn validates_narrow_pane_splits() {
         let request: Request = serde_json::from_value(serde_json::json!({
             "id": "test",
@@ -5194,16 +5456,19 @@ mod tests {
     }
 
     #[test]
-    fn terminal_attach_protocol_supports_current_and_latest_release_protocols() {
+    fn terminal_attach_protocol_requires_current_snapshot_protocol() {
         assert!(supported_terminal_attach_protocol(PROTOCOL_VERSION));
-        assert!(supported_terminal_attach_protocol(13));
-        assert!(!supported_terminal_attach_protocol(12));
+        assert!(supported_terminal_attach_protocol(
+            MIN_TERMINAL_ATTACH_PROTOCOL
+        ));
+        assert!(!supported_terminal_attach_protocol(
+            MIN_TERMINAL_ATTACH_PROTOCOL - 1
+        ));
         assert!(!supported_terminal_attach_protocol(PROTOCOL_VERSION + 1));
     }
 
     #[test]
     fn daemon_status_protocol_accepts_supported_range() {
-        assert_eq!(daemon_protocol_from_status(runtime_status(13)).unwrap(), 13);
         assert_eq!(
             daemon_protocol_from_status(runtime_status(PROTOCOL_VERSION)).unwrap(),
             PROTOCOL_VERSION
@@ -5225,12 +5490,11 @@ mod tests {
 
     #[test]
     fn daemon_status_protocol_rejects_unsupported_protocols() {
-        assert!(
-            daemon_protocol_from_status(runtime_status(MIN_TERMINAL_ATTACH_PROTOCOL - 1))
-                .unwrap_err()
-                .to_string()
-                .contains("too old")
-        );
+        let too_old = daemon_protocol_from_status(runtime_status(MIN_TERMINAL_ATTACH_PROTOCOL - 1))
+            .unwrap_err()
+            .to_string();
+        assert!(too_old.contains("too old"));
+        assert!(too_old.contains(&MIN_TERMINAL_ATTACH_PROTOCOL.to_string()));
 
         assert!(
             daemon_protocol_from_status(runtime_status(PROTOCOL_VERSION + 1))

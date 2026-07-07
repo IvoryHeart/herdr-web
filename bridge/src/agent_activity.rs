@@ -496,6 +496,7 @@ mod tests {
             agent_status: AgentStatus::Unknown,
             custom_status: None,
             state_labels: HashMap::new(),
+            scroll: None,
             revision: 1,
         }
     }

@@ -4,6 +4,11 @@
 
 ### Breaking Changes
 
+- Users must upgrade Herdr to `v0.7.2` or newer before upgrading herdr-web. The bridge now requires
+  a Herdr daemon with protocol `16` because browser snapshots use Herdr's native
+  `session.snapshot` API.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
+
 ### Added
 
 - Added an Agents-view active-status filter that shows only agents currently
@@ -11,6 +16,13 @@
   filtering. [PR #31](https://github.com/kcosr/herdr-web/pull/31)
 
 ### Changed
+
+- Refreshed the vendored Herdr compatibility baseline to `v0.7.2`, including protocol `16`, native
+  session snapshots, layout/scroll event schema drift, and terminal observe/control wire messages.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
+- Changed `/api/snapshot` to use one native Herdr `session.snapshot` request instead of separate
+  workspace, tab, pane, and per-tab layout requests.
+  [PR #32](https://github.com/kcosr/herdr-web/pull/32)
 
 ### Fixed
 

@@ -2,8 +2,8 @@
 
 `herdr-web` ships as separate desktop bridge/web tarballs and an Android APK.
 
-The desktop tarball does not include Herdr itself. Users still need a running Herdr session or
-daemon; the bundled bridge connects to the normal Herdr socket.
+The desktop tarball does not include Herdr itself. Users still need a running Herdr `v0.7.2` or
+newer session or daemon; the bundled bridge connects to the normal Herdr socket.
 
 ## Release Artifacts
 
@@ -121,7 +121,7 @@ dist-packages/herdr-web-vX.Y.Z-android.apk
 
 ## User Quick Start From Tarball
 
-Start or attach Herdr first:
+Start or attach Herdr `v0.7.2` or newer first:
 
 ```bash
 herdr

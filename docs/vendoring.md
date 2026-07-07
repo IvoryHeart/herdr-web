@@ -32,7 +32,7 @@ The browser app is not vendored into Herdr. It lives at `web/`, and `herdr-web-b
 ## Current Reference
 
 - Upstream checkout: a clean Herdr source checkout outside this repository
-- Upstream release baseline: `v0.7.1`
+- Upstream release baseline: `v0.7.2`
 
 Use the upstream checkout as an external reference for audits and refreshes. It is not required to
 build `herdr-web`.
@@ -95,7 +95,8 @@ src/server/socket_paths.rs -> vendor/herdr-compat/src/server/socket_paths.rs
 - `logging::init_file_logging` takes a concrete directory from the bridge.
 - socket path helpers derive paths from supplied overrides/defaults; bridge session resolution stays
   in `bridge/src/session.rs`.
-- `tabs.rs` and `workspaces.rs` contain clear-name compatibility changes for older daemons.
+- `tabs.rs` and `workspaces.rs` keep bridge-internal clear-name sentinel fields; the bridge
+  substitutes concrete default labels before forwarding rename requests to Herdr.
 - `protocol.rs` and schema tests include bridge fixture tests for the reviewed protocol/schema
   baseline.
 
@@ -129,10 +130,10 @@ the refit button after changing browser sizes.
 
 ## Compatibility Policy
 
-The bridge pings Herdr's status API at startup and checks the reported daemon protocol against the
-same supported range used for terminal attach. That catches incompatible daemon versions before
-serving the web app, but it is not a complete stability guarantee because the bridge mirrors private
-APIs.
+The bridge pings Herdr's status API at startup and requires daemon protocol `16` or newer. The
+`v0.7.2` baseline provides the native `session.snapshot` bootstrap API used by `/api/snapshot`, so
+older daemons are rejected before serving the web app. This is not a complete stability guarantee
+because the bridge mirrors private APIs.
 
 When updating Herdr:
 

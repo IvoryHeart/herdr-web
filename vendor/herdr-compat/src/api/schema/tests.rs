@@ -41,8 +41,11 @@ fn pong_response_json_fixture_matches_reviewed_snapshot() {
         id: "api-client:status".into(),
         result: ResponseResult::Pong {
             version: "0.7.0".into(),
-            protocol: 14,
-            capabilities: Some(ServerCapabilities { live_handoff: true }),
+            protocol: 16,
+            capabilities: Some(ServerCapabilities {
+                live_handoff: true,
+                detached_server_daemon: true,
+            }),
         },
     };
 
@@ -53,9 +56,10 @@ fn pong_response_json_fixture_matches_reviewed_snapshot() {
             "result": {
                 "type": "pong",
                 "version": "0.7.0",
-                "protocol": 14,
+                "protocol": 16,
                 "capabilities": {
-                    "live_handoff": true
+                    "live_handoff": true,
+                    "detached_server_daemon": true
                 }
             }
         })
@@ -327,6 +331,10 @@ fn subscribe_request_parses_parameterized_subscriptions() {
                     "type": "pane.agent_status_changed",
                     "pane_id": "p_1_1",
                     "agent_status": "done"
+                },
+                {
+                    "type": "pane.scroll_changed",
+                    "pane_id": "p_1_1"
                 }
             ]
         }
@@ -337,7 +345,7 @@ fn subscribe_request_parses_parameterized_subscriptions() {
     let Method::EventsSubscribe(params) = request.method else {
         panic!("wrong method parsed");
     };
-    assert_eq!(params.subscriptions.len(), 2);
+    assert_eq!(params.subscriptions.len(), 3);
     assert!(matches!(
         &params.subscriptions[0],
         Subscription::PaneOutputMatched {
@@ -354,6 +362,10 @@ fn subscribe_request_parses_parameterized_subscriptions() {
             pane_id,
             agent_status: Some(AgentStatus::Done),
         } if pane_id == "p_1_1"
+    ));
+    assert!(matches!(
+        &params.subscriptions[2],
+        Subscription::PaneScrollChanged { pane_id } if pane_id == "p_1_1"
     ));
 }
 
@@ -384,17 +396,165 @@ fn subscription_event_envelope_round_trips() {
 }
 
 #[test]
+fn scroll_changed_subscription_event_round_trips() {
+    let event = SubscriptionEventEnvelope {
+        event: SubscriptionEventKind::ScrollChanged,
+        data: SubscriptionEventData::ScrollChanged(PaneScrollChangedEvent {
+            pane_id: "p_1_1".into(),
+            workspace_id: "w_1".into(),
+            scroll: PaneScrollInfo {
+                offset_from_bottom: 12,
+                max_offset_from_bottom: 240,
+                viewport_rows: 30,
+            },
+        }),
+    };
+
+    let json = serde_json::to_string(&event).unwrap();
+    assert!(json.contains("\"event\":\"pane.scroll_changed\""));
+    let restored: SubscriptionEventEnvelope = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored, event);
+}
+
+#[test]
 fn success_response_round_trips() {
     let response = SuccessResponse {
         id: "req_1".into(),
         result: ResponseResult::Pong {
             version: "0.1.2".into(),
             protocol: 6,
-            capabilities: Some(ServerCapabilities { live_handoff: true }),
+            capabilities: Some(ServerCapabilities {
+                live_handoff: true,
+                detached_server_daemon: true,
+            }),
         },
     };
 
     let json = serde_json::to_string(&response).unwrap();
+    let restored: SuccessResponse = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored, response);
+}
+
+#[test]
+fn session_snapshot_request_and_response_round_trip() {
+    let request = Request {
+        id: "req_snapshot".into(),
+        method: Method::SessionSnapshot(EmptyParams::default()),
+    };
+    let json = serde_json::to_string(&request).unwrap();
+    assert!(json.contains("\"method\":\"session.snapshot\""));
+    let restored: Request = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored, request);
+
+    let response = SuccessResponse {
+        id: "req_snapshot".into(),
+        result: ResponseResult::SessionSnapshot {
+            snapshot: Box::new(SessionSnapshot {
+                version: "0.7.2".into(),
+                protocol: 16,
+                focused_workspace_id: Some("w_1".into()),
+                focused_tab_id: Some("t_1".into()),
+                focused_pane_id: Some("p_1".into()),
+                workspaces: vec![WorkspaceInfo {
+                    workspace_id: "w_1".into(),
+                    number: 1,
+                    label: "herdr".into(),
+                    focused: true,
+                    pane_count: 1,
+                    tab_count: 1,
+                    active_tab_id: "t_1".into(),
+                    agent_status: AgentStatus::Working,
+                    worktree: None,
+                }],
+                tabs: vec![TabInfo {
+                    tab_id: "t_1".into(),
+                    workspace_id: "w_1".into(),
+                    number: 1,
+                    label: "1".into(),
+                    focused: true,
+                    pane_count: 1,
+                    agent_status: AgentStatus::Working,
+                }],
+                panes: vec![PaneInfo {
+                    pane_id: "p_1".into(),
+                    terminal_id: "term_1".into(),
+                    workspace_id: "w_1".into(),
+                    tab_id: "t_1".into(),
+                    focused: true,
+                    cwd: Some("/work/herdr".into()),
+                    foreground_cwd: Some("/work/herdr".into()),
+                    label: Some("Review".into()),
+                    agent: Some("codex".into()),
+                    title: Some("Codex".into()),
+                    display_agent: Some("Codex".into()),
+                    agent_status: AgentStatus::Working,
+                    custom_status: Some("reviewing".into()),
+                    state_labels: HashMap::from([("phase".into(), "review".into())]),
+                    agent_session: None,
+                    scroll: Some(PaneScrollInfo {
+                        offset_from_bottom: 4,
+                        max_offset_from_bottom: 80,
+                        viewport_rows: 24,
+                    }),
+                    revision: 7,
+                }],
+                layouts: vec![PaneLayoutSnapshot {
+                    workspace_id: "w_1".into(),
+                    tab_id: "t_1".into(),
+                    zoomed: false,
+                    area: PaneLayoutRect {
+                        x: 0,
+                        y: 0,
+                        width: 120,
+                        height: 40,
+                    },
+                    focused_pane_id: "p_1".into(),
+                    panes: vec![PaneLayoutPane {
+                        pane_id: "p_1".into(),
+                        focused: true,
+                        rect: PaneLayoutRect {
+                            x: 0,
+                            y: 0,
+                            width: 120,
+                            height: 40,
+                        },
+                    }],
+                    splits: vec![PaneLayoutSplit {
+                        id: "root".into(),
+                        direction: SplitDirection::Right,
+                        ratio: 1.0,
+                        rect: PaneLayoutRect {
+                            x: 0,
+                            y: 0,
+                            width: 120,
+                            height: 40,
+                        },
+                    }],
+                }],
+                agents: vec![AgentInfo {
+                    terminal_id: "term_1".into(),
+                    name: Some("codex".into()),
+                    agent: Some("codex".into()),
+                    title: Some("Codex".into()),
+                    display_agent: Some("Codex".into()),
+                    agent_status: AgentStatus::Working,
+                    screen_detection_skipped: false,
+                    custom_status: Some("reviewing".into()),
+                    state_labels: HashMap::from([("phase".into(), "review".into())]),
+                    agent_session: None,
+                    workspace_id: "w_1".into(),
+                    tab_id: "t_1".into(),
+                    pane_id: "p_1".into(),
+                    focused: true,
+                    cwd: Some("/work/herdr".into()),
+                    foreground_cwd: Some("/work/herdr".into()),
+                    revision: 7,
+                }],
+            }),
+        },
+    };
+    let json = serde_json::to_string(&response).unwrap();
+    assert!(json.contains("\"type\":\"session_snapshot\""));
     let restored: SuccessResponse = serde_json::from_str(&json).unwrap();
     assert_eq!(restored, response);
 }
@@ -460,6 +620,7 @@ fn worktree_request_and_response_round_trip() {
                 custom_status: None,
                 state_labels: HashMap::new(),
                 agent_session: None,
+                scroll: None,
                 revision: 0,
             },
             worktree: WorktreeInfo {
@@ -776,6 +937,7 @@ fn create_response_round_trips_with_root_pane() {
                 custom_status: None,
                 state_labels: HashMap::new(),
                 agent_session: None,
+                scroll: None,
                 revision: 0,
             },
         },
