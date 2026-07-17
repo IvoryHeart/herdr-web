@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- Kept the first selected character anchored during mobile endpoint dragging, aligned the loupe caret
+  with the selected row, and centered a hollow drag handle over the anchored character.
+
 ### Removed
 
 ## [0.3.2] - 2026-07-07
