@@ -12,6 +12,7 @@
 
 - Kept the first selected character anchored during mobile endpoint dragging, aligned the loupe caret
   with the selected row, and centered a hollow drag handle over the anchored character.
+  [PR #35](https://github.com/kcosr/herdr-web/pull/35)
 
 ### Removed
 
