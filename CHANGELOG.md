@@ -1,8 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
-### Breaking Changes
+## [0.3.3] - 2026-07-19
 
 ### Added
 
@@ -16,15 +14,11 @@
   (`builtin:shell`) are accepted; unknown entries warn and are ignored.
   [PR #36](https://github.com/kcosr/herdr-web/pull/36)
 
-### Changed
-
 ### Fixed
 
 - Kept the first selected character anchored during mobile endpoint dragging, aligned the loupe caret
   with the selected row, and centered a hollow drag handle over the anchored character.
   [PR #35](https://github.com/kcosr/herdr-web/pull/35)
-
-### Removed
 
 ## [0.3.2] - 2026-07-07
 
