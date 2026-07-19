@@ -2302,6 +2302,15 @@ button {
   white-space: nowrap;
 }
 
+.launch-empty {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 4px;
+  color: var(--subtext0);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .backend-modal {
   width: min(840px, 100%);
 }

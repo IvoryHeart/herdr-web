@@ -1017,15 +1017,39 @@ export function App() {
       ? launcherPresetStates[launchRuntime.id]
       : null;
   const launchOptions = useMemo(() => {
-    if (
-      launchRuntime &&
-      supportsLauncherPresets(launchRuntime.capabilities) &&
-      launchPresetState?.response
-    ) {
+    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
+      return FALLBACK_LAUNCHER_PRESETS;
+    }
+    if (launchPresetState?.response) {
+      // Use the bridge list even when empty (e.g. builtins: [] with no customs).
       return launchPresetState.response.presets;
     }
-    return FALLBACK_LAUNCHER_PRESETS;
-  }, [launchPresetState?.response, launchRuntime?.capabilities]);
+    if (launchPresetState?.loadState === "error") {
+      return FALLBACK_LAUNCHER_PRESETS;
+    }
+    // First load: do not flash the full default set when the bridge may filter builtins.
+    return [];
+  }, [
+    launchPresetState?.loadState,
+    launchPresetState?.response,
+    launchRuntime?.capabilities,
+  ]);
+  const launchEmptyMessage = useMemo(() => {
+    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
+      return null;
+    }
+    if (launchPresetState?.response && launchPresetState.response.presets.length === 0) {
+      return "No launcher presets available. Adjust builtins or add custom presets.";
+    }
+    if (launchPresetState?.loadState === "loading" || !launchPresetState?.response) {
+      return "Loading launchers…";
+    }
+    return null;
+  }, [
+    launchPresetState?.loadState,
+    launchPresetState?.response,
+    launchRuntime?.capabilities,
+  ]);
 
   useEffect(() => {
     launcherPresetStatesRef.current = launcherPresetStates;
@@ -3657,6 +3681,7 @@ export function App() {
           target={launchTarget}
           busy={busy}
           options={launchOptions}
+          emptyMessage={launchEmptyMessage}
           onCancel={() => setLaunchTarget(null)}
           onSubmit={submitLaunch}
         />

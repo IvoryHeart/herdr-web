@@ -6,6 +6,13 @@
 
 ### Added
 
+- Added Grok and OpenCode agent icons in the Agents sidebar and create-menu launch choices.
+- Added built-in launcher presets for Grok and OpenCode (`builtin:grok`, `builtin:opencode`).
+- Added optional `builtins` allowlist/order in `launcher-presets.json` so the create menu can show a
+  subset of built-ins without PATH probing. Omitting `builtins` keeps the full default set; `[]`
+  hides all built-ins (custom presets still appear). Short names (`shell`) and full ids
+  (`builtin:shell`) are accepted; unknown entries warn and are ignored.
+
 ### Changed
 
 ### Fixed
