@@ -62,6 +62,8 @@ type Props = {
   onNotesEnabled: (enabled: boolean) => void;
   agentFeaturesInTabs: boolean;
   onAgentFeaturesInTabs: (enabled: boolean) => void;
+  multiHostSpaceSelection: boolean;
+  onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
   terminalInputTransport: TerminalInputTransport;
@@ -110,6 +112,8 @@ export function BackendSettingsDialog({
   onNotesEnabled,
   agentFeaturesInTabs,
   onAgentFeaturesInTabs,
+  multiHostSpaceSelection,
+  onMultiHostSpaceSelection,
   terminalFontSizePx,
   onTerminalFontSizePx,
   terminalInputTransport,
@@ -526,6 +530,31 @@ export function BackendSettingsDialog({
                       data-on={agentFeaturesInTabs}
                       aria-pressed={agentFeaturesInTabs}
                       onClick={() => onAgentFeaturesInTabs(true)}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <span>Multi-host Space selection</span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Multi-host Space selection"
+                  >
+                    <button
+                      type="button"
+                      data-on={!multiHostSpaceSelection}
+                      aria-pressed={!multiHostSpaceSelection}
+                      onClick={() => onMultiHostSpaceSelection(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={multiHostSpaceSelection}
+                      aria-pressed={multiHostSpaceSelection}
+                      onClick={() => onMultiHostSpaceSelection(true)}
                     >
                       On
                     </button>

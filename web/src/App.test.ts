@@ -189,6 +189,60 @@ describe("App multi-bridge helpers", () => {
     ).toEqual(["bridge-a:pane-a", "bridge-b:pane-b"]);
   });
 
+  it("limits Space scope to one host when multi-host Space selection is disabled", () => {
+    const bridgeViews = [
+      bridgeView(
+        "bridge-a",
+        bridgeSnapshot("workspace-a", "tab-a", pane("pane-a", "workspace-a", "tab-a")),
+      ),
+      bridgeView(
+        "bridge-b",
+        bridgeSnapshot("workspace-b", "tab-b", pane("pane-b", "workspace-b", "tab-b")),
+      ),
+    ];
+
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "all",
+      "space",
+      bridgeViews[0].snapshot?.workspaces[0] ?? null,
+      { "bridge-a": "workspace-a", "bridge-b": "workspace-b" },
+      false,
+    );
+
+    expect(
+      scopedWorkspaces.map((entry) => `${entry.bridgeId}:${entry.workspace.workspace_id}`),
+    ).toEqual(["bridge-a:workspace-a"]);
+  });
+
+  it("keeps every workspace in All scope when multi-host Space selection is disabled", () => {
+    const bridgeViews = [
+      bridgeView(
+        "bridge-a",
+        bridgeSnapshot("workspace-a", "tab-a", pane("pane-a", "workspace-a", "tab-a")),
+      ),
+      bridgeView(
+        "bridge-b",
+        bridgeSnapshot("workspace-b", "tab-b", pane("pane-b", "workspace-b", "tab-b")),
+      ),
+    ];
+
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "all",
+      "all",
+      bridgeViews[0].snapshot?.workspaces[0] ?? null,
+      { "bridge-a": "workspace-a", "bridge-b": "workspace-b" },
+      false,
+    );
+
+    expect(
+      scopedWorkspaces.map((entry) => `${entry.bridgeId}:${entry.workspace.workspace_id}`),
+    ).toEqual(["bridge-a:workspace-a", "bridge-b:workspace-b"]);
+  });
+
   it("limits visible shortcut entries to the selected host in selected-host scope", () => {
     const bridgeViews = [
       bridgeView(
@@ -1071,6 +1125,7 @@ describe("App multi-bridge helpers", () => {
         "space",
         bridgeViews[0].snapshot?.workspaces[0] ?? null,
         { "bridge-a": "workspace-a" },
+        true,
         false,
         false,
       ).map((entry) => entry.note.note_id),
@@ -1087,8 +1142,40 @@ describe("App multi-bridge helpers", () => {
         { "bridge-a": "workspace-a" },
         true,
         true,
+        true,
       ).map((entry) => entry.note.note_id),
     ).toEqual(["deleted", "archived", "unresolved-other-space", "active-linked"]);
+  });
+
+  it("limits Space-scoped notes to one host when multi-host Space selection is disabled", () => {
+    const bridgeViews = [
+      bridgeView(
+        "bridge-a",
+        bridgeSnapshot("workspace-a", "tab-a", pane("pane-a", "workspace-a", "tab-a")),
+      ),
+      bridgeView(
+        "bridge-b",
+        bridgeSnapshot("workspace-b", "tab-b", pane("pane-b", "workspace-b", "tab-b")),
+      ),
+    ];
+
+    expect(
+      buildVisibleScopedNotes(
+        bridgeViews,
+        {
+          ...notesState("bridge-a", "store-a", [note("note-a", "workspace-a", "linked")]),
+          ...notesState("bridge-b", "store-b", [note("note-b", "workspace-b", "linked")]),
+        },
+        "bridge-a",
+        "all",
+        "space",
+        bridgeViews[0].snapshot?.workspaces[0] ?? null,
+        { "bridge-a": "workspace-a", "bridge-b": "workspace-b" },
+        false,
+        false,
+        false,
+      ).map((entry) => `${entry.bridgeId}:${entry.note.note_id}`),
+    ).toEqual(["bridge-a:note-a"]);
   });
 
   it("dedupes all-host notes by note identity when two bridge profiles point at the same store", () => {
@@ -1133,6 +1220,7 @@ describe("App multi-bridge helpers", () => {
         "all",
         null,
         {},
+        true,
         false,
         false,
       ).map((entry) => `${entry.bridgeId}:${entry.note.session_key}:${entry.note.note_id}`),
@@ -1158,6 +1246,7 @@ describe("App multi-bridge helpers", () => {
       "all",
       null,
       {},
+      true,
       false,
       false,
     );
@@ -1188,6 +1277,7 @@ describe("App multi-bridge helpers", () => {
       "all",
       null,
       {},
+      true,
       false,
       false,
     );

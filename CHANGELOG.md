@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added a default-on Multi-host Space selection setting; disabling it limits Space-scoped Agents,
+  Tabs, and Notes to one globally selected Space while leaving All scope unchanged.
+
 ### Changed
 
 - Made ungrouped Tabs sidebar lists match the compact Agents layout by moving host, workspace, and

@@ -70,10 +70,12 @@ import {
   DEFAULT_CONTENT_INSET_TOP_PX,
   DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
   DEFAULT_AGENT_FEATURES_IN_TABS,
+  DEFAULT_MULTI_HOST_SPACE_SELECTION,
   parseContentInsetBottomPx,
   parseContentInsetTopPx,
   parseMobileControlsScalePercent,
   parseAgentFeaturesInTabs,
+  parseMultiHostSpaceSelection,
 } from "./displayPrefs";
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
@@ -325,6 +327,7 @@ type DisplayPrefs = {
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
   agentFeaturesInTabs: boolean;
+  multiHostSpaceSelection: boolean;
   sidebarWidth: number;
   notesPanelWidth: number;
   notesListPaneWidth: number;
@@ -382,6 +385,7 @@ function readDisplayPrefs(): DisplayPrefs {
     agentPinnedOnly: false,
     agentActiveOnly: false,
     agentFeaturesInTabs: DEFAULT_AGENT_FEATURES_IN_TABS,
+    multiHostSpaceSelection: DEFAULT_MULTI_HOST_SPACE_SELECTION,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     notesPanelWidth: DEFAULT_NOTES_PANEL_WIDTH,
     notesListPaneWidth: DEFAULT_NOTES_LIST_PANE_WIDTH,
@@ -493,6 +497,10 @@ function parseDisplayPrefsValue(
     agentFeaturesInTabs: parseAgentFeaturesInTabs(
       parsed.agentFeaturesInTabs,
       fallback.agentFeaturesInTabs,
+    ),
+    multiHostSpaceSelection: parseMultiHostSpaceSelection(
+      parsed.multiHostSpaceSelection,
+      fallback.multiHostSpaceSelection,
     ),
     sidebarWidth,
     notesPanelWidth,
@@ -788,6 +796,9 @@ export function App() {
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
   const [agentFeaturesInTabs, setAgentFeaturesInTabs] = useState(initialPrefs.agentFeaturesInTabs);
+  const [multiHostSpaceSelection, setMultiHostSpaceSelection] = useState(
+    initialPrefs.multiHostSpaceSelection,
+  );
   const [sidebarWidth, setSidebarWidth] = useState(initialPrefs.sidebarWidth);
   const [notesPanelWidth, setNotesPanelWidth] = useState(initialPrefs.notesPanelWidth);
   const [notesListPaneWidth, setNotesListPaneWidth] = useState(initialPrefs.notesListPaneWidth);
@@ -892,6 +903,7 @@ export function App() {
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
       setAgentFeaturesInTabs(prefs.agentFeaturesInTabs);
+      setMultiHostSpaceSelection(prefs.multiHostSpaceSelection);
       setSidebarWidth(prefs.sidebarWidth);
       setNotesPanelWidth(prefs.notesPanelWidth);
       setNotesListPaneWidth(prefs.notesListPaneWidth);
@@ -1375,6 +1387,7 @@ export function App() {
       agentPinnedOnly,
       agentActiveOnly,
       agentFeaturesInTabs,
+      multiHostSpaceSelection,
       sidebarWidth,
       notesPanelWidth,
       notesListPaneWidth,
@@ -1412,6 +1425,7 @@ export function App() {
     agentPinnedOnly,
     agentActiveOnly,
     agentFeaturesInTabs,
+    multiHostSpaceSelection,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -1781,6 +1795,7 @@ export function App() {
         scope,
         activeSpace,
         activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
         notesIncludeArchived,
         notesIncludeDeleted,
       );
@@ -1790,6 +1805,7 @@ export function App() {
       activeWorkspacesByBridgeId,
       bridgeViews,
       hostScope,
+      multiHostSpaceSelection,
       notesEnabled,
       notesStates,
       notesIncludeArchived,
@@ -1811,6 +1827,7 @@ export function App() {
         "all",
         null,
         {},
+        true,
         true,
         true,
         false,
@@ -2565,6 +2582,7 @@ export function App() {
             scope,
             activeSpace,
             activeWorkspacesByBridgeId,
+            multiHostSpaceSelection,
           ),
           bridgeViews,
           hostScope,
@@ -2606,6 +2624,7 @@ export function App() {
           scope,
           activeSpace,
           activeWorkspacesByBridgeId,
+          multiHostSpaceSelection,
         ),
         bridgeViews,
         hostScope,
@@ -2659,6 +2678,7 @@ export function App() {
     isCompactLayout,
     launchTarget,
     menu,
+    multiHostSpaceSelection,
     paneFocusSupported,
     pinnedAgentKeys,
     scope,
@@ -3239,6 +3259,7 @@ export function App() {
           agentSort={agentSort}
           agentGroup={agentGroup}
           spaceGroup={spaceGroup}
+          multiHostSpaceSelection={multiHostSpaceSelection}
           activeSpace={activeSpace}
           activeWorkspacesByBridgeId={activeWorkspacesByBridgeId}
           selectedPane={selectedPane}
@@ -3722,6 +3743,8 @@ export function App() {
           onNotesEnabled={setNotesEnabled}
           agentFeaturesInTabs={agentFeaturesInTabs}
           onAgentFeaturesInTabs={setAgentFeaturesInTabs}
+          multiHostSpaceSelection={multiHostSpaceSelection}
+          onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
           terminalInputTransport={terminalInputTransport}
@@ -4069,9 +4092,13 @@ export function activeWorkspaceForBridgeView(
   selectedBridgeId: BridgeId | null,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection = true,
 ) {
   const viewSnapshot = view.snapshot;
   if (!viewSnapshot || viewSnapshot.workspaces.length === 0) {
+    return null;
+  }
+  if (!multiHostSpaceSelection && view.runtime.id !== selectedBridgeId) {
     return null;
   }
   const preferredWorkspaceId =
@@ -4153,6 +4180,7 @@ export function buildVisibleScopedWorkspaces(
   scope: Scope,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection = true,
 ): ScopedWorkspace[] {
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   return hostBridgeViews.flatMap((view) => {
@@ -4173,6 +4201,7 @@ export function buildVisibleScopedWorkspaces(
               selectedBridgeId,
               activeSpace,
               activeWorkspacesByBridgeId,
+              multiHostSpaceSelection,
             ),
           ].filter((workspace): workspace is WorkspaceInfo => workspace !== null);
     return workspaces.map((workspace) => ({
@@ -4471,12 +4500,20 @@ export function buildVisibleScopedNotes(
   scope: Scope,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection: boolean,
   includeArchived: boolean,
   includeDeleted: boolean,
   dedupeStores = true,
 ): ScopedNoteEntry[] {
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   const entries = hostBridgeViews.flatMap((view) => {
+    if (
+      scope === "space" &&
+      !multiHostSpaceSelection &&
+      view.runtime.id !== selectedBridgeId
+    ) {
+      return [];
+    }
     const notesState = notesStates[view.runtime.id];
     if (!notesState || notesState.connectionKey !== view.runtime.connectionKey) {
       return [];
@@ -4493,6 +4530,7 @@ export function buildVisibleScopedNotes(
             selectedBridgeId,
             activeSpace,
             activeWorkspacesByBridgeId,
+            multiHostSpaceSelection,
           )
         : null;
     return (notesState.response?.notes ?? [])
@@ -5111,6 +5149,7 @@ function Switcher({
   agentSort,
   agentGroup,
   spaceGroup,
+  multiHostSpaceSelection,
   activeSpace,
   activeWorkspacesByBridgeId,
   selectedPane,
@@ -5159,6 +5198,7 @@ function Switcher({
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   spaceGroup: SpaceGroup;
+  multiHostSpaceSelection: boolean;
   activeSpace: WorkspaceInfo | null;
   activeWorkspacesByBridgeId: Record<string, string>;
   selectedPane: PaneInfo | null;
@@ -5200,8 +5240,19 @@ function Switcher({
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   const activeWorkspaceForView = useCallback(
     (view: BridgeConnectionView) =>
-      activeWorkspaceForBridgeView(view, selectedBridgeId, activeSpace, activeWorkspacesByBridgeId),
-    [activeSpace, activeWorkspacesByBridgeId, selectedBridgeId],
+      activeWorkspaceForBridgeView(
+        view,
+        selectedBridgeId,
+        activeSpace,
+        activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
+      ),
+    [
+      activeSpace,
+      activeWorkspacesByBridgeId,
+      multiHostSpaceSelection,
+      selectedBridgeId,
+    ],
   );
   const spaceEntries = hostBridgeViews.flatMap((view) => {
     const viewSnapshot = view.snapshot;
@@ -5236,8 +5287,17 @@ function Switcher({
         scope,
         activeSpace,
         activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
       ),
-    [activeSpace, activeWorkspacesByBridgeId, bridgeViews, hostScope, scope, selectedBridgeId],
+    [
+      activeSpace,
+      activeWorkspacesByBridgeId,
+      bridgeViews,
+      hostScope,
+      multiHostSpaceSelection,
+      scope,
+      selectedBridgeId,
+    ],
   );
   const panes = scopedWorkspaces.flatMap((entry) =>
     entry.snapshot.panes.filter((pane) => pane.workspace_id === entry.workspace.workspace_id),

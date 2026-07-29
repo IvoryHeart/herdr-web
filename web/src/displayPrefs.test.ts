@@ -4,6 +4,7 @@ import {
   DEFAULT_CONTENT_INSET_TOP_PX,
   DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
   DEFAULT_AGENT_FEATURES_IN_TABS,
+  DEFAULT_MULTI_HOST_SPACE_SELECTION,
   MAX_CONTENT_INSET_BOTTOM_PX,
   MAX_CONTENT_INSET_TOP_PX,
   MAX_MOBILE_CONTROLS_SCALE_PERCENT,
@@ -12,6 +13,7 @@ import {
   parseContentInsetTopPx,
   parseMobileControlsScalePercent,
   parseAgentFeaturesInTabs,
+  parseMultiHostSpaceSelection,
 } from "./displayPrefs";
 
 describe("display preferences", () => {
@@ -50,5 +52,13 @@ describe("display preferences", () => {
     expect(parseAgentFeaturesInTabs(undefined)).toBe(DEFAULT_AGENT_FEATURES_IN_TABS);
     expect(parseAgentFeaturesInTabs("false")).toBe(DEFAULT_AGENT_FEATURES_IN_TABS);
     expect(parseAgentFeaturesInTabs(undefined, false)).toBe(false);
+  });
+
+  it("parses multi-host Space selection and defaults it on", () => {
+    expect(parseMultiHostSpaceSelection(true)).toBe(true);
+    expect(parseMultiHostSpaceSelection(false)).toBe(false);
+    expect(parseMultiHostSpaceSelection(undefined)).toBe(DEFAULT_MULTI_HOST_SPACE_SELECTION);
+    expect(parseMultiHostSpaceSelection("false")).toBe(DEFAULT_MULTI_HOST_SPACE_SELECTION);
+    expect(parseMultiHostSpaceSelection(undefined, false)).toBe(false);
   });
 });
