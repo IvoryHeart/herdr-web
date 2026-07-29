@@ -11,8 +11,8 @@
 - Made ungrouped Tabs sidebar lists match the compact Agents layout by moving host, workspace, and
   tab context into each pane row instead of rendering contextual headers.
 - Added default-on Agent features in Tabs, which uses the Agents row presentation and exposes
-  agent-aware sorting while keeping non-agent tabs stable at the bottom; disabling it restores
-  plain pane rows and the original tab order.
+  agent-aware sorting and the active-status filter while keeping non-agent tabs stable at the
+  bottom; disabling it restores plain pane rows and the original tab order.
 
 ### Fixed
 

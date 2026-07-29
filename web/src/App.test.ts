@@ -741,6 +741,74 @@ describe("App multi-bridge helpers", () => {
     ).toEqual(["tab-shell-a", "tab-idle", "tab-blocked", "tab-shell-b"]);
   });
 
+  it("sorts agent tabs across workspace boundaries when grouping by host", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1), workspace("workspace-b", 2)],
+      [
+        pane("shell", "workspace-a", "tab-shell", "unknown"),
+        pane("blocked", "workspace-b", "tab-blocked", "blocked"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "host",
+        new Set(),
+        false,
+        true,
+        "attention",
+      ).map((entry) => entry.tab.tab_id),
+    ).toEqual(["tab-blocked", "tab-shell"]);
+  });
+
+  it("shows only active agents when the Tabs active-only filter is enabled", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [
+        pane("shell", "workspace-a", "tab-shell", "unknown"),
+        pane("idle", "workspace-a", "tab-idle", "idle"),
+        pane("working", "workspace-a", "tab-working", "working"),
+        pane("blocked", "workspace-a", "tab-blocked", "blocked"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "none",
+        new Set(),
+        false,
+        true,
+        "workspace",
+        new Map(),
+        true,
+      ).flatMap((entry) => entry.panes.map((paneInfo) => paneInfo.pane_id)),
+    ).toEqual(["working", "blocked"]);
+  });
+
   it("sorts tabs by their most recently active agent pane", () => {
     const snapshot = multiPaneSnapshot(
       [workspace("workspace-a", 1)],

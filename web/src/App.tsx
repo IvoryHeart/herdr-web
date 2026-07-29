@@ -2603,6 +2603,7 @@ export function App() {
         sidebarView === "tabs" && agentFeaturesInTabs,
         agentSort,
         agentActivityTransitions,
+        sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
       );
       const tabs = tabEntries;
       if (tabs.length === 0) {
@@ -4308,16 +4309,23 @@ export function buildVisibleTabWorkspaceGroups(
   agentFeaturesInTabs = false,
   agentSort: AgentSort = "workspace",
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+  activeOnly = false,
 ): ScopedTabWorkspace[] {
   return scopedWorkspaces.map((entry) => {
     const tabs = sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
       .map((tab) => {
         const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
+        const pinnedPanes = pinnedOnly
+          ? panes.filter((pane) => isAgentPinned(pinnedAgentKeys, entry.bridgeId, pane.pane_id))
+          : panes;
         return {
           tab,
-          panes: pinnedOnly
-            ? panes.filter((pane) => isAgentPinned(pinnedAgentKeys, entry.bridgeId, pane.pane_id))
-            : panes,
+          panes:
+            agentFeaturesInTabs && activeOnly
+              ? pinnedPanes.filter(
+                  (pane) => isAgentPane(pane) && isActiveAgentStatus(pane.agent_status),
+                )
+              : pinnedPanes,
         };
       })
       .filter((group) => group.panes.length > 0);
@@ -4346,6 +4354,7 @@ export function buildVisibleTabEntries(
   agentFeaturesInTabs = false,
   agentSort: AgentSort = "workspace",
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+  activeOnly = false,
 ): ScopedTabEntry[] {
   const spaceGroups = buildVisibleTabWorkspaceGroups(
     scopedWorkspaces,
@@ -4354,6 +4363,7 @@ export function buildVisibleTabEntries(
     agentFeaturesInTabs,
     agentSort,
     agentActivityTransitions,
+    activeOnly,
   );
   const flattenGroup = (group: ScopedTabWorkspace): ScopedTabEntry[] =>
     group.tabs.map(({ tab, panes }) => ({ ...group, tab, panes }));
@@ -4364,11 +4374,15 @@ export function buildVisibleTabEntries(
       agentActivityTransitions,
     );
   }
-  if (agentGroup === "host" || (agentGroup === "hostWorkspace" && hostScope === "all")) {
+  if (agentGroup === "host") {
     return bridgeViews.flatMap((view) =>
-      spaceGroups
-        .filter((group) => group.bridgeId === view.runtime.id && group.tabs.length > 0)
-        .flatMap(flattenGroup),
+      sortScopedTabEntriesByAgents(
+        spaceGroups
+          .filter((group) => group.bridgeId === view.runtime.id && group.tabs.length > 0)
+          .flatMap(flattenGroup),
+        agentFeaturesInTabs ? agentSort : "workspace",
+        agentActivityTransitions,
+      ),
     );
   }
   return spaceGroups.flatMap(flattenGroup);
@@ -5276,9 +5290,11 @@ function Switcher({
         sidebarView === "tabs" && agentFeaturesInTabs,
         agentSort,
         agentActivityTransitions,
+        sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
       ),
     [
       agentActivityTransitions,
+      agentActiveOnly,
       agentFeaturesInTabs,
       agentSort,
       effectiveAgentPinnedOnly,
@@ -5324,7 +5340,8 @@ function Switcher({
   const canCreateNoteFromHeader = notesViewActive && notesSupported;
   const showPinnedOnlyControl =
     (sidebarView === "agents" || sidebarView === "tabs") && agentPinsSupported;
-  const showActiveOnlyControl = sidebarView === "agents";
+  const showActiveOnlyControl =
+    sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
   const pinnedOnlyLabel = sidebarView === "tabs" ? "pinned panes" : "pinned agents";
 
   useEffect(() => {
@@ -5395,8 +5412,14 @@ function Switcher({
               key={`${group.bridgeId}:${pane.pane_id}`}
               index={index}
               pane={pane}
-              workspaceLabel={agentGroup === "none" ? group.workspace.label : undefined}
-              tabLabel={agentGroup === "none" ? tabLabel : undefined}
+              workspaceLabel={
+                agentGroup === "none" || agentGroup === "host"
+                  ? group.workspace.label
+                  : undefined
+              }
+              tabLabel={
+                agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
+              }
               bridgeLabel={
                 agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
               }
@@ -5437,7 +5460,34 @@ function Switcher({
     </Fragment>
   );
   const renderTabGroups = () => {
-    if (agentGroup === "host" || (agentGroup === "hostWorkspace" && hostScope === "all")) {
+    if (agentGroup === "host") {
+      return hostBridgeViews.map((view) => {
+        const entries = flatTabEntries.filter(
+          (entry) => entry.bridgeId === view.runtime.id && entry.panes.length > 0,
+        );
+        if (entries.length === 0) {
+          return null;
+        }
+        return (
+          <Fragment key={view.runtime.id}>
+            <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
+            {entries.map((entry) =>
+              renderTabWorkspaceGroup(
+                {
+                  ...entry,
+                  tabs: [{ tab: entry.tab, panes: entry.panes }],
+                },
+                false,
+                false,
+                `${entry.bridgeId}:${entry.tab.tab_id}`,
+              ),
+            )}
+          </Fragment>
+        );
+      });
+    }
+
+    if (agentGroup === "hostWorkspace" && hostScope === "all") {
       return hostBridgeViews.map((view) => {
         const groups = spaceGroups.filter(
           (group) => group.bridgeId === view.runtime.id && group.tabs.length > 0,
@@ -5879,8 +5929,8 @@ function Switcher({
                   <button
                     className="sec-add sec-add-active"
                     type="button"
-                    aria-label="Show active statuses only"
-                    title="Active statuses only"
+                    aria-label={`Show active ${sidebarView === "tabs" ? "agents" : "statuses"} only`}
+                    title={sidebarView === "tabs" ? "Active agents only" : "Active statuses only"}
                     aria-pressed={agentActiveOnly}
                     data-on={agentActiveOnly}
                     onClick={() => onAgentActiveOnly(!agentActiveOnly)}
@@ -5933,9 +5983,15 @@ function Switcher({
                   <>{renderDisconnectedBridgeRows()}</>
                 ) : (
                 <div className="empty">
-                  <strong>{effectiveAgentPinnedOnly ? "No pinned panes" : "No panes"}</strong>
+                  <strong>
+                    {agentFeaturesInTabs && agentActiveOnly
+                      ? emptyAgentListTitle(effectiveAgentPinnedOnly, true)
+                      : effectiveAgentPinnedOnly
+                        ? "No pinned panes"
+                        : "No panes"}
+                  </strong>
                   <span>
-                    {effectiveAgentPinnedOnly
+                    {effectiveAgentPinnedOnly || (agentFeaturesInTabs && agentActiveOnly)
                       ? ""
                       : scope === "space"
                         ? "This space has no panes yet."
