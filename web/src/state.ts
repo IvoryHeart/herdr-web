@@ -8,7 +8,11 @@ const statusRank: Record<AgentStatus, number> = {
   unknown: 4,
 };
 
-export function chooseSelectedPane(snapshot: Snapshot | null, currentPaneId: string | null) {
+export function chooseSelectedPane(
+  snapshot: Snapshot | null,
+  currentPaneId: string | null,
+  useSharedSelection = true,
+) {
   if (!snapshot || snapshot.panes.length === 0) {
     return null;
   }
@@ -16,6 +20,7 @@ export function chooseSelectedPane(snapshot: Snapshot | null, currentPaneId: str
     return currentPaneId;
   }
   if (
+    useSharedSelection &&
     snapshot.selected_pane_id &&
     snapshot.panes.some((pane) => pane.pane_id === snapshot.selected_pane_id)
   ) {
@@ -28,18 +33,19 @@ export function chooseSelectedPaneForActiveWorkspace(
   snapshot: Snapshot | null,
   currentPaneId: string | null,
   activeWorkspaceId: string | null,
+  useSharedSelection = true,
 ) {
   if (!snapshot || !activeWorkspaceId) {
-    return chooseSelectedPane(snapshot, currentPaneId);
+    return chooseSelectedPane(snapshot, currentPaneId, useSharedSelection);
   }
   if (!snapshot.workspaces.some((workspace) => workspace.workspace_id === activeWorkspaceId)) {
-    return chooseSelectedPane(snapshot, currentPaneId);
+    return chooseSelectedPane(snapshot, currentPaneId, useSharedSelection);
   }
   const currentPane = currentPaneId
     ? snapshot.panes.find((pane) => pane.pane_id === currentPaneId)
     : null;
   if (currentPane?.workspace_id === activeWorkspaceId) {
-    return chooseSelectedPane(snapshot, currentPaneId);
+    return chooseSelectedPane(snapshot, currentPaneId, useSharedSelection);
   }
   return choosePaneForWorkspace(snapshot, activeWorkspaceId);
 }

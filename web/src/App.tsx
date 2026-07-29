@@ -122,6 +122,12 @@ import {
   updateNote,
 } from "./notes";
 import type { NoteAttachment, NotesListResponse, PaneNote } from "./notes";
+import {
+  readClientNavigationPrefs,
+  sharesNavigation,
+  writeClientNavigationPrefs,
+} from "./navigationPrefs";
+import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
 import type { MenuItem } from "./overlays";
 import { createSnapshotRefreshController } from "./refreshCoordinator";
@@ -751,6 +757,9 @@ function usePointerDragResize(
 export function App() {
   const bridge = useBridge();
   const initialPrefs = useMemo(readDisplayPrefs, []);
+  const initialClientNavigationPrefs = useMemo(readClientNavigationPrefs, []);
+  const initialNavigationIsIndependent =
+    initialClientNavigationPrefs.mode === "independent";
   const legacySelectionPrefs = useMemo(readLegacyDisplaySelectionPrefs, []);
   const [displayPrefsLoaded, setDisplayPrefsLoaded] = useState(() => !isNativeApp());
   const [connectionStates, setConnectionStates] = useState<Record<string, BridgeConnectionState>>({});
@@ -763,8 +772,14 @@ export function App() {
   >({});
   const launcherPresetStatesRef = useRef(launcherPresetStates);
   const [selectedBridgeId, setSelectedBridgeId] = useState<BridgeId | null>(
-    initialPrefs.selectedBridgeId,
+    initialNavigationIsIndependent
+      ? initialClientNavigationPrefs.selectedBridgeId
+      : initialPrefs.selectedBridgeId,
   );
+  const [navigationSyncMode, setNavigationSyncMode] = useState<NavigationSyncMode>(
+    initialClientNavigationPrefs.mode,
+  );
+  const navigationIsShared = sharesNavigation(navigationSyncMode);
   const [selectedNoteRef, setSelectedNoteRef] = useState<ScopedNoteRef | null>(null);
   const [noteTitleFocusRequest, setNoteTitleFocusRequest] =
     useState<ScopedNoteTitleFocusRequest | null>(null);
@@ -777,15 +792,24 @@ export function App() {
   const [quickPaneNoteTarget, setQuickPaneNoteTarget] = useState<QuickPaneNoteTarget | null>(null);
   const [quickPaneNoteCreating, setQuickPaneNoteCreating] = useState(false);
   const [selectedPaneRefState, setSelectedPaneRefState] = useState<ScopedPaneRef | null>(
-    initialPrefs.selectedPane,
+    initialNavigationIsIndependent
+      ? initialClientNavigationPrefs.selectedPane
+      : initialPrefs.selectedPane,
   );
-  const [activeWorkspaceRefState, setActiveWorkspaceRefState] =
-    useState<ScopedWorkspaceRef | null>(initialPrefs.activeWorkspace);
+  const [activeWorkspaceRefState, setActiveWorkspaceRefState] = useState<ScopedWorkspaceRef | null>(
+    initialNavigationIsIndependent
+      ? initialClientNavigationPrefs.activeWorkspace
+      : initialPrefs.activeWorkspace,
+  );
   const [selectedPanesByBridgeId, setSelectedPanesByBridgeId] = useState<Record<string, string>>(
-    initialPrefs.selectedPanesByBridgeId,
+    initialNavigationIsIndependent
+      ? initialClientNavigationPrefs.selectedPanesByBridgeId
+      : initialPrefs.selectedPanesByBridgeId,
   );
   const [activeWorkspacesByBridgeId, setActiveWorkspacesByBridgeId] = useState<Record<string, string>>(
-    initialPrefs.activeWorkspacesByBridgeId,
+    initialNavigationIsIndependent
+      ? initialClientNavigationPrefs.activeWorkspacesByBridgeId
+      : initialPrefs.activeWorkspacesByBridgeId,
   );
   const [hostScope, setHostScope] = useState<HostScope>(initialPrefs.hostScope);
   const [scope, setScope] = useState<Scope>(initialPrefs.scope);
@@ -911,11 +935,13 @@ export function App() {
       setNotesEnabled(prefs.notesEnabled);
       setNotesPanelOpen(prefs.notesEnabled && prefs.notesPanelOpen);
       setSidebarOpen(prefs.sidebarOpen);
-      setSelectedBridgeId(prefs.selectedBridgeId);
-      setSelectedPaneRefState(prefs.selectedPane);
-      setActiveWorkspaceRefState(prefs.activeWorkspace);
-      setSelectedPanesByBridgeId(prefs.selectedPanesByBridgeId);
-      setActiveWorkspacesByBridgeId(prefs.activeWorkspacesByBridgeId);
+      if (sharesNavigation(navigationSyncMode)) {
+        setSelectedBridgeId(prefs.selectedBridgeId);
+        setSelectedPaneRefState(prefs.selectedPane);
+        setActiveWorkspaceRefState(prefs.activeWorkspace);
+        setSelectedPanesByBridgeId(prefs.selectedPanesByBridgeId);
+        setActiveWorkspacesByBridgeId(prefs.activeWorkspacesByBridgeId);
+      }
       setTerminalFontSizePx(prefs.terminalFontSizePx);
       setTerminalInputTransport(prefs.terminalInputTransport);
       setTerminalInputBatchDelayMs(prefs.terminalInputBatchDelayMs);
@@ -934,7 +960,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [displayPrefsLoaded]);
+  }, [displayPrefsLoaded, navigationSyncMode]);
 
   useEffect(() => {
     return addNativeBackHandler(() => {
@@ -1026,7 +1052,11 @@ export function App() {
       : selectedRuntime
         ? (activeWorkspacesByBridgeId[selectedRuntime.id] ?? null)
         : null;
-  const resolvedPaneId = chooseSelectedPane(snapshot, selectedRawPaneId);
+  const resolvedPaneId = chooseSelectedPane(
+    snapshot,
+    selectedRawPaneId,
+    sharesNavigation(navigationSyncMode),
+  );
   const supportedCommands =
     selectedRuntime?.capabilityState === "ready" ? (selectedRuntime.capabilities?.commands ?? []) : [];
   const splitSupported = supportedCommands.includes("pane.split");
@@ -1328,6 +1358,7 @@ export function App() {
       snapshot,
       restoredPaneId,
       restoredWorkspaceId,
+      sharesNavigation(navigationSyncMode),
     );
     setSelectedPaneRefState((current) => {
       if (!nextPaneId) {
@@ -1368,15 +1399,38 @@ export function App() {
     });
   }, [
     activeWorkspacesByBridgeId,
+    navigationSyncMode,
     selectedPanesByBridgeId,
     selectedRuntime?.id,
     snapshot,
   ]);
 
   useEffect(() => {
+    writeClientNavigationPrefs({
+      mode: navigationSyncMode,
+      selectedBridgeId,
+      selectedPane: selectedPaneRefState,
+      activeWorkspace: activeWorkspaceRefState,
+      selectedPanesByBridgeId,
+      activeWorkspacesByBridgeId,
+    });
+  }, [
+    activeWorkspaceRefState,
+    activeWorkspacesByBridgeId,
+    navigationSyncMode,
+    selectedBridgeId,
+    selectedPaneRefState,
+    selectedPanesByBridgeId,
+  ]);
+
+  useEffect(() => {
     if (!displayPrefsLoaded) {
       return;
     }
+    // Independent clients persist navigation in sessionStorage. Preserve the shared
+    // local/native selection fields when writing unrelated display preferences so
+    // another tab's independent navigation cannot replace a Shared client's reload state.
+    const persistedSharedNavigation = navigationIsShared ? null : readDisplayPrefs();
     void writeDisplayPrefs({
       hostScope,
       scope,
@@ -1395,11 +1449,21 @@ export function App() {
       notesEnabled,
       notesPanelOpen,
       sidebarOpen,
-      selectedBridgeId,
-      selectedPane: selectedPaneRefState,
-      activeWorkspace: activeWorkspaceRefState,
-      selectedPanesByBridgeId,
-      activeWorkspacesByBridgeId,
+      selectedBridgeId: persistedSharedNavigation
+        ? persistedSharedNavigation.selectedBridgeId
+        : selectedBridgeId,
+      selectedPane: persistedSharedNavigation
+        ? persistedSharedNavigation.selectedPane
+        : selectedPaneRefState,
+      activeWorkspace: persistedSharedNavigation
+        ? persistedSharedNavigation.activeWorkspace
+        : activeWorkspaceRefState,
+      selectedPanesByBridgeId: persistedSharedNavigation
+        ? persistedSharedNavigation.selectedPanesByBridgeId
+        : selectedPanesByBridgeId,
+      activeWorkspacesByBridgeId: persistedSharedNavigation
+        ? persistedSharedNavigation.activeWorkspacesByBridgeId
+        : activeWorkspacesByBridgeId,
       terminalFontSizePx,
       terminalInputTransport,
       terminalInputBatchDelayMs,
@@ -1426,6 +1490,7 @@ export function App() {
     agentActiveOnly,
     agentFeaturesInTabs,
     multiHostSpaceSelection,
+    navigationIsShared,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -1569,6 +1634,18 @@ export function App() {
       );
     }
   }, []);
+
+  const changeNavigationSyncMode = (mode: NavigationSyncMode) => {
+    if (mode === "shared" && selectedRuntime && snapshot?.selected_pane_id) {
+      const pane = snapshot.panes.find(
+        (candidate) => candidate.pane_id === snapshot.selected_pane_id,
+      );
+      if (pane) {
+        rememberPaneSelection(selectedRuntime.id, pane.pane_id, pane.workspace_id);
+      }
+    }
+    setNavigationSyncMode(mode);
+  };
 
   useEffect(() => {
     const activeBridgeIds = new Set(bridge.enabledRuntimes.map((runtime) => runtime.id));
@@ -1878,11 +1955,11 @@ export function App() {
 
   const showSplit = !isCompactLayout && splitCells !== null;
 
-  // Mirror browser navigation to the herdr session so `active_tab_id` tracks
-  // what we're viewing here. `tab.focus` also activates the tab's workspace, so
-  // a workspace-only focus is just the fallback for a space with no panes yet.
+  // Shared navigation mirrors browser focus to Herdr so `active_tab_id` tracks
+  // the synchronized view. Independent navigation deliberately leaves Herdr's
+  // global focus alone. `tab.focus` also activates the tab's workspace.
   const pushFocus = (runtime: BridgeRuntime | null, tabId?: string, workspaceId?: string) => {
-    if (!runtime || runtime.capabilityState !== "ready") {
+    if (!navigationIsShared || !runtime || runtime.capabilityState !== "ready") {
       return;
     }
     const commands = createCommands(runtime.httpUrl);
@@ -1925,7 +2002,7 @@ export function App() {
     setSelectedBridgeId(bridgeId);
     bridge.markBridgeUsed(bridgeId);
     rememberPaneSelection(bridgeId, pane.pane_id, pane.workspace_id);
-    if (runtime.capabilityState === "ready") {
+    if (navigationIsShared && runtime.capabilityState === "ready") {
       void syncSelectedPane(runtime.httpUrl, pane.pane_id).catch(() => {});
     }
     pushFocus(runtime, pane.tab_id, pane.workspace_id);
@@ -1976,7 +2053,7 @@ export function App() {
       if (paneId) {
         const pane = bridgeSnapshot.panes.find((item) => item.pane_id === paneId);
         rememberPaneSelection(bridgeId, paneId, pane?.workspace_id ?? workspaceId);
-        if (runtime.capabilityState === "ready") {
+        if (navigationIsShared && runtime.capabilityState === "ready") {
           void syncSelectedPane(runtime.httpUrl, paneId).catch(() => {});
         }
         pushFocus(runtime, pane?.tab_id, workspaceId);
@@ -3004,7 +3081,9 @@ export function App() {
         if (created) {
           setSelectedBridgeId(runtime.id);
           rememberPaneSelection(runtime.id, created.pane_id, created.workspace_id);
-          void syncSelectedPane(runtime.httpUrl, created.pane_id).catch(() => {});
+          if (navigationIsShared) {
+            void syncSelectedPane(runtime.httpUrl, created.pane_id).catch(() => {});
+          }
           if (isCompactLayout) {
             openMobileDetail();
           }
@@ -3225,6 +3304,7 @@ export function App() {
         <BridgeConnectionController
           key={runtime.id}
           runtime={runtime}
+          followSharedSelection={navigationIsShared}
           connectionRefs={connectionRefs}
           setConnectionStates={setConnectionStates}
           onPaneSelection={rememberPaneSelection}
@@ -3741,6 +3821,8 @@ export function App() {
           showMobileTerminalSettings={isTouchInput}
           notesEnabled={notesEnabled}
           onNotesEnabled={setNotesEnabled}
+          navigationSyncMode={navigationSyncMode}
+          onNavigationSyncMode={changeNavigationSyncMode}
           agentFeaturesInTabs={agentFeaturesInTabs}
           onAgentFeaturesInTabs={setAgentFeaturesInTabs}
           multiHostSpaceSelection={multiHostSpaceSelection}
@@ -3817,6 +3899,7 @@ export function shouldCollapseHostScope(
 
 export function BridgeConnectionController({
   runtime,
+  followSharedSelection,
   connectionRefs,
   setConnectionStates,
   onPaneSelection,
@@ -3825,6 +3908,7 @@ export function BridgeConnectionController({
   onNotesChanged,
 }: {
   runtime: BridgeRuntime;
+  followSharedSelection: boolean;
   connectionRefs: MutableRefObject<Record<string, BridgeConnectionRef>>;
   setConnectionStates: Dispatch<SetStateAction<Record<string, BridgeConnectionState>>>;
   onPaneSelection: (bridgeId: BridgeId, paneId: string, workspaceId?: string) => void;
@@ -3837,6 +3921,7 @@ export function BridgeConnectionController({
   const onAgentActivityChangedRef = useRef(onAgentActivityChanged);
   const onAgentPinsChangedRef = useRef(onAgentPinsChanged);
   const onNotesChangedRef = useRef(onNotesChanged);
+  const followSharedSelectionRef = useRef(followSharedSelection);
   const refreshOffsetRef = useRef(stableBridgeRefreshOffsetMs(runtime.id));
 
   useEffect(() => {
@@ -3845,10 +3930,16 @@ export function BridgeConnectionController({
   }, [runtime.httpUrl, runtime.wsUrl]);
 
   useEffect(() => {
+    followSharedSelectionRef.current = followSharedSelection;
     onAgentActivityChangedRef.current = onAgentActivityChanged;
     onAgentPinsChangedRef.current = onAgentPinsChanged;
     onNotesChangedRef.current = onNotesChanged;
-  }, [onAgentActivityChanged, onAgentPinsChanged, onNotesChanged]);
+  }, [
+    followSharedSelection,
+    onAgentActivityChanged,
+    onAgentPinsChanged,
+    onNotesChanged,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -3997,6 +4088,10 @@ export function BridgeConnectionController({
         }
         const paneId = selectionPaneId(event);
         if (paneId) {
+          if (!followSharedSelectionRef.current) {
+            refresh();
+            return;
+          }
           const pane = connectionRefs.current[runtime.id]?.snapshot?.panes.find(
             (item) => item.pane_id === paneId,
           );

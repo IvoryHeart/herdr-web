@@ -152,8 +152,8 @@ Settings are grouped by area:
 
 - Bridge: same-origin and saved bridge profiles, reachability testing, and bridge enablement.
 - Features: client feature toggles such as Notes.
-- Display: agent features in Tabs, multi-host Space selection, top/bottom app padding, and mobile
-  terminal controls size.
+- Display: client-local navigation synchronization, agent features in Tabs, multi-host Space
+  selection, top/bottom app padding, and mobile terminal controls size.
 - Terminal: browser-to-bridge terminal input transport and input batching delay.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 
@@ -350,8 +350,11 @@ serving bridge origin and `data:`. Use `--allow-connect-origin ORIGIN` on the se
 that page should connect to another bridge; the bridge adds matching HTTP and WebSocket
 `connect-src` entries for that origin.
 
-Pane selection is bridge-owned. Selecting a pane in one browser updates `/api/selection`, broadcasts
-over `/ws/ui-events`, and other browsers switch to the same pane.
+Sync navigation is on by default. Selecting a pane updates `/api/selection`, broadcasts over
+`/ws/ui-events`, and other clients with sync enabled switch to the same pane. Clients can turn sync
+off in Display settings to keep their pane selection local to that browser tab or window. Navigation
+with sync off still uses the same Herdr session: terminal input, structural commands, and workspace,
+tab, and pane changes remain shared.
 
 ## Vendoring Strategy
 
