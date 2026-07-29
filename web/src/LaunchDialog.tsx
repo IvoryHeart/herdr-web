@@ -21,17 +21,12 @@ export function LaunchDialog({
   onCancel: () => void;
   onSubmit: (spec: LaunchSpec) => void;
 }) {
-  const firstOption = options[0] ?? {
-    id: "builtin:shell",
-    label: "Shell",
-    agent_hint: null,
-    built_in: true,
-  };
-  const [presetId, setPresetId] = useState(firstOption.id);
-  const [title, setTitle] = useState(() => firstOption.label);
+  const firstOption = options[0] ?? null;
+  const [presetId, setPresetId] = useState(firstOption?.id ?? "");
+  const [title, setTitle] = useState(() => firstOption?.label ?? "");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
-  const selectedLabelRef = useRef(firstOption.label);
+  const selectedLabelRef = useRef(firstOption?.label ?? "");
 
   const matchedOption = options.find((option) => option.id === presetId) ?? null;
   const selectedOption = matchedOption ?? firstOption;
@@ -83,7 +78,7 @@ export function LaunchDialog({
       return;
     }
     const trimmed = title.trim();
-    if (trimmed) {
+    if (trimmed && selectedOption) {
       onSubmit({ presetId, label: selectedOption.label, title: trimmed });
     }
   };
@@ -167,7 +162,7 @@ export function LaunchDialog({
             ref={inputRef}
             className="field"
             value={title}
-            placeholder={selectedOption.label}
+            placeholder={selectedOption?.label ?? ""}
             disabled={busy}
             spellCheck={false}
             autoComplete="off"

@@ -80,11 +80,7 @@ import {
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
-import {
-  FALLBACK_LAUNCHER_PRESETS,
-  fetchLauncherPresets,
-  supportsLauncherPresets,
-} from "./launcherPresets";
+import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
 import type { LauncherPresetsResponse } from "./launcherPresets";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
@@ -242,6 +238,29 @@ type PendingSharedPaneSelection = {
   connectionKey: string;
   timeoutId: number;
 };
+
+export function launcherEmptyMessage(
+  bridgeReady: boolean,
+  launcherSupported: boolean,
+  state: BridgeLauncherPresetsState | null,
+) {
+  if (!bridgeReady) {
+    return "Bridge is not ready. Close this dialog and reconnect.";
+  }
+  if (!launcherSupported) {
+    return "Launching is unavailable on this bridge. Update the bridge and reconnect.";
+  }
+  if (state?.loadState === "error") {
+    return `Could not load launcher presets: ${state.error ?? "unknown error"}. Close and reopen this dialog to retry.`;
+  }
+  if (state?.response && state.response.presets.length === 0) {
+    return "No launcher presets available. Adjust builtins or add custom presets.";
+  }
+  if (state?.loadState === "loading" || !state?.response) {
+    return "Loading launchers…";
+  }
+  return null;
+}
 type BridgeAgentPinsState = BridgeResourceState<AgentPinsListResponse>;
 type BridgeAgentActivityState = BridgeResourceState<AgentActivityListResponse>;
 export type BridgeConnectionRef = {
@@ -1187,40 +1206,14 @@ export function App() {
     launcherPresetStates[launchRuntime.id]?.connectionKey === launchRuntime.connectionKey
       ? launcherPresetStates[launchRuntime.id]
       : null;
-  const launchOptions = useMemo(() => {
-    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
-      return FALLBACK_LAUNCHER_PRESETS;
-    }
-    if (launchPresetState?.response) {
-      // Use the bridge list even when empty (e.g. builtins: [] with no customs).
-      return launchPresetState.response.presets;
-    }
-    if (launchPresetState?.loadState === "error") {
-      return FALLBACK_LAUNCHER_PRESETS;
-    }
-    // First load: do not flash the full default set when the bridge may filter builtins.
-    return [];
-  }, [
-    launchPresetState?.loadState,
-    launchPresetState?.response,
-    launchRuntime?.capabilities,
-  ]);
-  const launchEmptyMessage = useMemo(() => {
-    if (!launchRuntime || !supportsLauncherPresets(launchRuntime.capabilities)) {
-      return null;
-    }
-    if (launchPresetState?.response && launchPresetState.response.presets.length === 0) {
-      return "No launcher presets available. Adjust builtins or add custom presets.";
-    }
-    if (launchPresetState?.loadState === "loading" || !launchPresetState?.response) {
-      return "Loading launchers…";
-    }
-    return null;
-  }, [
-    launchPresetState?.loadState,
-    launchPresetState?.response,
-    launchRuntime?.capabilities,
-  ]);
+  const launcherSupported = supportsLauncherPresets(launchRuntime?.capabilities);
+  const launchOptions =
+    launcherSupported && launchPresetState?.response ? launchPresetState.response.presets : [];
+  const launchEmptyMessage = launcherEmptyMessage(
+    Boolean(launchRuntime),
+    launcherSupported,
+    launchPresetState,
+  );
 
   useEffect(() => {
     launcherPresetStatesRef.current = launcherPresetStates;
@@ -3437,25 +3430,27 @@ export function App() {
       setError("Bridge is not ready");
       return;
     }
+    if (!supportsLauncherPresets(runtime.capabilities)) {
+      setError("Launching is unavailable on this bridge. Update the bridge and reconnect.");
+      return;
+    }
+    if (!launchPresetState?.response) {
+      setError(launchEmptyMessage ?? "Launcher presets are unavailable");
+      return;
+    }
+    if (!launchPresetState.response.presets.some((preset) => preset.id === spec.presetId)) {
+      setError("That launcher preset is no longer available. Close and reopen the launcher.");
+      return;
+    }
     const launchSnapshot =
       connectionRefs.current[launchTarget.bridgeId]?.snapshot ??
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
-    const usePresetEndpoint = supportsLauncherPresets(runtime.capabilities);
-    const action = usePresetEndpoint
-      ? launchTarget.mode === "tab"
+    const action =
+      launchTarget.mode === "tab"
         ? () => commands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
         : () =>
             commands.launchPresetSplit(
-              launchTarget.pane.pane_id,
-              launchTarget.pane.tab_id,
-              launchTarget.direction,
-              resolvedSpec,
-            )
-      : launchTarget.mode === "tab"
-        ? () => commands.createLaunchTab(launchTarget.workspaceId, resolvedSpec)
-        : () =>
-            commands.splitLaunchPane(
               launchTarget.pane.pane_id,
               launchTarget.pane.tab_id,
               launchTarget.direction,
@@ -7887,8 +7882,8 @@ function isAgentPane(pane: PaneInfo) {
   return Boolean(
     pane.agent ||
       pane.display_agent ||
-      pane.custom_status ||
       pane.title ||
+      Object.keys(pane.state_labels ?? {}).length > 0 ||
       pane.agent_status !== "unknown",
   );
 }
@@ -8167,9 +8162,8 @@ export function agentSubtitle(
   bridgeLabel?: string,
 ) {
   const dir = basename(pane.foreground_cwd || pane.cwd);
-  const customStateText =
-    pane.custom_status || pane.state_labels?.[statusLabel(pane.agent_status)];
-  return [bridgeLabel, workspace?.label, tabLabel, dir, customStateText]
+  const stateText = pane.state_labels?.[pane.agent_status];
+  return [bridgeLabel, workspace?.label, tabLabel, dir, stateText]
     .filter(Boolean)
     .join(" · ");
 }

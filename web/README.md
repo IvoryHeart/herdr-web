@@ -46,3 +46,7 @@ The app expects these bridge routes:
 - `/ws/events`
 - `/ws/ui-events`
 - `/ws/terminal`
+
+Launcher execution belongs to the bridge. The frontend selects a preset and placement; it does not
+construct Herdr `agent.start` requests. Built-in agents use Herdr's managed-agent flow after the
+bridge creates the destination pane, while custom presets retain their exact configured `argv`.

@@ -66,7 +66,7 @@ The top-level scripts hide that detail.
 
 For release tarball users:
 
-- A running Herdr `v0.7.2` or newer daemon/session
+- A running Herdr `v0.7.5` or newer daemon/session that reports terminal protocol `17`
 - A supported host for the downloaded bridge tarball. Current planned desktop release artifacts are
   Linux x86_64, macOS ARM64, and macOS x86_64.
 
@@ -75,7 +75,7 @@ For source development:
 - Node.js 22 or newer
 - npm
 - Rust stable
-- A running Herdr `v0.7.2` or newer daemon/session
+- A running Herdr `v0.7.5` or newer daemon/session that reports terminal protocol `17`
 
 Android development also needs a JDK and Android SDK. See [docs/android.md](docs/android.md).
 
@@ -97,7 +97,8 @@ http://127.0.0.1:8787
 ```
 
 The desktop tarball includes the web assets and `herdr-web-bridge`; it does not include Herdr.
-Start or attach Herdr `v0.7.2` or newer separately before running the bridge.
+Start or attach Herdr `v0.7.5` or newer with terminal protocol `17` separately before running the
+bridge.
 
 For Android, install the APK from the same release and add the bridge URL in the Bridge area of
 Settings. LAN bridges must allow Android's app origin:
@@ -219,11 +220,22 @@ Example:
 
 Presets use explicit argv, not multi-step terminal typing. Use `["bash", "-lc", "... && exec codex"]`
 when shell sequencing is needed. `agent_hint` injects `HERDR_AGENT=<agent>` for the launched process;
-Herdr `v0.7.2+` on Linux uses that hint to detect agents behind wrappers, SSH, containers, and VMs.
+Herdr uses that hint to detect agents behind wrappers, SSH, containers, and VMs.
+
+Built-in agent choices are managed Herdr agents. For a new tab or split, the bridge first creates
+the destination pane, then calls Herdr `agent.start` with that pane and the built-in agent kind. It
+waits for the agent to become interactive; a rejected launch, early process exit, or startup timeout
+closes the tab or pane created for that attempt. Shell creates the destination shell without an
+`agent.start` call.
+
+Custom presets are intentionally different: the bridge gives their complete `argv` to Herdr's
+layout command unchanged. It does not reinterpret the executable as a managed built-in or prepend
+an agent command. This preserves wrappers, SSH commands, containers, and other exact command lines;
+`agent_hint` remains optional detection metadata for the launched process.
 
 ## Run Locally
 
-Start or attach a normal Herdr `v0.7.2` or newer session first:
+Start or attach a normal Herdr `v0.7.5` or newer session with terminal protocol `17` first:
 
 ```bash
 herdr
@@ -374,6 +386,8 @@ local `vendor/herdr-compat` crate for copied Herdr protocol/schema/client/socket
 bridge HTTP/WebSocket behavior in `bridge/src/web_bridge.rs`. A separate upstream Herdr checkout can
 be used for refreshes and drift audits, but a full `vendor/herdr` snapshot is not part of this repo.
 The cost is that `vendor/herdr-compat` must be kept compatible with Herdr protocol changes.
+The current compatibility baseline is Herdr `v0.7.5` and terminal protocol `17`; the bridge requires
+that exact protocol rather than attempting to decode older or newer private wire formats.
 
 See [docs/vendoring.md](docs/vendoring.md) for the refresh process.
 

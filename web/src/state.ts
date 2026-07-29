@@ -241,10 +241,11 @@ function inferredWorkspaceDefaultLabel(workspace: WorkspaceInfo, panes: readonly
 }
 
 export function paneSubtitle(pane: PaneInfo, workspace?: WorkspaceInfo, tab?: TabInfo) {
+  const stateLabel = pane.state_labels?.[pane.agent_status];
   const parts = [
     workspace?.label,
     tab?.label,
-    pane.custom_status || pane.display_agent || pane.agent,
+    stateLabel || pane.display_agent || pane.agent,
     pane.foreground_cwd || pane.cwd,
   ].filter(Boolean);
   return parts.join(" / ");

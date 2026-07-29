@@ -4,7 +4,6 @@ import {
   createCommands,
   createdPaneId,
 } from "./commands";
-import { fallbackLaunchSpec } from "./launch";
 
 describe("command helpers", () => {
   afterEach(() => {
@@ -35,27 +34,6 @@ describe("command helpers", () => {
       "http://192.168.1.20:4000/api/command",
       expect.objectContaining({ method: "POST" }),
     );
-  });
-
-  it("creates launch tabs without a tab label and renames the root pane", async () => {
-    const requests: unknown[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body));
-      requests.push(body);
-      if (body.method === "tab.create") {
-        return new Response(JSON.stringify({ root_pane: { pane_id: "pane-1" } }), {
-          status: 200,
-        });
-      }
-      return new Response(JSON.stringify({ type: "ok" }), { status: 200 });
-    });
-
-    await commands.createLaunchTab("space-1", { ...fallbackLaunchSpec("shell"), title: "Review" });
-
-    expect(requests).toEqual([
-      { method: "tab.create", params: { workspace_id: "space-1", focus: true } },
-      { method: "pane.rename", params: { pane_id: "pane-1", label: "Review" } },
-    ]);
   });
 
   it("clears workspace and tab names with null labels", async () => {
@@ -108,6 +86,40 @@ describe("command helpers", () => {
             tab_id: "tab-0",
             direction: "right",
           },
+        },
+      },
+    ]);
+  });
+
+  it("launches preset tabs through the bridge-owned launch endpoint", async () => {
+    const requests: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      requests.push({ input, body: JSON.parse(String(init?.body)) });
+      return new Response(
+        JSON.stringify({
+          preset_id: "builtin:shell",
+          title: "Review",
+          workspace_id: "space-1",
+          tab_id: "tab-1",
+          pane_id: "pane-1",
+        }),
+        { status: 200 },
+      );
+    });
+
+    await commands.launchPresetTab("space-1", {
+      presetId: "builtin:shell",
+      label: "Shell",
+      title: "Review",
+    });
+
+    expect(requests).toEqual([
+      {
+        input: "/api/launcher-presets/launch",
+        body: {
+          preset_id: "builtin:shell",
+          title: "Review",
+          target: { mode: "tab", workspace_id: "space-1" },
         },
       },
     ]);

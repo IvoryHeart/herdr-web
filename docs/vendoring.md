@@ -32,7 +32,8 @@ The browser app is not vendored into Herdr. It lives at `web/`, and `herdr-web-b
 ## Current Reference
 
 - Upstream checkout: a clean Herdr source checkout outside this repository
-- Upstream release baseline: `v0.7.2`
+- Upstream release baseline: `v0.7.5`
+- Terminal wire baseline: protocol `17`
 
 Use the upstream checkout as an external reference for audits and refreshes. It is not required to
 build `herdr-web`.
@@ -61,8 +62,10 @@ bridge narrows the drift check to only the terminal attach message regions.
 
 ## Refresh Process
 
-Use a clean Herdr checkout as the source reference. Do not refresh from an experimental tree that
-may contain unrelated local drift.
+Use a clean Herdr checkout at the reviewed `v0.7.5` release tag as the source reference. Do not
+refresh from an experimental tree that may contain unrelated local drift. Copy the reviewed
+upstream source files into the minimal compatibility crate; do not make the bridge compile against
+the external checkout or recreate a full upstream vendor snapshot.
 
 ```bash
 HERDR_SRC=/path/to/herdr
@@ -86,6 +89,7 @@ src/api/schema/*.rs        -> vendor/herdr-compat/src/api/schema/*.rs
 src/protocol/wire.rs       -> vendor/herdr-compat/src/protocol/wire.rs
 src/ipc.rs                 -> vendor/herdr-compat/src/ipc.rs
 src/logging.rs             -> vendor/herdr-compat/src/logging.rs
+src/popup_size.rs          -> vendor/herdr-compat/src/popup_size.rs
 src/server/socket_paths.rs -> vendor/herdr-compat/src/server/socket_paths.rs
 ```
 
@@ -97,6 +101,9 @@ src/server/socket_paths.rs -> vendor/herdr-compat/src/server/socket_paths.rs
   in `bridge/src/session.rs`.
 - `tabs.rs` and `workspaces.rs` keep bridge-internal clear-name sentinel fields; the bridge
   substitutes concrete default labels before forwarding rename requests to Herdr.
+- `PopupSize` is public in the compatibility crate because copied public plugin schema fields expose
+  it, while upstream keeps the type crate-visible inside the full Herdr crate. This visibility-only
+  adaptation is expected by the vendor drift check.
 - `protocol.rs` and schema tests include bridge fixture tests for the reviewed protocol/schema
   baseline.
 
@@ -109,7 +116,8 @@ HERDR_SRC="$HERDR_SRC" scripts/check-vendor.sh
 
 The optional `HERDR_SRC` mode exact-compares unmodified schema files and the terminal wire protocol
 body. Locally adapted files are intentionally excluded from exact comparison and must be reviewed
-manually during refresh.
+manually during refresh. `PopupSize` is compared with only the documented visibility adaptation
+allowed.
 
 5. Re-run validation:
 
@@ -130,10 +138,11 @@ the refit button after changing browser sizes.
 
 ## Compatibility Policy
 
-The bridge pings Herdr's status API at startup and requires daemon protocol `16` or newer. The
-`v0.7.2` baseline provides the native `session.snapshot` bootstrap API used by `/api/snapshot`, so
-older daemons are rejected before serving the web app. This is not a complete stability guarantee
-because the bridge mirrors private APIs.
+The bridge pings Herdr's status API at startup and requires Herdr `v0.7.5` or newer with daemon
+protocol exactly `17`. Older daemons and any unreviewed newer protocol are rejected before serving
+the web app. The version floor covers the private JSON API shape, including the managed
+`agent.start` contract; the exact protocol check protects the copied bincode terminal wire format.
+This is not a complete stability guarantee because the bridge mirrors private APIs.
 
 When updating Herdr:
 
