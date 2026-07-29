@@ -1,26 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLIENT_NAVIGATION_PREFS_KEY,
   DEFAULT_NAVIGATION_SYNC_MODE,
+  NAVIGATION_SYNC_MODE_KEY,
+  navigationSyncModeForStorageEvent,
   parseNavigationSyncMode,
-  readClientNavigationPrefs,
+  readNavigationSyncMode,
   sharesNavigation,
-  writeClientNavigationPrefs,
+  writeNavigationSyncMode,
 } from "./navigationPrefs";
 
 function memoryStorage(initial?: string) {
   let value = initial ?? null;
   return {
-    getItem: (key: string) => (key === CLIENT_NAVIGATION_PREFS_KEY ? value : null),
+    getItem: (key: string) => (key === NAVIGATION_SYNC_MODE_KEY ? value : null),
     setItem: (key: string, next: string) => {
-      if (key === CLIENT_NAVIGATION_PREFS_KEY) {
+      if (key === NAVIGATION_SYNC_MODE_KEY) {
         value = next;
       }
     },
   };
 }
 
-describe("client navigation preferences", () => {
+describe("navigation synchronization preference", () => {
   it("defaults navigation synchronization to shared", () => {
     expect(parseNavigationSyncMode(undefined)).toBe(DEFAULT_NAVIGATION_SYNC_MODE);
     expect(parseNavigationSyncMode("other")).toBe(DEFAULT_NAVIGATION_SYNC_MODE);
@@ -28,41 +29,22 @@ describe("client navigation preferences", () => {
     expect(sharesNavigation("independent")).toBe(false);
   });
 
-  it("round-trips per-client navigation state", () => {
+  it("round-trips only the browser-wide synchronization mode", () => {
     const storage = memoryStorage();
-    const prefs = {
-      mode: "independent" as const,
-      selectedBridgeId: "bridge-a",
-      selectedPane: { bridgeId: "bridge-a", paneId: "pane-a" },
-      activeWorkspace: { bridgeId: "bridge-a", workspaceId: "workspace-a" },
-      selectedPanesByBridgeId: { "bridge-a": "pane-a" },
-      activeWorkspacesByBridgeId: { "bridge-a": "workspace-a" },
-    };
 
-    writeClientNavigationPrefs(prefs, storage);
+    writeNavigationSyncMode("independent", storage);
 
-    expect(readClientNavigationPrefs(storage)).toEqual(prefs);
+    expect(readNavigationSyncMode(storage)).toBe("independent");
   });
 
-  it("drops malformed client selection data", () => {
-    const storage = memoryStorage(
-      JSON.stringify({
-        mode: "independent",
-        selectedBridgeId: 3,
-        selectedPane: { bridgeId: "bridge-a" },
-        activeWorkspace: "workspace-a",
-        selectedPanesByBridgeId: { "bridge-a": "pane-a", invalid: 4 },
-        activeWorkspacesByBridgeId: null,
-      }),
-    );
+  it("defaults malformed stored modes to shared", () => {
+    expect(readNavigationSyncMode(memoryStorage("invalid"))).toBe("shared");
+  });
 
-    expect(readClientNavigationPrefs(storage)).toEqual({
-      mode: "independent",
-      selectedBridgeId: null,
-      selectedPane: null,
-      activeWorkspace: null,
-      selectedPanesByBridgeId: { "bridge-a": "pane-a" },
-      activeWorkspacesByBridgeId: {},
-    });
+  it("ignores delayed events that no longer match the stored mode", () => {
+    const storage = memoryStorage("shared");
+
+    expect(navigationSyncModeForStorageEvent("independent", storage)).toBeNull();
+    expect(navigationSyncModeForStorageEvent("shared", storage)).toBe("shared");
   });
 });

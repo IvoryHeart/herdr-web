@@ -27,6 +27,8 @@
 
 ### Changed
 
+- Store the Sync navigation setting browser-wide while keeping sync-off pane selections only in
+  memory. The app no longer creates per-tab navigation storage records.
 - Simplified agent-row metadata by removing generic status text already communicated by the status
   indicator and badge, while retaining custom status text and bridge-defined labels.
   [PR #41](https://github.com/kcosr/herdr-web/pull/41)

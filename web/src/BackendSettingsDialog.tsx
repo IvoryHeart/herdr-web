@@ -516,7 +516,7 @@ export function BackendSettingsDialog({
               <div className="settings-section settings-section-flat">
                 <div className="settings-label">Sidebar</div>
                 <div className="settings-row">
-                  <span title="Choose whether this window follows pane selections from other clients">
+                  <span title="Choose whether this browser follows pane selections from other clients">
                     Sync navigation
                   </span>
                   <div
