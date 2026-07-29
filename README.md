@@ -152,7 +152,8 @@ Settings are grouped by area:
 
 - Bridge: same-origin and saved bridge profiles, reachability testing, and bridge enablement.
 - Features: client feature toggles such as Notes.
-- Display: agent features in Tabs, top/bottom app padding, and mobile terminal controls size.
+- Display: agent features in Tabs, dynamic Spaces grouping, top/bottom app padding, and mobile
+  terminal controls size.
 - Terminal: browser-to-bridge terminal input transport and input batching delay.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 

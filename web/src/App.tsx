@@ -35,6 +35,7 @@ import type {
   FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MutableRefObject,
+  ReactNode,
   SetStateAction,
 } from "react";
 import { Capacitor } from "@capacitor/core";
@@ -175,6 +176,7 @@ type HostScope = "selected" | "all";
 type SidebarView = "agents" | "tabs" | "notes";
 type AgentSort = "attention" | "status" | "workspace" | "lastStatusChange";
 type AgentGroup = "none" | "host" | "workspace" | "hostWorkspace";
+type SpaceGroup = "none" | "host";
 type MenuKind = "space" | "tab" | "pane";
 type ScopedPaneRef = {
   bridgeId: BridgeId;
@@ -319,6 +321,7 @@ type DisplayPrefs = {
   sidebarView: SidebarView;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  spaceGroup: SpaceGroup;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
   agentFeaturesInTabs: boolean;
@@ -375,6 +378,7 @@ function readDisplayPrefs(): DisplayPrefs {
     sidebarView: "agents",
     agentSort: "attention",
     agentGroup: "none",
+    spaceGroup: "none",
     agentPinnedOnly: false,
     agentActiveOnly: false,
     agentFeaturesInTabs: DEFAULT_AGENT_FEATURES_IN_TABS,
@@ -474,6 +478,10 @@ function parseDisplayPrefsValue(
       parsed.agentGroup === "hostWorkspace"
         ? parsed.agentGroup
         : fallback.agentGroup,
+    spaceGroup:
+      parsed.spaceGroup === "none" || parsed.spaceGroup === "host"
+        ? parsed.spaceGroup
+        : fallback.spaceGroup,
     agentPinnedOnly:
       typeof parsed.agentPinnedOnly === "boolean"
         ? parsed.agentPinnedOnly
@@ -776,6 +784,7 @@ export function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>(initialPrefs.sidebarView);
   const [agentSort, setAgentSort] = useState<AgentSort>(initialPrefs.agentSort);
   const [agentGroup, setAgentGroup] = useState<AgentGroup>(initialPrefs.agentGroup);
+  const [spaceGroup, setSpaceGroup] = useState<SpaceGroup>(initialPrefs.spaceGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
   const [agentFeaturesInTabs, setAgentFeaturesInTabs] = useState(initialPrefs.agentFeaturesInTabs);
@@ -879,6 +888,7 @@ export function App() {
       setSidebarView(prefs.sidebarView);
       setAgentSort(prefs.agentSort);
       setAgentGroup(prefs.agentGroup);
+      setSpaceGroup(prefs.spaceGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
       setAgentFeaturesInTabs(prefs.agentFeaturesInTabs);
@@ -1361,6 +1371,7 @@ export function App() {
       sidebarView,
       agentSort,
       agentGroup,
+      spaceGroup,
       agentPinnedOnly,
       agentActiveOnly,
       agentFeaturesInTabs,
@@ -1397,6 +1408,7 @@ export function App() {
     sidebarView,
     agentSort,
     agentGroup,
+    spaceGroup,
     agentPinnedOnly,
     agentActiveOnly,
     agentFeaturesInTabs,
@@ -3226,6 +3238,7 @@ export function App() {
           agentFeaturesInTabs={agentFeaturesInTabs}
           agentSort={agentSort}
           agentGroup={agentGroup}
+          spaceGroup={spaceGroup}
           activeSpace={activeSpace}
           activeWorkspacesByBridgeId={activeWorkspacesByBridgeId}
           selectedPane={selectedPane}
@@ -3238,6 +3251,7 @@ export function App() {
           onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
+          onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
           onSelectTab={selectTab}
@@ -3258,11 +3272,6 @@ export function App() {
           }
           onCreateTab={(bridgeId, workspaceId) =>
             setLaunchTarget({ mode: "tab", workspaceId, bridgeId })
-          }
-          onMenu={(kind, id, label, x, y, clearable) =>
-            selectedRuntime
-              ? setMenu({ kind, bridgeId: selectedRuntime.id, id, label, x, y, clearable })
-              : undefined
           }
           onScopedMenu={(kind, bridgeId, id, label, x, y, clearable, pinLabel) =>
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
@@ -5101,6 +5110,7 @@ function Switcher({
   agentFeaturesInTabs,
   agentSort,
   agentGroup,
+  spaceGroup,
   activeSpace,
   activeWorkspacesByBridgeId,
   selectedPane,
@@ -5113,6 +5123,7 @@ function Switcher({
   onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
+  onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
   onSelectTab,
@@ -5122,7 +5133,6 @@ function Switcher({
   onBackendSettings,
   onCreateSpace,
   onCreateTab,
-  onMenu,
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
@@ -5148,6 +5158,7 @@ function Switcher({
   agentFeaturesInTabs: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  spaceGroup: SpaceGroup;
   activeSpace: WorkspaceInfo | null;
   activeWorkspacesByBridgeId: Record<string, string>;
   selectedPane: PaneInfo | null;
@@ -5160,6 +5171,7 @@ function Switcher({
   onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
+  onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
   onSelectTab: (bridgeId: BridgeId, tabId: string) => void;
@@ -5169,14 +5181,6 @@ function Switcher({
   onBackendSettings: () => void;
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
-  onMenu: (
-    kind: MenuKind,
-    id: string,
-    label: string,
-    x: number,
-    y: number,
-    clearable?: boolean,
-  ) => void;
   onScopedMenu: (
     kind: MenuKind,
     bridgeId: BridgeId,
@@ -5189,6 +5193,7 @@ function Switcher({
   ) => void;
 }) {
   const [optionsMenu, setOptionsMenu] = useState<{ x: number; y: number } | null>(null);
+  const [spaceOptionsMenu, setSpaceOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const selectedBridgeView = selectedBridgeId
     ? (bridgeViews.find((view) => view.runtime.id === selectedBridgeId) ?? null)
     : null;
@@ -5197,6 +5202,30 @@ function Switcher({
     (view: BridgeConnectionView) =>
       activeWorkspaceForBridgeView(view, selectedBridgeId, activeSpace, activeWorkspacesByBridgeId),
     [activeSpace, activeWorkspacesByBridgeId, selectedBridgeId],
+  );
+  const spaceEntries = hostBridgeViews.flatMap((view) => {
+    const viewSnapshot = view.snapshot;
+    if (!viewSnapshot) {
+      return [];
+    }
+    const activeWorkspace = activeWorkspaceForView(view);
+    return viewSnapshot.workspaces.map((workspace) => {
+      const workspacePanes = viewSnapshot.panes.filter(
+        (pane) => pane.workspace_id === workspace.workspace_id,
+      );
+      return {
+        view,
+        workspace,
+        workspacePanes,
+        active: workspace.workspace_id === activeWorkspace?.workspace_id,
+      };
+    });
+  });
+  const canGroupSpacesByHost = shouldOfferSpaceHostGrouping(hostScope, hostBridgeViews.length);
+  const effectiveSpaceGroup = resolveEffectiveSpaceGroup(
+    spaceGroup,
+    hostScope,
+    hostBridgeViews.length,
   );
   const scopedWorkspaces = useMemo<ScopedWorkspace[]>(
     () =>
@@ -5320,10 +5349,7 @@ function Switcher({
       ),
     [agentActivityTransitions, agentFeaturesInTabs, agentSort, spaceGroups],
   );
-  const spaceCount = hostBridgeViews.reduce(
-    (count, view) => count + (view.snapshot?.workspaces.length ?? 0),
-    0,
-  );
+  const spaceCount = spaceEntries.length;
   const showGroupedHostContext = hostScope === "all";
   const showGroupControl =
     sidebarView !== "notes" &&
@@ -5351,6 +5377,12 @@ function Switcher({
       setOptionsMenu(null);
     }
   }, [optionsMenu, showOptionsControl]);
+
+  useEffect(() => {
+    if (spaceOptionsMenu && !canGroupSpacesByHost) {
+      setSpaceOptionsMenu(null);
+    }
+  }, [canGroupSpacesByHost, spaceOptionsMenu]);
 
   let agentPaneIndex = 0;
   let paneIndex = 0;
@@ -5628,6 +5660,33 @@ function Switcher({
       />
     ));
   };
+  const renderSpaceEntry = (
+    entry: (typeof spaceEntries)[number],
+    index: number,
+    showBridgeLabel: boolean,
+  ) => (
+    <SpaceRow
+      key={`${entry.view.runtime.id}:${entry.workspace.workspace_id}`}
+      index={index}
+      workspace={entry.workspace}
+      bridgeLabel={showBridgeLabel ? entry.view.runtime.label : undefined}
+      agentCount={entry.workspacePanes.filter(isAgentPane).length}
+      active={entry.active}
+      attention={countAttention(entry.workspacePanes)}
+      onSelect={() => onSelectSpace(entry.view.runtime.id, entry.workspace.workspace_id)}
+      onMenu={(x, y) =>
+        onScopedMenu(
+          "space",
+          entry.view.runtime.id,
+          entry.workspace.workspace_id,
+          entry.workspace.label,
+          x,
+          y,
+          canClearWorkspaceName(entry.workspace, entry.workspacePanes),
+        )
+      }
+    />
+  );
 
   return (
     <>
@@ -5795,75 +5854,48 @@ function Switcher({
                     <Plus size={14} />
                   </button>
                 ) : null}
+                {canGroupSpacesByHost ? (
+                  <button
+                    className="sec-add"
+                    type="button"
+                    aria-label="Space list options"
+                    title="Space list options"
+                    aria-haspopup="dialog"
+                    aria-expanded={spaceOptionsMenu ? "true" : "false"}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setOptionsMenu(null);
+                      setSpaceOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+                ) : null}
               </div>
               {spaceCount === 0 ? (
                 <div className="empty">
                   <strong>No spaces yet</strong>
                   <span>{hostScope === "selected" ? "Tap + to create one." : "No enabled host has spaces."}</span>
                 </div>
-              ) : hostScope === "all" ? (
+              ) : effectiveSpaceGroup === "host" ? (
                 hostBridgeViews.map((view) => {
-                  const viewSnapshot = view.snapshot;
-                  if (!viewSnapshot) {
+                  const entries = spaceEntries.filter(
+                    (entry) => entry.view.runtime.id === view.runtime.id,
+                  );
+                  if (entries.length === 0) {
                     return null;
                   }
-                  const activeWorkspace = activeWorkspaceForView(view);
                   return (
                     <Fragment key={view.runtime.id}>
                       <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-                      {viewSnapshot.workspaces.map((workspace, index) => (
-                        <SpaceRow
-                          key={`${view.runtime.id}:${workspace.workspace_id}`}
-                          index={index}
-                          workspace={workspace}
-                          active={workspace.workspace_id === activeWorkspace?.workspace_id}
-                          attention={countAttention(
-                            viewSnapshot.panes.filter(
-                              (pane) => pane.workspace_id === workspace.workspace_id,
-                            ),
-                          )}
-                          onSelect={() => onSelectSpace(view.runtime.id, workspace.workspace_id)}
-                          onMenu={(x, y) =>
-                            onScopedMenu(
-                              "space",
-                              view.runtime.id,
-                              workspace.workspace_id,
-                              workspace.label,
-                              x,
-                              y,
-                              canClearWorkspaceName(workspace, viewSnapshot.panes),
-                            )
-                          }
-                        />
-                      ))}
+                      {entries.map((entry, index) => renderSpaceEntry(entry, index, false))}
                     </Fragment>
                   );
                 })
               ) : (
-                snapshot?.workspaces.map((workspace, index) => (
-                  <SpaceRow
-                    key={workspace.workspace_id}
-                    index={index}
-                    workspace={workspace}
-                    active={workspace.workspace_id === activeSpace?.workspace_id}
-                    attention={countAttention(
-                      snapshot.panes.filter((pane) => pane.workspace_id === workspace.workspace_id),
-                    )}
-                    onSelect={() =>
-                      selectedBridgeId ? onSelectSpace(selectedBridgeId, workspace.workspace_id) : undefined
-                    }
-                    onMenu={(x, y) =>
-                      onMenu(
-                        "space",
-                        workspace.workspace_id,
-                        workspace.label,
-                        x,
-                        y,
-                        canClearWorkspaceName(workspace, snapshot.panes),
-                      )
-                    }
-                  />
-                )) ?? null
+                spaceEntries.map((entry, index) =>
+                  renderSpaceEntry(entry, index, canGroupSpacesByHost),
+                )
               )}
             </section>
             ) : null}
@@ -5951,6 +5983,7 @@ function Switcher({
                     aria-expanded={optionsMenu ? "true" : "false"}
                     onClick={(event) => {
                       const rect = event.currentTarget.getBoundingClientRect();
+                      setSpaceOptionsMenu(null);
                       setOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
                     }}
                   >
@@ -6025,6 +6058,15 @@ function Switcher({
           onClose={() => setOptionsMenu(null)}
         />
       ) : null}
+      {spaceOptionsMenu ? (
+        <SpaceOptionsMenu
+          x={spaceOptionsMenu.x}
+          y={spaceOptionsMenu.y}
+          spaceGroup={spaceGroup}
+          onSpaceGroup={onSpaceGroup}
+          onClose={() => setSpaceOptionsMenu(null)}
+        />
+      ) : null}
     </>
   );
 }
@@ -6053,6 +6095,89 @@ function SidebarOptionsMenu({
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
   onClose: () => void;
+}) {
+  return (
+    <OptionsMenuShell
+      x={x}
+      y={y}
+      ariaLabel={`${sidebarView === "agents" ? "Agent" : "Tab"} list options`}
+      onClose={onClose}
+    >
+      {showSort ? (
+        <label className="sidebar-option-field">
+          <span>Sort</span>
+          <select
+            value={agentSort}
+            onChange={(event) => onAgentSort(event.currentTarget.value as AgentSort)}
+          >
+            <option value="attention">Attention</option>
+            <option value="status">Status</option>
+            {showLastStatusChangeSort ? (
+              <option value="lastStatusChange">Last status change</option>
+            ) : null}
+            <option value="workspace">Workspace</option>
+          </select>
+        </label>
+      ) : null}
+      {showGroup ? (
+        <label className="sidebar-option-field">
+          <span>Group</span>
+          <select
+            value={agentGroup}
+            onChange={(event) => onAgentGroup(event.currentTarget.value as AgentGroup)}
+          >
+            <option value="none">None</option>
+            <option value="host">Host</option>
+            <option value="workspace">Workspace</option>
+            <option value="hostWorkspace">Host + workspace</option>
+          </select>
+        </label>
+      ) : null}
+    </OptionsMenuShell>
+  );
+}
+
+function SpaceOptionsMenu({
+  x,
+  y,
+  spaceGroup,
+  onSpaceGroup,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  spaceGroup: SpaceGroup;
+  onSpaceGroup: (group: SpaceGroup) => void;
+  onClose: () => void;
+}) {
+  return (
+    <OptionsMenuShell x={x} y={y} ariaLabel="Space list options" onClose={onClose}>
+      <label className="sidebar-option-field">
+        <span>Group</span>
+        <select
+          value={spaceGroup}
+          onChange={(event) => onSpaceGroup(event.currentTarget.value as SpaceGroup)}
+        >
+          <option value="none">None</option>
+          <option value="host">Host</option>
+        </select>
+      </label>
+    </OptionsMenuShell>
+  );
+}
+
+function OptionsMenuShell({
+  x,
+  y,
+  ariaLabel,
+  onClose,
+  children,
+}: {
+  x: number;
+  y: number;
+  ariaLabel: string;
+  onClose: () => void;
+  children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -6105,7 +6230,7 @@ function SidebarOptionsMenu({
         ref={ref}
         className="sidebar-options-menu"
         role="dialog"
-        aria-label={`${sidebarView === "agents" ? "Agent" : "Tab"} list options`}
+        aria-label={ariaLabel}
         tabIndex={-1}
         style={{
           left: pos?.left ?? x,
@@ -6113,36 +6238,7 @@ function SidebarOptionsMenu({
           visibility: pos ? "visible" : "hidden",
         }}
       >
-        {showSort ? (
-          <label className="sidebar-option-field">
-            <span>Sort</span>
-            <select
-              value={agentSort}
-              onChange={(event) => onAgentSort(event.currentTarget.value as AgentSort)}
-            >
-              <option value="attention">Attention</option>
-              <option value="status">Status</option>
-              {showLastStatusChangeSort ? (
-                <option value="lastStatusChange">Last status change</option>
-              ) : null}
-              <option value="workspace">Workspace</option>
-            </select>
-          </label>
-        ) : null}
-        {showGroup ? (
-          <label className="sidebar-option-field">
-            <span>Group</span>
-            <select
-              value={agentGroup}
-              onChange={(event) => onAgentGroup(event.currentTarget.value as AgentGroup)}
-            >
-              <option value="none">None</option>
-              <option value="host">Host</option>
-              <option value="workspace">Workspace</option>
-              <option value="hostWorkspace">Host + workspace</option>
-            </select>
-          </label>
-        ) : null}
+        {children}
       </div>
     </div>
   );
@@ -7132,6 +7228,8 @@ function GroupHeader({
 
 function SpaceRow({
   workspace,
+  bridgeLabel,
+  agentCount,
   active,
   attention,
   index,
@@ -7139,6 +7237,8 @@ function SpaceRow({
   onMenu,
 }: {
   workspace: WorkspaceInfo;
+  bridgeLabel?: string;
+  agentCount: number;
   active: boolean;
   attention: number;
   index: number;
@@ -7157,7 +7257,9 @@ function SpaceRow({
       <span className="dot" data-status={workspace.agent_status} />
       <span className="space-body">
         <span className="space-name">{workspace.label}</span>
-        <span className="space-sub mono">{spaceSubtitle(workspace)}</span>
+        <span className="space-sub mono">
+          {spaceSubtitle(workspace, bridgeLabel, agentCount)}
+        </span>
       </span>
       {attention > 0 ? <span className="attn">{attention}</span> : null}
     </button>
@@ -7524,6 +7626,18 @@ export function shouldShowSidebarSort(
   agentFeaturesInTabs: boolean,
 ) {
   return sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
+}
+
+export function shouldOfferSpaceHostGrouping(hostScope: HostScope, hostCount: number) {
+  return hostScope === "all" && hostCount > 1;
+}
+
+export function resolveEffectiveSpaceGroup(
+  spaceGroup: SpaceGroup,
+  hostScope: HostScope,
+  hostCount: number,
+): SpaceGroup {
+  return shouldOfferSpaceHostGrouping(hostScope, hostCount) ? spaceGroup : "none";
 }
 
 export function canAddNoteFromPaneMenu({

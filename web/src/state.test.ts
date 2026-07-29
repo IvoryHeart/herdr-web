@@ -10,6 +10,7 @@ import {
   paneListSubtitle,
   paneTitle,
   sortPanesForPicker,
+  spaceSubtitle,
 } from "./state";
 import type { PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "./types";
 
@@ -283,6 +284,16 @@ describe("paneListSubtitle", () => {
         "workspace",
       ),
     ).toBe("workspace");
+  });
+});
+
+describe("spaceSubtitle", () => {
+  it("prepends host context only when supplied and includes the agent count", () => {
+    const item = { ...workspace("repo"), tab_count: 2, pane_count: 3 };
+
+    expect(spaceSubtitle(item, "srv", 2)).toBe("srv · 2 tabs · 3 panes · 2 agents");
+    expect(spaceSubtitle(item, undefined, 1)).toBe("2 tabs · 3 panes · 1 agent");
+    expect(spaceSubtitle(item)).toBe("2 tabs · 3 panes");
   });
 });
 

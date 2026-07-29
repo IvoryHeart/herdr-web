@@ -152,10 +152,16 @@ export function paneListSubtitle(
     .join(" · ");
 }
 
-export function spaceSubtitle(workspace: WorkspaceInfo) {
+export function spaceSubtitle(
+  workspace: WorkspaceInfo,
+  bridgeLabel?: string,
+  agentCount = 0,
+) {
   const tabs = `${workspace.tab_count} tab${workspace.tab_count === 1 ? "" : "s"}`;
   const panes = `${workspace.pane_count} pane${workspace.pane_count === 1 ? "" : "s"}`;
-  return `${tabs} · ${panes}`;
+  const agents =
+    agentCount > 0 ? `${agentCount} agent${agentCount === 1 ? "" : "s"}` : undefined;
+  return [bridgeLabel, tabs, panes, agents].filter(Boolean).join(" · ");
 }
 
 export function sortTabsForWorkspace(tabs: TabInfo[], workspaceId: string) {

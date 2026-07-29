@@ -15,11 +15,13 @@ import {
   nextVisibleAgentPaneEntry,
   nextVisibleTabEntry,
   resolveInitialSelectedBridgeId,
+  resolveEffectiveSpaceGroup,
   resolveCreatedPaneNoteForTarget,
   paneNoteListContains,
   shouldBlockDirtyNoteAutosave,
   shouldCollapseHostScope,
   shouldRenderAgentRowInTabs,
+  shouldOfferSpaceHostGrouping,
   shouldShowSidebarSort,
   shouldShowTabDivider,
   shouldShowLastStatusChangeSort,
@@ -85,6 +87,15 @@ describe("App multi-bridge helpers", () => {
     expect(shouldCollapseHostScope("all", 1, true)).toBe(true);
     expect(shouldCollapseHostScope("all", 2, true)).toBe(false);
     expect(shouldCollapseHostScope("selected", 1, true)).toBe(false);
+  });
+
+  it("offers Spaces host grouping only when all of multiple hosts are visible", () => {
+    expect(shouldOfferSpaceHostGrouping("all", 2)).toBe(true);
+    expect(shouldOfferSpaceHostGrouping("all", 1)).toBe(false);
+    expect(shouldOfferSpaceHostGrouping("selected", 2)).toBe(false);
+    expect(resolveEffectiveSpaceGroup("host", "all", 2)).toBe("host");
+    expect(resolveEffectiveSpaceGroup("host", "all", 1)).toBe("none");
+    expect(resolveEffectiveSpaceGroup("host", "selected", 2)).toBe("none");
   });
 
   it("keeps bridge refresh offsets deterministic and inside the fallback interval", () => {
