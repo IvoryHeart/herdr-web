@@ -114,6 +114,19 @@ describe("chooseSelectedPane", () => {
     ).toBe("1-1");
   });
 
+  it("ignores the bridge selection for independent navigation", () => {
+    expect(
+      chooseSelectedPane(
+        {
+          ...snapshot([pane("1-1"), pane("1-2", true)]),
+          selected_pane_id: "1-1",
+        },
+        null,
+        false,
+      ),
+    ).toBe("1-2");
+  });
+
   it("uses the snapshot selection when the current pane is gone", () => {
     expect(
       chooseSelectedPane(

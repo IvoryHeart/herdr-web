@@ -52,6 +52,7 @@ import type {
   MobileTerminalTapTarget,
   MobileTouchSelectionEndpointTimeoutMs,
 } from "./mobileTerminalPrefs";
+import type { NavigationSyncMode } from "./navigationPrefs";
 import { TERMINAL_INPUT_BATCH_DELAY_OPTIONS_MS } from "./terminalInputTransport";
 import type { TerminalInputTransport } from "./terminalInputTransport";
 import { TERMINAL_OUTPUT_COALESCE_OPTIONS_MS } from "./terminalOutputCoalescing";
@@ -60,6 +61,8 @@ type Props = {
   showMobileTerminalSettings: boolean;
   notesEnabled: boolean;
   onNotesEnabled: (enabled: boolean) => void;
+  navigationSyncMode: NavigationSyncMode;
+  onNavigationSyncMode: (mode: NavigationSyncMode) => void;
   agentFeaturesInTabs: boolean;
   onAgentFeaturesInTabs: (enabled: boolean) => void;
   multiHostSpaceSelection: boolean;
@@ -110,6 +113,8 @@ export function BackendSettingsDialog({
   showMobileTerminalSettings,
   notesEnabled,
   onNotesEnabled,
+  navigationSyncMode,
+  onNavigationSyncMode,
   agentFeaturesInTabs,
   onAgentFeaturesInTabs,
   multiHostSpaceSelection,
@@ -510,6 +515,33 @@ export function BackendSettingsDialog({
             {activeArea === "display" ? (
               <div className="settings-section settings-section-flat">
                 <div className="settings-label">Sidebar</div>
+                <div className="settings-row">
+                  <span title="Choose whether this window follows pane selections from other clients">
+                    Sync navigation
+                  </span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Navigation synchronization"
+                  >
+                    <button
+                      type="button"
+                      data-on={navigationSyncMode === "independent"}
+                      aria-pressed={navigationSyncMode === "independent"}
+                      onClick={() => onNavigationSyncMode("independent")}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={navigationSyncMode === "shared"}
+                      aria-pressed={navigationSyncMode === "shared"}
+                      onClick={() => onNavigationSyncMode("shared")}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
                 <div className="settings-row">
                   <span>Agent features in Tabs</span>
                   <div
