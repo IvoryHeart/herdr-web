@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentSubtitle,
   buildVisibleAgentPaneEntries,
   buildVisibleScopedNotes,
   canAddNoteFromPaneMenu,
@@ -51,6 +52,21 @@ describe("App connection guards", () => {
 });
 
 describe("App multi-bridge helpers", () => {
+  it("keeps agent subtitles compact by omitting redundant status text", () => {
+    expect(
+      agentSubtitle(
+        {
+          ...pane("agent", "workspace-a", "tab-a", "working"),
+          custom_status: "Reviewing",
+          cwd: "/work/project",
+        },
+        workspace("workspace-a", 1),
+        "tab-a",
+        "host-a",
+      ),
+    ).toBe("host-a · workspace-a · tab-a · project");
+  });
+
   it("uses display preference selection before store fallback", () => {
     expect(resolveInitialSelectedBridgeId("bridge-b", ["bridge-a", "bridge-b"], "bridge-a")).toBe(
       "bridge-b",

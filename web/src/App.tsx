@@ -7646,18 +7646,14 @@ function agentTitle(pane: PaneInfo) {
   return pane.display_agent || pane.label || pane.agent || pane.title || paneTitle(pane);
 }
 
-function agentSubtitle(
+export function agentSubtitle(
   pane: PaneInfo,
   workspace?: WorkspaceInfo,
   tabLabel?: string,
   bridgeLabel?: string,
 ) {
-  const stateText =
-    pane.custom_status ||
-    pane.state_labels?.[statusLabel(pane.agent_status)] ||
-    statusLabel(pane.agent_status);
   const dir = basename(pane.foreground_cwd || pane.cwd);
-  return [stateText, bridgeLabel, workspace?.label, tabLabel, dir].filter(Boolean).join(" · ");
+  return [bridgeLabel, workspace?.label, tabLabel, dir].filter(Boolean).join(" · ");
 }
 
 function SplitGlyph() {
