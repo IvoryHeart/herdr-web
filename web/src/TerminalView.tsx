@@ -1402,7 +1402,7 @@ function MobileSelectionActions({
   );
 }
 
-function MobileTerminalControls({
+export function MobileTerminalControls({
   commandInputRef,
   disabled,
   uploadDisabled,
@@ -1431,21 +1431,33 @@ function MobileTerminalControls({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState("");
+  const [fieldKey, setFieldKey] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [ctrlLatch, setCtrlLatch] = useState(false);
   const setCommandInputNode = (node: HTMLInputElement | HTMLTextAreaElement | null) => {
     commandInputRef.current = node;
   };
-  const submit = () => {
-    onSubmitCommand(value);
+  const clearCommandInput = () => {
     setValue("");
+    const node = commandInputRef.current;
+    if (node) {
+      node.value = "";
+      node.defaultValue = "";
+    }
+    setFieldKey((key) => key + 1);
+  };
+  const submit = () => {
+    const command = value;
+    clearCommandInput();
+    onSubmitCommand(command);
   };
   const stage = () => {
     if (value.length === 0) {
       return;
     }
-    onStageCommand(value);
-    setValue("");
+    const command = value;
+    clearCommandInput();
+    onStageCommand(command);
   };
   const sendKey = (key: TerminalKey) => {
     onInput(ctrlLatch && key.ctrlData ? key.ctrlData : key.data);
@@ -1455,10 +1467,18 @@ function MobileTerminalControls({
   };
 
   useLayoutEffect(() => {
+    const node = commandInputRef.current;
+    if (fieldKey > 0 && node) {
+      node.value = "";
+      node.defaultValue = "";
+    }
+  }, [commandInputRef, fieldKey]);
+
+  useLayoutEffect(() => {
     if (expandingInput) {
       autosizeMobileCommandTextarea(commandInputRef.current);
     }
-  }, [commandInputRef, controlsScalePercent, expandingInput, value]);
+  }, [commandInputRef, controlsScalePercent, expandingInput, fieldKey, value]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -1615,6 +1635,7 @@ function MobileTerminalControls({
       >
         {expandingInput ? (
           <textarea
+            key={fieldKey}
             ref={setCommandInputNode}
             className="term-native-input mono"
             rows={1}
@@ -1631,6 +1652,7 @@ function MobileTerminalControls({
           />
         ) : (
           <input
+            key={fieldKey}
             ref={setCommandInputNode}
             className="term-native-input mono"
             type="text"
