@@ -4,6 +4,9 @@
   "description": "Terminal multiplexer web interface",
   "start_url": "/",
   "display": "standalone",
+  "launch_handler": {
+    "client_mode": "navigate-new"
+  },
   "orientation": "any",
   "background_color": "#11111b",
   "theme_color": "#11111b",
