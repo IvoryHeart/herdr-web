@@ -29,8 +29,6 @@
 
 - Store the Sync navigation setting browser-wide while keeping sync-off pane selections only in
   memory. The app no longer creates per-tab navigation storage records.
-- Launch each installed desktop web-app request in a new browsing context instead of allowing the
-  browser to reuse an existing exact-URL app instance.
 - Simplified agent-row metadata by removing generic status text already communicated by the status
   indicator and badge, while retaining custom status text and bridge-defined labels.
   [PR #41](https://github.com/kcosr/herdr-web/pull/41)
