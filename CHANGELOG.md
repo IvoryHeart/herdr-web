@@ -6,9 +6,10 @@
 
 - Herdr `v0.7.5` or newer with terminal protocol exactly `17` is now required. The bridge rejects
   older protocol `16` daemons and unreviewed newer protocols rather than attempting a
-  backward-compatible wire fallback.
+  backward-compatible wire fallback. [PR #45](https://github.com/kcosr/herdr-web/pull/45)
 - Removed the obsolete `custom_status` field from bridge snapshots and activity events; agent
   presentation now uses Herdr's `state_labels`, title, display-agent, and status fields.
+  [PR #45](https://github.com/kcosr/herdr-web/pull/45)
 - Changed the default ungrouped Tabs and Spaces sidebar presentation to compact rows with inline
   host, Space, and tab context instead of contextual headers. Agent panes in Tabs also use the
   Agents row presentation and agent-aware ordering by default. Choose a grouping mode to restore
@@ -34,10 +35,11 @@
 
 - Refreshed the minimal vendored Herdr compatibility sources to the `v0.7.5`/protocol `17` baseline,
   including the current API schemas and terminal wire definitions.
+  [PR #45](https://github.com/kcosr/herdr-web/pull/45)
 - Updated launching for Herdr `v0.7.5`: built-in agents use the managed `agent.start` flow after the
   destination pane is created. The bridge waits for interactive readiness and rolls back its new
   tab or pane after rejection, early process exit, or timeout. Custom launcher presets continue to
-  execute their exact configured `argv`.
+  execute their exact configured `argv`. [PR #45](https://github.com/kcosr/herdr-web/pull/45)
 - Store the Sync navigation setting browser-wide while keeping sync-off pane selections only in
   memory. The app no longer creates per-tab navigation storage records.
   [PR #43](https://github.com/kcosr/herdr-web/pull/43)
