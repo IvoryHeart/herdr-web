@@ -66,7 +66,14 @@ describe("App multi-bridge helpers", () => {
         "tab-a",
         "host-a",
       ),
-    ).toBe("host-a · workspace-a · tab-a · project");
+    ).toBe("host-a · workspace-a · tab-a · project · Reviewing");
+    expect(
+      agentSubtitle({
+        ...pane("agent", "workspace-a", "tab-a", "working"),
+        state_labels: { working: "Running" },
+      }),
+    ).toBe("Running");
+    expect(agentSubtitle(pane("agent", "workspace-a", "tab-a", "working"))).toBe("");
   });
 
   it("uses display preference selection before store fallback", () => {

@@ -13,8 +13,8 @@
 - Added default-on Agent features in Tabs, which uses the Agents row presentation and exposes
   agent-aware sorting and the active-status filter while keeping non-agent tabs stable at the
   bottom; disabling it restores plain pane rows and the original tab order.
-- Removed redundant status text from agent-row metadata because the row status indicator and badge
-  already communicate it.
+- Removed redundant generic status text from agent-row metadata because the row status indicator and
+  badge already communicate it, while retaining custom status text and bridge-defined labels.
 - Added dynamic Spaces grouping for multi-host scope: None uses compact flat rows with host context,
   while Host renders host headers; the control and redundant host labels stay hidden in single-host
   scope.

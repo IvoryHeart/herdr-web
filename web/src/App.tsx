@@ -7767,7 +7767,11 @@ export function agentSubtitle(
   bridgeLabel?: string,
 ) {
   const dir = basename(pane.foreground_cwd || pane.cwd);
-  return [bridgeLabel, workspace?.label, tabLabel, dir].filter(Boolean).join(" · ");
+  const customStateText =
+    pane.custom_status || pane.state_labels?.[statusLabel(pane.agent_status)];
+  return [bridgeLabel, workspace?.label, tabLabel, dir, customStateText]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function SplitGlyph() {
