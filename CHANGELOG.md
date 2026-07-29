@@ -4,23 +4,27 @@
 
 ### Breaking Changes
 
+- Changed the default ungrouped Tabs and Spaces sidebar presentation to compact rows with inline
+  host, Space, and tab context instead of contextual headers. Agent panes in Tabs also use the
+  Agents row presentation and agent-aware ordering by default. Choose a grouping mode to restore
+  contextual headers, or disable Agent features in Tabs to restore generic pane rows and the
+  original tab order. (PR #TBD)
+
 ### Added
 
-- Added a default-on Multi-host Space selection setting; disabling it limits Space-scoped Agents,
-  Tabs, and Notes to one globally selected Space while leaving All scope unchanged.
+- Added default-on Agent features in Tabs, including consistent Agents row metadata and pin
+  placement, agent-aware sorting, and pinned-only and active-only filters. Non-agent tabs remain
+  visible at the bottom of agent-aware sorts; disabling the setting restores generic pane rows.
+  (PR #TBD)
+- Added multi-host Spaces controls: Spaces can be shown as a flat list with host context or grouped
+  under host headers, and the default-on Multi-host Space selection setting can be disabled to limit
+  Space-scoped Agents, Tabs, and Notes to one globally selected Space. All scope remains unchanged.
+  (PR #TBD)
 
 ### Changed
 
-- Made ungrouped Tabs sidebar lists match the compact Agents layout by moving host, workspace, and
-  tab context into each pane row instead of rendering contextual headers.
-- Added default-on Agent features in Tabs, which uses the Agents row presentation and exposes
-  agent-aware sorting and the active-status filter while keeping non-agent tabs stable at the
-  bottom; disabling it restores plain pane rows and the original tab order.
-- Removed redundant generic status text from agent-row metadata because the row status indicator and
-  badge already communicate it, while retaining custom status text and bridge-defined labels.
-- Added dynamic Spaces grouping for multi-host scope: None uses compact flat rows with host context,
-  while Host renders host headers; the control and redundant host labels stay hidden in single-host
-  scope.
+- Simplified agent-row metadata by removing generic status text already communicated by the status
+  indicator and badge, while retaining custom status text and bridge-defined labels. (PR #TBD)
 
 ### Fixed
 
