@@ -125,6 +125,7 @@ import type { NoteAttachment, NotesListResponse, PaneNote } from "./notes";
 import {
   NAVIGATION_SYNC_MODE_KEY,
   navigationSyncModeForStorageEvent,
+  parseNavigationSyncMode,
   readNavigationSyncMode,
   sharesNavigation,
   writeNavigationSyncMode,
@@ -501,6 +502,28 @@ async function loadSharedNavigationPrefs(): Promise<SharedNavigationPrefs> {
     return value ? parseSharedNavigationPrefs(JSON.parse(value)) : localPrefs;
   } catch {
     return localPrefs;
+  }
+}
+
+async function loadNavigationSyncMode(): Promise<NavigationSyncMode> {
+  const localMode = readNavigationSyncMode();
+  if (!isNativeApp()) {
+    return localMode;
+  }
+  try {
+    const { value } = await Preferences.get({ key: NAVIGATION_SYNC_MODE_KEY });
+    return value ? parseNavigationSyncMode(value) : localMode;
+  } catch {
+    return localMode;
+  }
+}
+
+function persistNavigationSyncMode(mode: NavigationSyncMode) {
+  writeNavigationSyncMode(mode);
+  if (isNativeApp()) {
+    void Preferences.set({ key: NAVIGATION_SYNC_MODE_KEY, value: mode }).catch(() => {
+      // Browser storage above remains a best-effort backup.
+    });
   }
 }
 
@@ -989,8 +1012,12 @@ export function App() {
       return;
     }
     let cancelled = false;
-    void Promise.all([loadDisplayPrefs(), loadSharedNavigationPrefs()]).then(
-      ([prefs, sharedNavigationPrefs]) => {
+    void Promise.all([
+      loadDisplayPrefs(),
+      loadSharedNavigationPrefs(),
+      loadNavigationSyncMode(),
+    ]).then(
+      ([prefs, sharedNavigationPrefs, loadedNavigationSyncMode]) => {
       if (cancelled) {
         return;
       }
@@ -1011,13 +1038,12 @@ export function App() {
       setNotesEnabled(prefs.notesEnabled);
       setNotesPanelOpen(prefs.notesEnabled && prefs.notesPanelOpen);
       setSidebarOpen(prefs.sidebarOpen);
-      if (sharesNavigation(navigationSyncMode)) {
-        setSelectedBridgeId(sharedNavigationPrefs.selectedBridgeId);
-        setSelectedPaneRefState(sharedNavigationPrefs.selectedPane);
-        setActiveWorkspaceRefState(sharedNavigationPrefs.activeWorkspace);
-        setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
-        setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
-      }
+      setNavigationSyncMode(loadedNavigationSyncMode);
+      setSelectedBridgeId(sharedNavigationPrefs.selectedBridgeId);
+      setSelectedPaneRefState(sharedNavigationPrefs.selectedPane);
+      setActiveWorkspaceRefState(sharedNavigationPrefs.activeWorkspace);
+      setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
+      setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
       setTerminalInputTransport(prefs.terminalInputTransport);
       setTerminalInputBatchDelayMs(prefs.terminalInputBatchDelayMs);
@@ -1037,7 +1063,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [displayPrefsLoaded, navigationSyncMode]);
+  }, [displayPrefsLoaded]);
 
   useEffect(() => {
     return addNativeBackHandler(() => {
@@ -1744,7 +1770,7 @@ export function App() {
   ]);
 
   const changeNavigationSyncMode = useCallback((mode: NavigationSyncMode) => {
-    writeNavigationSyncMode(mode);
+    persistNavigationSyncMode(mode);
     applyNavigationSyncMode(mode);
   }, [applyNavigationSyncMode]);
 
