@@ -123,9 +123,12 @@ import {
 } from "./notes";
 import type { NoteAttachment, NotesListResponse, PaneNote } from "./notes";
 import {
-  readClientNavigationPrefs,
+  NAVIGATION_SYNC_MODE_KEY,
+  navigationSyncModeForStorageEvent,
+  parseNavigationSyncMode,
+  readNavigationSyncMode,
   sharesNavigation,
-  writeClientNavigationPrefs,
+  writeNavigationSyncMode,
 } from "./navigationPrefs";
 import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
@@ -152,6 +155,7 @@ import {
   basename,
   canClearTabName,
   canClearWorkspaceName,
+  chooseDirectionalPane,
   choosePaneForTab,
   choosePaneForWorkspace,
   chooseSelectedPane,
@@ -233,6 +237,11 @@ type PendingCreatedPaneNote = PendingCreatedPaneNoteTarget & {
 type QuickPaneNoteTarget = ScopedPaneRef & {
   label: string;
 };
+type PendingSharedPaneSelection = {
+  paneId: string;
+  connectionKey: string;
+  timeoutId: number;
+};
 type BridgeAgentPinsState = BridgeResourceState<AgentPinsListResponse>;
 type BridgeAgentActivityState = BridgeResourceState<AgentActivityListResponse>;
 export type BridgeConnectionRef = {
@@ -241,6 +250,10 @@ export type BridgeConnectionRef = {
   activityGeneration: number;
   resyncBarrierGeneration: number;
   activityLog: ActivityLogEntry[];
+  sharedSelectionOverride: {
+    paneId: string;
+    expiresAtMs: number;
+  } | null;
 };
 export type ScopedAgentPane = {
   bridgeId: BridgeId;
@@ -341,11 +354,6 @@ type DisplayPrefs = {
   notesEnabled: boolean;
   notesPanelOpen: boolean;
   sidebarOpen: boolean;
-  selectedBridgeId: BridgeId | null;
-  selectedPane: ScopedPaneRef | null;
-  activeWorkspace: ScopedWorkspaceRef | null;
-  selectedPanesByBridgeId: Record<string, string>;
-  activeWorkspacesByBridgeId: Record<string, string>;
   terminalFontSizePx: number;
   terminalInputTransport: TerminalInputTransport;
   terminalInputBatchDelayMs: number;
@@ -360,6 +368,13 @@ type DisplayPrefs = {
   mobileCommandExpandingInput: boolean;
   mobileCommandEnterNewline: boolean;
 };
+type SharedNavigationPrefs = {
+  selectedBridgeId: BridgeId | null;
+  selectedPane: ScopedPaneRef | null;
+  activeWorkspace: ScopedWorkspaceRef | null;
+  selectedPanesByBridgeId: Record<string, string>;
+  activeWorkspacesByBridgeId: Record<string, string>;
+};
 type LegacyDisplaySelectionPrefs = {
   activeSpaceId: string | null;
   selectedPaneId: string | null;
@@ -367,6 +382,7 @@ type LegacyDisplaySelectionPrefs = {
 const COMPACT_LAYOUT_QUERY = "(max-width: 820px)";
 const TOUCH_INPUT_QUERY = "(hover: none) and (pointer: coarse)";
 const DISPLAY_PREFS_KEY = "herdr.mobileWeb.displayPrefs.v2";
+const SHARED_NAVIGATION_PREFS_KEY = "herdr.mobileWeb.sharedNavigation.v1";
 const LEGACY_DISPLAY_PREFS_KEY = "herdr.mobileWeb.displayPrefs.v1";
 const MOBILE_SIDEBAR_HISTORY_KEY = "herdrWebMobileSidebar";
 const MOBILE_DETAIL_HISTORY_KEY = "herdrWebMobileDetail";
@@ -399,11 +415,6 @@ function readDisplayPrefs(): DisplayPrefs {
     notesEnabled: true,
     notesPanelOpen: false,
     sidebarOpen: true,
-    selectedBridgeId: null,
-    selectedPane: null,
-    activeWorkspace: null,
-    selectedPanesByBridgeId: {},
-    activeWorkspacesByBridgeId: {},
     terminalFontSizePx: DEFAULT_TERMINAL_FONT_SIZE_PX,
     terminalInputTransport: DEFAULT_TERMINAL_INPUT_TRANSPORT,
     terminalInputBatchDelayMs: DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
@@ -446,6 +457,74 @@ async function loadDisplayPrefs(): Promise<DisplayPrefs> {
     // Fall back to browser storage backup.
   }
   return localPrefs;
+}
+
+function emptySharedNavigationPrefs(): SharedNavigationPrefs {
+  return {
+    selectedBridgeId: null,
+    selectedPane: null,
+    activeWorkspace: null,
+    selectedPanesByBridgeId: {},
+    activeWorkspacesByBridgeId: {},
+  };
+}
+
+function parseSharedNavigationPrefs(value: unknown): SharedNavigationPrefs {
+  if (!isRecord(value)) {
+    return emptySharedNavigationPrefs();
+  }
+  return {
+    selectedBridgeId:
+      typeof value.selectedBridgeId === "string" ? value.selectedBridgeId : null,
+    selectedPane: parseScopedPaneRef(value.selectedPane),
+    activeWorkspace: parseScopedWorkspaceRef(value.activeWorkspace),
+    selectedPanesByBridgeId: parseStringRecord(value.selectedPanesByBridgeId),
+    activeWorkspacesByBridgeId: parseStringRecord(value.activeWorkspacesByBridgeId),
+  };
+}
+
+function readSharedNavigationPrefs(): SharedNavigationPrefs {
+  try {
+    const raw = window.localStorage.getItem(SHARED_NAVIGATION_PREFS_KEY);
+    return raw ? parseSharedNavigationPrefs(JSON.parse(raw)) : emptySharedNavigationPrefs();
+  } catch {
+    return emptySharedNavigationPrefs();
+  }
+}
+
+async function loadSharedNavigationPrefs(): Promise<SharedNavigationPrefs> {
+  const localPrefs = readSharedNavigationPrefs();
+  if (!isNativeApp()) {
+    return localPrefs;
+  }
+  try {
+    const { value } = await Preferences.get({ key: SHARED_NAVIGATION_PREFS_KEY });
+    return value ? parseSharedNavigationPrefs(JSON.parse(value)) : localPrefs;
+  } catch {
+    return localPrefs;
+  }
+}
+
+async function loadNavigationSyncMode(): Promise<NavigationSyncMode> {
+  const localMode = readNavigationSyncMode();
+  if (!isNativeApp()) {
+    return localMode;
+  }
+  try {
+    const { value } = await Preferences.get({ key: NAVIGATION_SYNC_MODE_KEY });
+    return value ? parseNavigationSyncMode(value) : localMode;
+  } catch {
+    return localMode;
+  }
+}
+
+function persistNavigationSyncMode(mode: NavigationSyncMode) {
+  writeNavigationSyncMode(mode);
+  if (isNativeApp()) {
+    void Preferences.set({ key: NAVIGATION_SYNC_MODE_KEY, value: mode }).catch(() => {
+      // Browser storage above remains a best-effort backup.
+    });
+  }
 }
 
 function parseDisplayPrefsValue(
@@ -523,12 +602,6 @@ function parseDisplayPrefsValue(
     notesPanelOpen:
       typeof parsed.notesPanelOpen === "boolean" ? parsed.notesPanelOpen : fallback.notesPanelOpen,
     sidebarOpen,
-    selectedBridgeId:
-      typeof parsed.selectedBridgeId === "string" ? parsed.selectedBridgeId : fallback.selectedBridgeId,
-    selectedPane: parseScopedPaneRef(parsed.selectedPane),
-    activeWorkspace: parseScopedWorkspaceRef(parsed.activeWorkspace),
-    selectedPanesByBridgeId: parseStringRecord(parsed.selectedPanesByBridgeId),
-    activeWorkspacesByBridgeId: parseStringRecord(parsed.activeWorkspacesByBridgeId),
     terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
     terminalInputTransport: parseTerminalInputTransport(parsed.terminalInputTransport),
     terminalInputBatchDelayMs: parseTerminalInputBatchDelayMs(parsed.terminalInputBatchDelayMs),
@@ -582,14 +655,7 @@ function readLegacyDisplayPrefs(fallback: DisplayPrefs): DisplayPrefs {
       selectedPaneId?: unknown;
       mobileTouchSelection?: unknown;
     } & Partial<DisplayPrefs>;
-    return {
-      ...parseDisplayPrefsValue(parsed, fallback),
-      selectedBridgeId: fallback.selectedBridgeId,
-      selectedPane: fallback.selectedPane,
-      activeWorkspace: fallback.activeWorkspace,
-      selectedPanesByBridgeId: fallback.selectedPanesByBridgeId,
-      activeWorkspacesByBridgeId: fallback.activeWorkspacesByBridgeId,
-    };
+    return parseDisplayPrefsValue(parsed, fallback);
   } catch {
     return fallback;
   }
@@ -667,6 +733,22 @@ async function writeDisplayPrefs(prefs: DisplayPrefs) {
   try {
     window.localStorage.setItem(DISPLAY_PREFS_KEY, value);
     window.localStorage.removeItem(LEGACY_DISPLAY_PREFS_KEY);
+  } catch {
+    // Storage can be unavailable in private or locked-down browser contexts.
+  }
+}
+
+async function writeSharedNavigationPrefs(prefs: SharedNavigationPrefs) {
+  const value = JSON.stringify(prefs);
+  if (isNativeApp()) {
+    try {
+      await Preferences.set({ key: SHARED_NAVIGATION_PREFS_KEY, value });
+    } catch {
+      // Browser storage below remains a best-effort backup.
+    }
+  }
+  try {
+    window.localStorage.setItem(SHARED_NAVIGATION_PREFS_KEY, value);
   } catch {
     // Storage can be unavailable in private or locked-down browser contexts.
   }
@@ -757,9 +839,8 @@ function usePointerDragResize(
 export function App() {
   const bridge = useBridge();
   const initialPrefs = useMemo(readDisplayPrefs, []);
-  const initialClientNavigationPrefs = useMemo(readClientNavigationPrefs, []);
-  const initialNavigationIsIndependent =
-    initialClientNavigationPrefs.mode === "independent";
+  const initialSharedNavigationPrefs = useMemo(readSharedNavigationPrefs, []);
+  const initialNavigationSyncMode = useMemo(readNavigationSyncMode, []);
   const legacySelectionPrefs = useMemo(readLegacyDisplaySelectionPrefs, []);
   const [displayPrefsLoaded, setDisplayPrefsLoaded] = useState(() => !isNativeApp());
   const [connectionStates, setConnectionStates] = useState<Record<string, BridgeConnectionState>>({});
@@ -772,12 +853,10 @@ export function App() {
   >({});
   const launcherPresetStatesRef = useRef(launcherPresetStates);
   const [selectedBridgeId, setSelectedBridgeId] = useState<BridgeId | null>(
-    initialNavigationIsIndependent
-      ? initialClientNavigationPrefs.selectedBridgeId
-      : initialPrefs.selectedBridgeId,
+    initialSharedNavigationPrefs.selectedBridgeId,
   );
   const [navigationSyncMode, setNavigationSyncMode] = useState<NavigationSyncMode>(
-    initialClientNavigationPrefs.mode,
+    initialNavigationSyncMode,
   );
   const navigationIsShared = sharesNavigation(navigationSyncMode);
   const [selectedNoteRef, setSelectedNoteRef] = useState<ScopedNoteRef | null>(null);
@@ -792,24 +871,16 @@ export function App() {
   const [quickPaneNoteTarget, setQuickPaneNoteTarget] = useState<QuickPaneNoteTarget | null>(null);
   const [quickPaneNoteCreating, setQuickPaneNoteCreating] = useState(false);
   const [selectedPaneRefState, setSelectedPaneRefState] = useState<ScopedPaneRef | null>(
-    initialNavigationIsIndependent
-      ? initialClientNavigationPrefs.selectedPane
-      : initialPrefs.selectedPane,
+    initialSharedNavigationPrefs.selectedPane,
   );
   const [activeWorkspaceRefState, setActiveWorkspaceRefState] = useState<ScopedWorkspaceRef | null>(
-    initialNavigationIsIndependent
-      ? initialClientNavigationPrefs.activeWorkspace
-      : initialPrefs.activeWorkspace,
+    initialSharedNavigationPrefs.activeWorkspace,
   );
   const [selectedPanesByBridgeId, setSelectedPanesByBridgeId] = useState<Record<string, string>>(
-    initialNavigationIsIndependent
-      ? initialClientNavigationPrefs.selectedPanesByBridgeId
-      : initialPrefs.selectedPanesByBridgeId,
+    initialSharedNavigationPrefs.selectedPanesByBridgeId,
   );
   const [activeWorkspacesByBridgeId, setActiveWorkspacesByBridgeId] = useState<Record<string, string>>(
-    initialNavigationIsIndependent
-      ? initialClientNavigationPrefs.activeWorkspacesByBridgeId
-      : initialPrefs.activeWorkspacesByBridgeId,
+    initialSharedNavigationPrefs.activeWorkspacesByBridgeId,
   );
   const [hostScope, setHostScope] = useState<HostScope>(initialPrefs.hostScope);
   const [scope, setScope] = useState<Scope>(initialPrefs.scope);
@@ -896,6 +967,7 @@ export function App() {
   const isCompactLayoutRef = useRef(isCompactLayout);
   const showDetailRef = useRef(showDetail);
   const selectedBridgeIdRef = useRef(selectedBridgeId);
+  const pendingSharedPaneSelectionsRef = useRef<Record<string, PendingSharedPaneSelection>>({});
   const mobileSidebarHistoryRef = useRef(false);
   const mobileDetailHistoryRef = useRef(false);
   const legacySelectionAppliedRef = useRef(false);
@@ -908,13 +980,44 @@ export function App() {
     y: number;
     target: HTMLDivElement;
   } | null>(null);
+  const clearPendingSharedPaneSelection = useCallback((
+    bridgeId: BridgeId,
+    paneId?: string,
+    connectionKey?: string,
+  ) => {
+    const pending = pendingSharedPaneSelectionsRef.current[bridgeId];
+    if (
+      !pending ||
+      (paneId && pending.paneId !== paneId) ||
+      (connectionKey && pending.connectionKey !== connectionKey)
+    ) {
+      return false;
+    }
+    window.clearTimeout(pending.timeoutId);
+    delete pendingSharedPaneSelectionsRef.current[bridgeId];
+    return true;
+  }, []);
+
+  useEffect(
+    () => () => {
+      for (const bridgeId of Object.keys(pendingSharedPaneSelectionsRef.current)) {
+        clearPendingSharedPaneSelection(bridgeId);
+      }
+    },
+    [clearPendingSharedPaneSelection],
+  );
 
   useEffect(() => {
     if (displayPrefsLoaded) {
       return;
     }
     let cancelled = false;
-    void loadDisplayPrefs().then((prefs) => {
+    void Promise.all([
+      loadDisplayPrefs(),
+      loadSharedNavigationPrefs(),
+      loadNavigationSyncMode(),
+    ]).then(
+      ([prefs, sharedNavigationPrefs, loadedNavigationSyncMode]) => {
       if (cancelled) {
         return;
       }
@@ -935,13 +1038,12 @@ export function App() {
       setNotesEnabled(prefs.notesEnabled);
       setNotesPanelOpen(prefs.notesEnabled && prefs.notesPanelOpen);
       setSidebarOpen(prefs.sidebarOpen);
-      if (sharesNavigation(navigationSyncMode)) {
-        setSelectedBridgeId(prefs.selectedBridgeId);
-        setSelectedPaneRefState(prefs.selectedPane);
-        setActiveWorkspaceRefState(prefs.activeWorkspace);
-        setSelectedPanesByBridgeId(prefs.selectedPanesByBridgeId);
-        setActiveWorkspacesByBridgeId(prefs.activeWorkspacesByBridgeId);
-      }
+      setNavigationSyncMode(loadedNavigationSyncMode);
+      setSelectedBridgeId(sharedNavigationPrefs.selectedBridgeId);
+      setSelectedPaneRefState(sharedNavigationPrefs.selectedPane);
+      setActiveWorkspaceRefState(sharedNavigationPrefs.activeWorkspace);
+      setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
+      setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
       setTerminalInputTransport(prefs.terminalInputTransport);
       setTerminalInputBatchDelayMs(prefs.terminalInputBatchDelayMs);
@@ -956,11 +1058,12 @@ export function App() {
       setMobileCommandExpandingInput(prefs.mobileCommandExpandingInput);
       setMobileCommandEnterNewline(prefs.mobileCommandEnterNewline);
       setDisplayPrefsLoaded(true);
-    });
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [displayPrefsLoaded, navigationSyncMode]);
+  }, [displayPrefsLoaded]);
 
   useEffect(() => {
     return addNativeBackHandler(() => {
@@ -1052,10 +1155,15 @@ export function App() {
       : selectedRuntime
         ? (activeWorkspacesByBridgeId[selectedRuntime.id] ?? null)
         : null;
+  const preferSharedSnapshotSelection =
+    navigationIsShared &&
+    Boolean(selectedRuntime) &&
+    !pendingSharedPaneSelectionsRef.current[selectedRuntime?.id ?? ""];
   const resolvedPaneId = chooseSelectedPane(
     snapshot,
     selectedRawPaneId,
-    sharesNavigation(navigationSyncMode),
+    navigationIsShared,
+    preferSharedSnapshotSelection,
   );
   const supportedCommands =
     selectedRuntime?.capabilityState === "ready" ? (selectedRuntime.capabilities?.commands ?? []) : [];
@@ -1354,11 +1462,21 @@ export function App() {
     }
     const restoredPaneId = selectedPanesByBridgeId[selectedRuntime.id] ?? null;
     const restoredWorkspaceId = activeWorkspacesByBridgeId[selectedRuntime.id] ?? null;
+    if (
+      navigationIsShared &&
+      snapshot?.selected_pane_id &&
+      pendingSharedPaneSelectionsRef.current[selectedRuntime.id]?.paneId ===
+        snapshot.selected_pane_id
+    ) {
+      clearPendingSharedPaneSelection(selectedRuntime.id, snapshot.selected_pane_id);
+    }
     const nextPaneId = chooseSelectedPaneForActiveWorkspace(
       snapshot,
       restoredPaneId,
       restoredWorkspaceId,
-      sharesNavigation(navigationSyncMode),
+      navigationIsShared,
+      navigationIsShared &&
+        !pendingSharedPaneSelectionsRef.current[selectedRuntime.id],
     );
     setSelectedPaneRefState((current) => {
       if (!nextPaneId) {
@@ -1399,15 +1517,18 @@ export function App() {
     });
   }, [
     activeWorkspacesByBridgeId,
-    navigationSyncMode,
+    clearPendingSharedPaneSelection,
+    navigationIsShared,
     selectedPanesByBridgeId,
     selectedRuntime?.id,
     snapshot,
   ]);
 
   useEffect(() => {
-    writeClientNavigationPrefs({
-      mode: navigationSyncMode,
+    if (!displayPrefsLoaded || !navigationIsShared) {
+      return;
+    }
+    void writeSharedNavigationPrefs({
       selectedBridgeId,
       selectedPane: selectedPaneRefState,
       activeWorkspace: activeWorkspaceRefState,
@@ -1417,7 +1538,8 @@ export function App() {
   }, [
     activeWorkspaceRefState,
     activeWorkspacesByBridgeId,
-    navigationSyncMode,
+    displayPrefsLoaded,
+    navigationIsShared,
     selectedBridgeId,
     selectedPaneRefState,
     selectedPanesByBridgeId,
@@ -1427,10 +1549,6 @@ export function App() {
     if (!displayPrefsLoaded) {
       return;
     }
-    // Independent clients persist navigation in sessionStorage. Preserve the shared
-    // local/native selection fields when writing unrelated display preferences so
-    // another tab's independent navigation cannot replace a Shared client's reload state.
-    const persistedSharedNavigation = navigationIsShared ? null : readDisplayPrefs();
     void writeDisplayPrefs({
       hostScope,
       scope,
@@ -1449,21 +1567,6 @@ export function App() {
       notesEnabled,
       notesPanelOpen,
       sidebarOpen,
-      selectedBridgeId: persistedSharedNavigation
-        ? persistedSharedNavigation.selectedBridgeId
-        : selectedBridgeId,
-      selectedPane: persistedSharedNavigation
-        ? persistedSharedNavigation.selectedPane
-        : selectedPaneRefState,
-      activeWorkspace: persistedSharedNavigation
-        ? persistedSharedNavigation.activeWorkspace
-        : activeWorkspaceRefState,
-      selectedPanesByBridgeId: persistedSharedNavigation
-        ? persistedSharedNavigation.selectedPanesByBridgeId
-        : selectedPanesByBridgeId,
-      activeWorkspacesByBridgeId: persistedSharedNavigation
-        ? persistedSharedNavigation.activeWorkspacesByBridgeId
-        : activeWorkspacesByBridgeId,
       terminalFontSizePx,
       terminalInputTransport,
       terminalInputBatchDelayMs,
@@ -1490,7 +1593,6 @@ export function App() {
     agentActiveOnly,
     agentFeaturesInTabs,
     multiHostSpaceSelection,
-    navigationIsShared,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -1498,11 +1600,6 @@ export function App() {
     notesEnabled,
     notesPanelOpen,
     sidebarOpen,
-    selectedBridgeId,
-    selectedPaneRefState,
-    activeWorkspaceRefState,
-    selectedPanesByBridgeId,
-    activeWorkspacesByBridgeId,
     terminalFontSizePx,
     terminalInputTransport,
     terminalInputBatchDelayMs,
@@ -1635,7 +1732,27 @@ export function App() {
     }
   }, []);
 
-  const changeNavigationSyncMode = (mode: NavigationSyncMode) => {
+  const applySharedPaneSelection = useCallback((
+    bridgeId: BridgeId,
+    paneId: string,
+    workspaceId?: string,
+  ) => {
+    const pendingPaneId = pendingSharedPaneSelectionsRef.current[bridgeId]?.paneId;
+    if (pendingPaneId && pendingPaneId !== paneId) {
+      return;
+    }
+    if (pendingPaneId === paneId) {
+      clearPendingSharedPaneSelection(bridgeId, paneId);
+    }
+    rememberPaneSelection(bridgeId, paneId, workspaceId);
+  }, [clearPendingSharedPaneSelection, rememberPaneSelection]);
+
+  const applyNavigationSyncMode = useCallback((mode: NavigationSyncMode) => {
+    if (mode === "independent") {
+      for (const bridgeId of Object.keys(pendingSharedPaneSelectionsRef.current)) {
+        clearPendingSharedPaneSelection(bridgeId);
+      }
+    }
     if (mode === "shared" && selectedRuntime && snapshot?.selected_pane_id) {
       const pane = snapshot.panes.find(
         (candidate) => candidate.pane_id === snapshot.selected_pane_id,
@@ -1645,7 +1762,31 @@ export function App() {
       }
     }
     setNavigationSyncMode(mode);
-  };
+  }, [
+    clearPendingSharedPaneSelection,
+    rememberPaneSelection,
+    selectedRuntime,
+    snapshot,
+  ]);
+
+  const changeNavigationSyncMode = useCallback((mode: NavigationSyncMode) => {
+    persistNavigationSyncMode(mode);
+    applyNavigationSyncMode(mode);
+  }, [applyNavigationSyncMode]);
+
+  useEffect(() => {
+    const syncNavigationModeFromStorage = (event: StorageEvent) => {
+      if (event.key !== NAVIGATION_SYNC_MODE_KEY) {
+        return;
+      }
+      const mode = navigationSyncModeForStorageEvent(event.newValue);
+      if (mode) {
+        applyNavigationSyncMode(mode);
+      }
+    };
+    window.addEventListener("storage", syncNavigationModeFromStorage);
+    return () => window.removeEventListener("storage", syncNavigationModeFromStorage);
+  }, [applyNavigationSyncMode]);
 
   useEffect(() => {
     const activeBridgeIds = new Set(bridge.enabledRuntimes.map((runtime) => runtime.id));
@@ -1660,6 +1801,14 @@ export function App() {
         pendingCreatedPaneNotesRef.current[bridgeId] = nextEntries;
       } else {
         delete pendingCreatedPaneNotesRef.current[bridgeId];
+      }
+    }
+
+    for (const [bridgeId, pending] of Object.entries(
+      pendingSharedPaneSelectionsRef.current,
+    )) {
+      if (activeConnectionKeysByBridgeId.get(bridgeId) !== pending.connectionKey) {
+        clearPendingSharedPaneSelection(bridgeId);
       }
     }
 
@@ -1716,7 +1865,7 @@ export function App() {
       }
       return changed ? next : current;
     });
-  }, [bridge.enabledRuntimes]);
+  }, [bridge.enabledRuntimes, clearPendingSharedPaneSelection]);
 
   useEffect(() => {
     if (!error) {
@@ -1958,6 +2107,34 @@ export function App() {
   // Shared navigation mirrors browser focus to Herdr so `active_tab_id` tracks
   // the synchronized view. Independent navigation deliberately leaves Herdr's
   // global focus alone. `tab.focus` also activates the tab's workspace.
+  const publishSharedPaneSelection = (runtime: BridgeRuntime, paneId: string) => {
+    clearPendingSharedPaneSelection(runtime.id);
+    const refreshIfConnectionIsCurrent = () => {
+      if (connectionRefs.current[runtime.id]?.connectionKey === runtime.connectionKey) {
+        void refreshBridgeSnapshot(runtime, false);
+      }
+    };
+    const timeoutId = window.setTimeout(() => {
+      if (
+        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.connectionKey)
+      ) {
+        refreshIfConnectionIsCurrent();
+      }
+    }, SHARED_SELECTION_SETTLE_TIMEOUT_MS);
+    pendingSharedPaneSelectionsRef.current[runtime.id] = {
+      paneId,
+      connectionKey: runtime.connectionKey,
+      timeoutId,
+    };
+    void syncSelectedPane(runtime.httpUrl, paneId).catch(() => {
+      if (
+        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.connectionKey)
+      ) {
+        refreshIfConnectionIsCurrent();
+      }
+    });
+  };
+
   const pushFocus = (runtime: BridgeRuntime | null, tabId?: string, workspaceId?: string) => {
     if (!navigationIsShared || !runtime || runtime.capabilityState !== "ready") {
       return;
@@ -2003,7 +2180,7 @@ export function App() {
     bridge.markBridgeUsed(bridgeId);
     rememberPaneSelection(bridgeId, pane.pane_id, pane.workspace_id);
     if (navigationIsShared && runtime.capabilityState === "ready") {
-      void syncSelectedPane(runtime.httpUrl, pane.pane_id).catch(() => {});
+      publishSharedPaneSelection(runtime, pane.pane_id);
     }
     pushFocus(runtime, pane.tab_id, pane.workspace_id);
     if (isCompactLayout) {
@@ -2054,7 +2231,7 @@ export function App() {
         const pane = bridgeSnapshot.panes.find((item) => item.pane_id === paneId);
         rememberPaneSelection(bridgeId, paneId, pane?.workspace_id ?? workspaceId);
         if (navigationIsShared && runtime.capabilityState === "ready") {
-          void syncSelectedPane(runtime.httpUrl, paneId).catch(() => {});
+          publishSharedPaneSelection(runtime, paneId);
         }
         pushFocus(runtime, pane?.tab_id, workspaceId);
         return;
@@ -2529,7 +2706,10 @@ export function App() {
       const closeTabShortcut = isCloseTabShortcut(event);
       const newTabShortcut = isNewTabShortcut(event);
       const splitDirection = splitSupported ? splitShortcutDirection(event) : null;
-      const paneFocusDirection = paneFocusSupported ? paneFocusShortcutDirection(event) : null;
+      const paneFocusDirection =
+        paneFocusSupported || !navigationIsShared
+          ? paneFocusShortcutDirection(event)
+          : null;
       const paneCycleStep = paneCycleShortcutStep(event);
       if (
         (!navigationShortcut &&
@@ -2549,7 +2729,22 @@ export function App() {
       }
 
       if (paneFocusDirection) {
-        if (!selectedPane || !selectedCommands) {
+        if (!selectedPane || !selectedRuntime) {
+          return;
+        }
+        if (!navigationIsShared) {
+          const nextPane = snapshot
+            ? chooseDirectionalPane(snapshot, selectedPane.pane_id, paneFocusDirection)
+            : null;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!nextPane) {
+            return;
+          }
+          focusPane(selectedRuntime.id, nextPane);
+          return;
+        }
+        if (!selectedCommands) {
           return;
         }
         event.preventDefault();
@@ -2756,6 +2951,7 @@ export function App() {
     launchTarget,
     menu,
     multiHostSpaceSelection,
+    navigationIsShared,
     paneFocusSupported,
     pinnedAgentKeys,
     scope,
@@ -2804,7 +3000,7 @@ export function App() {
       if (currentRef.resyncBarrierGeneration > refreshGeneration) {
         return refreshBridgeSnapshot(runtime, false);
       }
-      const patched = replayActivityMessages(next, currentRef.activityLog, refreshGeneration);
+      const patched = applySnapshotOverlays(next, currentRef, refreshGeneration);
       currentRef.snapshot = patched;
       setConnectionStates((current) => ({
         ...current,
@@ -3065,7 +3261,7 @@ export function App() {
       if (!ref || !isConnectionResultCurrent(ref.connectionKey, requestConnectionKey)) {
         return false;
       }
-      const patched = replayActivityMessages(next, ref.activityLog, refreshGeneration);
+      const patched = applySnapshotOverlays(next, ref, refreshGeneration);
       ref.snapshot = patched;
       setConnectionStates((current) => ({
         ...current,
@@ -3082,7 +3278,7 @@ export function App() {
           setSelectedBridgeId(runtime.id);
           rememberPaneSelection(runtime.id, created.pane_id, created.workspace_id);
           if (navigationIsShared) {
-            void syncSelectedPane(runtime.httpUrl, created.pane_id).catch(() => {});
+            publishSharedPaneSelection(runtime, created.pane_id);
           }
           if (isCompactLayout) {
             openMobileDetail();
@@ -3307,7 +3503,7 @@ export function App() {
           followSharedSelection={navigationIsShared}
           connectionRefs={connectionRefs}
           setConnectionStates={setConnectionStates}
-          onPaneSelection={rememberPaneSelection}
+          onPaneSelection={applySharedPaneSelection}
           onAgentActivityChanged={refreshAgentActivityForBridge}
           onAgentPinsChanged={refreshAgentPinsForBridge}
           onNotesChanged={refreshNotesForBridge}
@@ -3870,6 +4066,7 @@ export function App() {
 }
 
 const SNAPSHOT_REFRESH_INTERVAL_MS = 10000;
+const SHARED_SELECTION_SETTLE_TIMEOUT_MS = 2000;
 const NOTES_REFRESH_INTERVAL_MS = 15000;
 const MAX_PENDING_CREATED_PANE_NOTES = 32;
 const NOTE_DRAFT_STORAGE_PREFIX = "herdr-web:note-draft:v1:";
@@ -4007,7 +4204,7 @@ export function BridgeConnectionController({
         if (!currentRef || currentRef.connectionKey !== requestConnectionKey) {
           return;
         }
-        const patched = replayActivityMessages(next, currentRef.activityLog, refreshGeneration);
+        const patched = applySnapshotOverlays(next, currentRef, refreshGeneration);
         currentRef.snapshot = patched;
         setConnectionStates((current) => ({
           ...current,
@@ -4088,14 +4285,38 @@ export function BridgeConnectionController({
         }
         const paneId = selectionPaneId(event);
         if (paneId) {
-          if (!followSharedSelectionRef.current) {
-            refresh();
+          const currentRef = connectionRefs.current[runtime.id];
+          if (!currentRef) {
             return;
           }
-          const pane = connectionRefs.current[runtime.id]?.snapshot?.panes.find(
+          currentRef.activityGeneration += 1;
+          currentRef.resyncBarrierGeneration = currentRef.activityGeneration;
+          currentRef.sharedSelectionOverride = {
+            paneId,
+            expiresAtMs: Date.now() + SHARED_SELECTION_SETTLE_TIMEOUT_MS,
+          };
+          const currentSnapshot = currentRef.snapshot;
+          if (currentSnapshot) {
+            const patched = {
+              ...currentSnapshot,
+              selected_pane_id: paneId,
+            };
+            currentRef.snapshot = patched;
+            setConnectionStates((current) => ({
+              ...current,
+              [runtime.id]: {
+                connectionKey: requestConnectionKey,
+                snapshot: patched,
+                loadState: "ready",
+              },
+            }));
+          }
+          const pane = currentSnapshot?.panes.find(
             (item) => item.pane_id === paneId,
           );
-          onPaneSelection(runtime.id, paneId, pane?.workspace_id);
+          if (followSharedSelectionRef.current) {
+            onPaneSelection(runtime.id, paneId, pane?.workspace_id);
+          }
           refresh();
           return;
         }
@@ -4149,6 +4370,29 @@ export function stableBridgeRefreshOffsetMs(bridgeId: BridgeId) {
   return hash % SNAPSHOT_REFRESH_INTERVAL_MS;
 }
 
+export function applySnapshotOverlays(
+  snapshot: Snapshot,
+  ref: BridgeConnectionRef,
+  refreshGeneration: number,
+) {
+  const patched = replayActivityMessages(snapshot, ref.activityLog, refreshGeneration);
+  const selectionOverride = ref.sharedSelectionOverride;
+  if (!selectionOverride) {
+    return patched;
+  }
+  if (
+    patched.selected_pane_id === selectionOverride.paneId ||
+    Date.now() >= selectionOverride.expiresAtMs
+  ) {
+    ref.sharedSelectionOverride = null;
+    return patched;
+  }
+  return {
+    ...patched,
+    selected_pane_id: selectionOverride.paneId,
+  };
+}
+
 function ensureBridgeConnectionRef(
   connectionRefs: MutableRefObject<Record<string, BridgeConnectionRef>>,
   runtime: BridgeRuntime,
@@ -4163,6 +4407,7 @@ function ensureBridgeConnectionRef(
     activityGeneration: 0,
     resyncBarrierGeneration: 0,
     activityLog: [],
+    sharedSelectionOverride: null,
   };
   connectionRefs.current[runtime.id] = next;
   return next;

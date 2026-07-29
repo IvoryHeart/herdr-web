@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentSubtitle,
+  applySnapshotOverlays,
   buildVisibleAgentPaneEntries,
   buildVisibleScopedNotes,
   canAddNoteFromPaneMenu,
@@ -28,7 +29,7 @@ import {
   sortScopedAgentPanes,
   stableBridgeRefreshOffsetMs,
 } from "./App";
-import type { BridgeConnectionView } from "./App";
+import type { BridgeConnectionRef, BridgeConnectionView } from "./App";
 import type { BridgeRuntime } from "./bridge";
 import { agentActivityKey } from "./agentActivity";
 import {
@@ -45,6 +46,46 @@ describe("App connection guards", () => {
 
     expect(currentConnectionSnapshot(snapshot, "same-origin", "same-origin")).toBe(snapshot);
     expect(currentConnectionSnapshot(snapshot, "configured:a", "configured:b")).toBeNull();
+  });
+
+  it("keeps a recent selection event over a lagging snapshot until the snapshot catches up", () => {
+    const data = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [
+        pane("pane-a", "workspace-a", "tab-a"),
+        pane("pane-b", "workspace-a", "tab-a"),
+      ],
+    );
+    const ref: BridgeConnectionRef = {
+      connectionKey: "bridge-a",
+      snapshot: data,
+      activityGeneration: 1,
+      resyncBarrierGeneration: 1,
+      activityLog: [],
+      sharedSelectionOverride: {
+        paneId: "pane-b",
+        expiresAtMs: Date.now() + 2000,
+      },
+    };
+
+    expect(
+      applySnapshotOverlays({ ...data, selected_pane_id: "pane-a" }, ref, 1)
+        .selected_pane_id,
+    ).toBe("pane-b");
+    expect(ref.sharedSelectionOverride?.paneId).toBe("pane-b");
+
+    expect(
+      applySnapshotOverlays({ ...data, selected_pane_id: "pane-b" }, ref, 1)
+        .selected_pane_id,
+    ).toBe("pane-b");
+    expect(ref.sharedSelectionOverride).toBeNull();
+
+    ref.sharedSelectionOverride = { paneId: "pane-b", expiresAtMs: 0 };
+    expect(
+      applySnapshotOverlays({ ...data, selected_pane_id: "pane-a" }, ref, 1)
+        .selected_pane_id,
+    ).toBe("pane-a");
+    expect(ref.sharedSelectionOverride).toBeNull();
   });
 
   it("rejects async results from stale backend connections", () => {

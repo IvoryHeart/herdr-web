@@ -27,11 +27,20 @@
 
 ### Changed
 
+- Store the Sync navigation setting browser-wide while keeping sync-off pane selections only in
+  memory. The app no longer creates per-tab navigation storage records.
+  [PR #43](https://github.com/kcosr/herdr-web/pull/43)
 - Simplified agent-row metadata by removing generic status text already communicated by the status
   indicator and badge, while retaining custom status text and bridge-defined labels.
   [PR #41](https://github.com/kcosr/herdr-web/pull/41)
 
 ### Fixed
+
+- Fixed client-local navigation synchronization across reloads, reconnects, lagging snapshots, and
+  rapid multi-client selection races. Sync-off split navigation now stays local, and independent
+  clients no longer rewrite shared navigation persistence. After a bridge restart, the focused
+  Herdr pane now seeds shared navigation so synced clients immediately converge.
+  [PR #43](https://github.com/kcosr/herdr-web/pull/43)
 
 ### Removed
 
