@@ -4311,37 +4311,39 @@ export function buildVisibleTabWorkspaceGroups(
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
   activeOnly = false,
 ): ScopedTabWorkspace[] {
-  return scopedWorkspaces.map((entry) => {
-    const tabs = sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
-      .map((tab) => {
-        const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
-        const pinnedPanes = pinnedOnly
-          ? panes.filter((pane) => isAgentPinned(pinnedAgentKeys, entry.bridgeId, pane.pane_id))
-          : panes;
-        return {
-          tab,
-          panes:
-            agentFeaturesInTabs && activeOnly
-              ? pinnedPanes.filter(
-                  (pane) => isAgentPane(pane) && isActiveAgentStatus(pane.agent_status),
-                )
-              : pinnedPanes,
-        };
-      })
-      .filter((group) => group.panes.length > 0);
-    if (!agentFeaturesInTabs) {
-      return { ...entry, tabs };
-    }
-    const sorted = sortScopedTabEntriesByAgents(
-      tabs.map(({ tab, panes }) => ({ ...entry, tab, panes })),
-      agentSort,
-      agentActivityTransitions,
-    );
-    return {
-      ...entry,
-      tabs: sorted.map(({ tab, panes }) => ({ tab, panes })),
-    };
-  });
+  return scopedWorkspaces
+    .map((entry) => {
+      const tabs = sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
+        .map((tab) => {
+          const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
+          const pinnedPanes = pinnedOnly
+            ? panes.filter((pane) => isAgentPinned(pinnedAgentKeys, entry.bridgeId, pane.pane_id))
+            : panes;
+          return {
+            tab,
+            panes:
+              agentFeaturesInTabs && activeOnly
+                ? pinnedPanes.filter(
+                    (pane) => isAgentPane(pane) && isActiveAgentStatus(pane.agent_status),
+                  )
+                : pinnedPanes,
+          };
+        })
+        .filter((group) => group.panes.length > 0);
+      if (!agentFeaturesInTabs) {
+        return { ...entry, tabs };
+      }
+      const sorted = sortScopedTabEntriesByAgents(
+        tabs.map(({ tab, panes }) => ({ ...entry, tab, panes })),
+        agentSort,
+        agentActivityTransitions,
+      );
+      return {
+        ...entry,
+        tabs: sorted.map(({ tab, panes }) => ({ tab, panes })),
+      };
+    })
+    .filter((group) => group.tabs.length > 0);
 }
 
 export function buildVisibleTabEntries(
@@ -5375,6 +5377,7 @@ function Switcher({
         const paneRows = tabPanes.map((pane) => {
           const index = paneIndex++;
           const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
+          const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
           const active =
             group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id;
           const onSelect = () => onSelectPane(group.bridgeId, pane);
@@ -5387,9 +5390,9 @@ function Switcher({
               x,
               y,
               undefined,
-              "pane",
+              renderAsAgent ? "agent" : "pane",
             );
-          if (shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs)) {
+          if (renderAsAgent) {
             return (
               <AgentRow
                 key={`${group.bridgeId}:${pane.pane_id}`}

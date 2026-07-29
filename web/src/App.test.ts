@@ -8,6 +8,7 @@ import {
   noteDraftStorageKey,
   buildVisibleScopedWorkspaces,
   buildVisibleTabEntries,
+  buildVisibleTabWorkspaceGroups,
   isInFlightNoteSaveVisible,
   menuItems,
   nextVisibleAgentPaneEntry,
@@ -807,6 +808,76 @@ describe("App multi-bridge helpers", () => {
         true,
       ).flatMap((entry) => entry.panes.map((paneInfo) => paneInfo.pane_id)),
     ).toEqual(["working", "blocked"]);
+  });
+
+  it("sorts agent tabs within workspace boundaries for workspace grouping", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1), workspace("workspace-b", 2)],
+      [
+        pane("shell-a", "workspace-a", "tab-shell-a", "unknown"),
+        pane("blocked", "workspace-a", "tab-blocked", "blocked"),
+        pane("shell-b", "workspace-b", "tab-shell-b", "unknown"),
+        pane("working", "workspace-b", "tab-working", "working"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "workspace",
+        new Set(),
+        false,
+        true,
+        "attention",
+      ).map((entry) => `${entry.workspace.workspace_id}:${entry.tab.tab_id}`),
+    ).toEqual([
+      "workspace-a:tab-blocked",
+      "workspace-a:tab-shell-a",
+      "workspace-b:tab-working",
+      "workspace-b:tab-shell-b",
+    ]);
+  });
+
+  it("omits workspace groups emptied by the Tabs active-only filter", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1), workspace("workspace-b", 2)],
+      [
+        pane("idle", "workspace-a", "tab-idle", "idle"),
+        pane("blocked", "workspace-b", "tab-blocked", "blocked"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleTabWorkspaceGroups(
+        scopedWorkspaces,
+        new Set(),
+        false,
+        true,
+        "workspace",
+        new Map(),
+        true,
+      ).map((group) => group.workspace.workspace_id),
+    ).toEqual(["workspace-b"]);
   });
 
   it("sorts tabs by their most recently active agent pane", () => {
