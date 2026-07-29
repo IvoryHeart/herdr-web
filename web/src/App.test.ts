@@ -17,6 +17,9 @@ import {
   paneNoteListContains,
   shouldBlockDirtyNoteAutosave,
   shouldCollapseHostScope,
+  shouldRenderAgentRowInTabs,
+  shouldShowSidebarSort,
+  shouldShowTabDivider,
   shouldShowLastStatusChangeSort,
   sortScopedAgentPanes,
   stableBridgeRefreshOffsetMs,
@@ -73,6 +76,32 @@ describe("App multi-bridge helpers", () => {
     expect(first).toBeGreaterThanOrEqual(0);
     expect(first).toBeLessThan(10000);
     expect(stableBridgeRefreshOffsetMs("bridge-b")).toBeLessThan(10000);
+  });
+
+  it("keeps ungrouped tab lists flat even for multi-tab and split-pane workspaces", () => {
+    expect(shouldShowTabDivider("none", 3, 2)).toBe(false);
+    expect(shouldShowTabDivider("workspace", 3, 1)).toBe(true);
+    expect(shouldShowTabDivider("host", 1, 2)).toBe(true);
+    expect(shouldShowTabDivider("hostWorkspace", 1, 1)).toBe(false);
+  });
+
+  it("uses the Agents classifier only when agent rendering in Tabs is enabled", () => {
+    const agentPane = {
+      ...pane("agent", "workspace-a", "tab-a", "unknown"),
+      agent: "codex",
+    };
+    expect(shouldRenderAgentRowInTabs(agentPane, true)).toBe(true);
+    expect(shouldRenderAgentRowInTabs(agentPane, false)).toBe(false);
+    expect(
+      shouldRenderAgentRowInTabs(pane("shell", "workspace-a", "tab-a", "unknown"), true),
+    ).toBe(false);
+  });
+
+  it("shows agent sort options in Tabs only when agent features are enabled", () => {
+    expect(shouldShowSidebarSort("agents", false)).toBe(true);
+    expect(shouldShowSidebarSort("tabs", true)).toBe(true);
+    expect(shouldShowSidebarSort("tabs", false)).toBe(false);
+    expect(shouldShowSidebarSort("notes", true)).toBe(false);
   });
 
   it("sorts scoped agents by bridge display order, workspace, tab, then scoped pane id", () => {
@@ -664,6 +693,92 @@ describe("App multi-bridge helpers", () => {
         (item) => `${item.bridgeId}:${item.tab.tab_id}`,
       ),
     ).toEqual(["bridge-a:tab-a", "bridge-b:tab-b"]);
+  });
+
+  it("sorts agent tabs first by attention while keeping plain tabs stable at the bottom", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [
+        pane("shell-a", "workspace-a", "tab-shell-a", "unknown"),
+        pane("idle", "workspace-a", "tab-idle", "idle"),
+        pane("blocked", "workspace-a", "tab-blocked", "blocked"),
+        pane("shell-b", "workspace-a", "tab-shell-b", "unknown"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "none",
+        new Set(),
+        false,
+        true,
+        "attention",
+      ).map((entry) => entry.tab.tab_id),
+    ).toEqual(["tab-blocked", "tab-idle", "tab-shell-a", "tab-shell-b"]);
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "none",
+        new Set(),
+        false,
+        false,
+        "attention",
+      ).map((entry) => entry.tab.tab_id),
+    ).toEqual(["tab-shell-a", "tab-idle", "tab-blocked", "tab-shell-b"]);
+  });
+
+  it("sorts tabs by their most recently active agent pane", () => {
+    const snapshot = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [
+        pane("agent-a-old", "workspace-a", "tab-a", "idle"),
+        pane("agent-a-new", "workspace-a", "tab-a", "idle"),
+        pane("agent-b", "workspace-a", "tab-b", "idle"),
+        pane("shell", "workspace-a", "tab-shell", "unknown"),
+      ],
+    );
+    const bridgeViews = [bridgeView("bridge-a", snapshot)];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "selected",
+      "all",
+      null,
+      {},
+    );
+    const activity = new Map([
+      [agentActivityKey("bridge-a", "agent-a-old", "agent-a-old-terminal"), 100],
+      [agentActivityKey("bridge-a", "agent-a-new", "agent-a-new-terminal"), 500],
+      [agentActivityKey("bridge-a", "agent-b", "agent-b-terminal"), 300],
+    ]);
+
+    expect(
+      buildVisibleTabEntries(
+        scopedWorkspaces,
+        bridgeViews,
+        "selected",
+        "none",
+        new Set(),
+        false,
+        true,
+        "lastStatusChange",
+        activity,
+      ).map((entry) => entry.tab.tab_id),
+    ).toEqual(["tab-a", "tab-b", "tab-shell"]);
   });
 
   it("filters tab entries to pinned panes", () => {

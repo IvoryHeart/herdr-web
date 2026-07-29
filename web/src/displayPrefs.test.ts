@@ -3,6 +3,7 @@ import {
   DEFAULT_CONTENT_INSET_BOTTOM_PX,
   DEFAULT_CONTENT_INSET_TOP_PX,
   DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
+  DEFAULT_AGENT_FEATURES_IN_TABS,
   MAX_CONTENT_INSET_BOTTOM_PX,
   MAX_CONTENT_INSET_TOP_PX,
   MAX_MOBILE_CONTROLS_SCALE_PERCENT,
@@ -10,6 +11,7 @@ import {
   parseContentInsetBottomPx,
   parseContentInsetTopPx,
   parseMobileControlsScalePercent,
+  parseAgentFeaturesInTabs,
 } from "./displayPrefs";
 
 describe("display preferences", () => {
@@ -40,5 +42,13 @@ describe("display preferences", () => {
   it("falls back for invalid mobile controls scale values", () => {
     expect(parseMobileControlsScalePercent(null)).toBe(DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT);
     expect(parseMobileControlsScalePercent("100")).toBe(DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT);
+  });
+
+  it("parses the Tabs agent features preference and defaults it on", () => {
+    expect(parseAgentFeaturesInTabs(true)).toBe(true);
+    expect(parseAgentFeaturesInTabs(false)).toBe(false);
+    expect(parseAgentFeaturesInTabs(undefined)).toBe(DEFAULT_AGENT_FEATURES_IN_TABS);
+    expect(parseAgentFeaturesInTabs("false")).toBe(DEFAULT_AGENT_FEATURES_IN_TABS);
+    expect(parseAgentFeaturesInTabs(undefined, false)).toBe(false);
   });
 });

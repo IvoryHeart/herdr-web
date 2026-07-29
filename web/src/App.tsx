@@ -68,9 +68,11 @@ import {
   DEFAULT_CONTENT_INSET_BOTTOM_PX,
   DEFAULT_CONTENT_INSET_TOP_PX,
   DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
+  DEFAULT_AGENT_FEATURES_IN_TABS,
   parseContentInsetBottomPx,
   parseContentInsetTopPx,
   parseMobileControlsScalePercent,
+  parseAgentFeaturesInTabs,
 } from "./displayPrefs";
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
@@ -150,6 +152,7 @@ import {
   isAttention,
   isLoud,
   paneMeta,
+  paneListSubtitle,
   paneTitle,
   sortPanesForTab,
   sortTabsForWorkspace,
@@ -318,6 +321,7 @@ type DisplayPrefs = {
   agentGroup: AgentGroup;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
+  agentFeaturesInTabs: boolean;
   sidebarWidth: number;
   notesPanelWidth: number;
   notesListPaneWidth: number;
@@ -373,6 +377,7 @@ function readDisplayPrefs(): DisplayPrefs {
     agentGroup: "none",
     agentPinnedOnly: false,
     agentActiveOnly: false,
+    agentFeaturesInTabs: DEFAULT_AGENT_FEATURES_IN_TABS,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     notesPanelWidth: DEFAULT_NOTES_PANEL_WIDTH,
     notesListPaneWidth: DEFAULT_NOTES_LIST_PANE_WIDTH,
@@ -477,6 +482,10 @@ function parseDisplayPrefsValue(
       typeof parsed.agentActiveOnly === "boolean"
         ? parsed.agentActiveOnly
         : fallback.agentActiveOnly,
+    agentFeaturesInTabs: parseAgentFeaturesInTabs(
+      parsed.agentFeaturesInTabs,
+      fallback.agentFeaturesInTabs,
+    ),
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth:
@@ -769,6 +778,7 @@ export function App() {
   const [agentGroup, setAgentGroup] = useState<AgentGroup>(initialPrefs.agentGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
+  const [agentFeaturesInTabs, setAgentFeaturesInTabs] = useState(initialPrefs.agentFeaturesInTabs);
   const [sidebarWidth, setSidebarWidth] = useState(initialPrefs.sidebarWidth);
   const [notesPanelWidth, setNotesPanelWidth] = useState(initialPrefs.notesPanelWidth);
   const [notesListPaneWidth, setNotesListPaneWidth] = useState(initialPrefs.notesListPaneWidth);
@@ -871,6 +881,7 @@ export function App() {
       setAgentGroup(prefs.agentGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
+      setAgentFeaturesInTabs(prefs.agentFeaturesInTabs);
       setSidebarWidth(prefs.sidebarWidth);
       setNotesPanelWidth(prefs.notesPanelWidth);
       setNotesListPaneWidth(prefs.notesListPaneWidth);
@@ -1352,6 +1363,7 @@ export function App() {
       agentGroup,
       agentPinnedOnly,
       agentActiveOnly,
+      agentFeaturesInTabs,
       sidebarWidth,
       notesPanelWidth,
       notesListPaneWidth,
@@ -1387,6 +1399,7 @@ export function App() {
     agentGroup,
     agentPinnedOnly,
     agentActiveOnly,
+    agentFeaturesInTabs,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -2587,6 +2600,9 @@ export function App() {
         agentGroup,
         pinnedAgentKeys,
         sidebarView === "tabs" && effectiveAgentPinnedOnly,
+        sidebarView === "tabs" && agentFeaturesInTabs,
+        agentSort,
+        agentActivityTransitions,
       );
       const tabs = tabEntries;
       if (tabs.length === 0) {
@@ -2619,6 +2635,7 @@ export function App() {
     activeWorkspacesByBridgeId,
     agentActivityTransitions,
     agentActiveOnly,
+    agentFeaturesInTabs,
     effectiveAgentPinnedOnly,
     agentGroup,
     agentSort,
@@ -3205,6 +3222,7 @@ export function App() {
           pinnedAgentKeys={pinnedAgentKeys}
           agentPinnedOnly={agentPinnedOnly}
           agentActiveOnly={agentActiveOnly}
+          agentFeaturesInTabs={agentFeaturesInTabs}
           agentSort={agentSort}
           agentGroup={agentGroup}
           activeSpace={activeSpace}
@@ -3692,6 +3710,8 @@ export function App() {
           showMobileTerminalSettings={isTouchInput}
           notesEnabled={notesEnabled}
           onNotesEnabled={setNotesEnabled}
+          agentFeaturesInTabs={agentFeaturesInTabs}
+          onAgentFeaturesInTabs={setAgentFeaturesInTabs}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
           terminalInputTransport={terminalInputTransport}
@@ -4285,10 +4305,12 @@ export function buildVisibleTabWorkspaceGroups(
   scopedWorkspaces: ScopedWorkspace[],
   pinnedAgentKeys: ReadonlySet<string> = EMPTY_AGENT_PIN_KEYS,
   pinnedOnly = false,
+  agentFeaturesInTabs = false,
+  agentSort: AgentSort = "workspace",
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
 ): ScopedTabWorkspace[] {
-  return scopedWorkspaces.map((entry) => ({
-    ...entry,
-    tabs: sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
+  return scopedWorkspaces.map((entry) => {
+    const tabs = sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
       .map((tab) => {
         const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
         return {
@@ -4298,8 +4320,20 @@ export function buildVisibleTabWorkspaceGroups(
             : panes,
         };
       })
-      .filter((group) => group.panes.length > 0),
-  }));
+      .filter((group) => group.panes.length > 0);
+    if (!agentFeaturesInTabs) {
+      return { ...entry, tabs };
+    }
+    const sorted = sortScopedTabEntriesByAgents(
+      tabs.map(({ tab, panes }) => ({ ...entry, tab, panes })),
+      agentSort,
+      agentActivityTransitions,
+    );
+    return {
+      ...entry,
+      tabs: sorted.map(({ tab, panes }) => ({ tab, panes })),
+    };
+  });
 }
 
 export function buildVisibleTabEntries(
@@ -4309,10 +4343,27 @@ export function buildVisibleTabEntries(
   agentGroup: AgentGroup,
   pinnedAgentKeys: ReadonlySet<string> = EMPTY_AGENT_PIN_KEYS,
   pinnedOnly = false,
+  agentFeaturesInTabs = false,
+  agentSort: AgentSort = "workspace",
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
 ): ScopedTabEntry[] {
-  const spaceGroups = buildVisibleTabWorkspaceGroups(scopedWorkspaces, pinnedAgentKeys, pinnedOnly);
+  const spaceGroups = buildVisibleTabWorkspaceGroups(
+    scopedWorkspaces,
+    pinnedAgentKeys,
+    pinnedOnly,
+    agentFeaturesInTabs,
+    agentSort,
+    agentActivityTransitions,
+  );
   const flattenGroup = (group: ScopedTabWorkspace): ScopedTabEntry[] =>
     group.tabs.map(({ tab, panes }) => ({ ...group, tab, panes }));
+  if (agentFeaturesInTabs && agentGroup === "none") {
+    return sortScopedTabEntriesByAgents(
+      spaceGroups.flatMap(flattenGroup),
+      agentSort,
+      agentActivityTransitions,
+    );
+  }
   if (agentGroup === "host" || (agentGroup === "hostWorkspace" && hostScope === "all")) {
     return bridgeViews.flatMap((view) =>
       spaceGroups
@@ -4321,6 +4372,70 @@ export function buildVisibleTabEntries(
     );
   }
   return spaceGroups.flatMap(flattenGroup);
+}
+
+export function sortScopedTabEntriesByAgents(
+  entries: ScopedTabEntry[],
+  agentSort: AgentSort,
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+) {
+  if (agentSort === "workspace") {
+    return [...entries];
+  }
+  const ranked = entries.map((entry, index) => {
+    const agents = entry.panes.filter(isAgentPane);
+    let sortRank: number | undefined;
+    if (agentSort === "attention" || agentSort === "status") {
+      const order = agentSort === "attention" ? AGENT_ATTENTION_ORDER : AGENT_STATUS_ORDER;
+      sortRank =
+        agents.length > 0
+          ? Math.min(...agents.map((pane) => order[pane.agent_status]))
+          : undefined;
+    } else {
+      sortRank = agents.reduce<number | undefined>((latest, pane) => {
+        const transition = agentActivityTransitions.get(
+          agentActivityKey(entry.bridgeId, pane.pane_id, pane.terminal_id),
+        );
+        return transition === undefined || (latest !== undefined && latest >= transition)
+          ? latest
+          : transition;
+      }, undefined);
+    }
+    return { entry, index, agents, sortRank };
+  });
+  ranked.sort((a, b) => {
+    const agentPresence = Number(b.agents.length > 0) - Number(a.agents.length > 0);
+    if (agentPresence !== 0) {
+      return agentPresence;
+    }
+    if (a.agents.length === 0) {
+      return a.index - b.index;
+    }
+    if (a.sortRank !== undefined || b.sortRank !== undefined) {
+      if (a.sortRank === undefined) {
+        return 1;
+      }
+      if (b.sortRank === undefined) {
+        return -1;
+      }
+      if (a.sortRank !== b.sortRank) {
+        if (agentSort === "lastStatusChange") {
+          return b.sortRank - a.sortRank;
+        }
+        return a.sortRank - b.sortRank;
+      }
+    }
+    return a.index - b.index;
+  });
+  return ranked.map(({ entry }) => entry);
+}
+
+export function shouldShowTabDivider(
+  agentGroup: AgentGroup,
+  workspaceTabCount: number,
+  paneCount: number,
+) {
+  return agentGroup !== "none" && (workspaceTabCount > 1 || paneCount > 1);
 }
 
 export function buildVisibleScopedNotes(
@@ -4967,6 +5082,7 @@ function Switcher({
   pinnedAgentKeys,
   agentPinnedOnly,
   agentActiveOnly,
+  agentFeaturesInTabs,
   agentSort,
   agentGroup,
   activeSpace,
@@ -5013,6 +5129,7 @@ function Switcher({
   pinnedAgentKeys: ReadonlySet<string>;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
+  agentFeaturesInTabs: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   activeSpace: WorkspaceInfo | null;
@@ -5156,8 +5273,34 @@ function Switcher({
         scopedWorkspaces,
         pinnedAgentKeys,
         sidebarView === "tabs" && effectiveAgentPinnedOnly,
+        sidebarView === "tabs" && agentFeaturesInTabs,
+        agentSort,
+        agentActivityTransitions,
       ),
-    [effectiveAgentPinnedOnly, pinnedAgentKeys, scopedWorkspaces, sidebarView],
+    [
+      agentActivityTransitions,
+      agentFeaturesInTabs,
+      agentSort,
+      effectiveAgentPinnedOnly,
+      pinnedAgentKeys,
+      scopedWorkspaces,
+      sidebarView,
+    ],
+  );
+  const flatTabEntries = useMemo(
+    () =>
+      sortScopedTabEntriesByAgents(
+        spaceGroups.flatMap((group) =>
+          group.tabs.map(({ tab, panes: tabPanes }) => ({
+            ...group,
+            tab,
+            panes: tabPanes,
+          })),
+        ),
+        agentFeaturesInTabs ? agentSort : "workspace",
+        agentActivityTransitions,
+      ),
+    [agentActivityTransitions, agentFeaturesInTabs, agentSort, spaceGroups],
   );
   const spaceCount = hostBridgeViews.reduce(
     (count, view) => count + (view.snapshot?.workspaces.length ?? 0),
@@ -5167,7 +5310,11 @@ function Switcher({
   const showGroupControl =
     sidebarView !== "notes" &&
     (sidebarView === "agents" || hostScope === "all" || scope === "all" || agentGroup !== "none");
-  const showOptionsControl = sidebarView !== "notes" && (sidebarView === "agents" || showGroupControl);
+  const showOptionsControl =
+    sidebarView !== "notes" &&
+    (sidebarView === "agents" ||
+      showGroupControl ||
+      (sidebarView === "tabs" && agentFeaturesInTabs));
   const canCreateTabFromHeader = Boolean(
     sidebarView === "tabs" &&
       scope === "space" &&
@@ -5191,10 +5338,10 @@ function Switcher({
   const renderTabWorkspaceGroup = (
     group: ScopedTabWorkspace,
     showWorkspaceHeader: boolean,
-    showContextInTabLabel: boolean,
     showBridgeInWorkspaceHeader = showGroupedHostContext,
+    key = `${group.bridgeId}:${group.workspace.workspace_id}`,
   ) => (
-    <Fragment key={`${group.bridgeId}:${group.workspace.workspace_id}`}>
+    <Fragment key={key}>
       {showWorkspaceHeader ? (
         <GroupHeader
           label={
@@ -5208,14 +5355,66 @@ function Switcher({
       ) : null}
       {group.tabs.map(({ tab, panes: tabPanes }) => {
         const tabLabel = displayTabLabel(tab, group.snapshot.panes);
-        const label = showContextInTabLabel
-          ? `${group.bridgeLabel} / ${group.workspace.label} / ${tabLabel}`
-          : tabLabel;
+        const paneRows = tabPanes.map((pane) => {
+          const index = paneIndex++;
+          const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
+          const active =
+            group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id;
+          const onSelect = () => onSelectPane(group.bridgeId, pane);
+          const onPaneMenu = (x: number, y: number) =>
+            onScopedMenu(
+              "pane",
+              group.bridgeId,
+              pane.pane_id,
+              paneTitle(pane),
+              x,
+              y,
+              undefined,
+              "pane",
+            );
+          if (shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs)) {
+            return (
+              <AgentRow
+                key={`${group.bridgeId}:${pane.pane_id}`}
+                index={index}
+                pane={pane}
+                workspace={group.workspace}
+                tabLabel={tabLabel}
+                bridgeLabel={
+                  agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
+                }
+                pinned={pinned}
+                active={active}
+                onSelect={onSelect}
+                onMenu={onPaneMenu}
+              />
+            );
+          }
+          return (
+            <PaneRow
+              key={`${group.bridgeId}:${pane.pane_id}`}
+              index={index}
+              pane={pane}
+              workspaceLabel={agentGroup === "none" ? group.workspace.label : undefined}
+              tabLabel={agentGroup === "none" ? tabLabel : undefined}
+              bridgeLabel={
+                agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
+              }
+              pinned={pinned}
+              active={active}
+              onSelect={onSelect}
+              onMenu={onPaneMenu}
+            />
+          );
+        });
+        if (agentGroup === "none") {
+          return <Fragment key={`${group.bridgeId}:${tab.tab_id}`}>{paneRows}</Fragment>;
+        }
         return (
           <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
-            {showContextInTabLabel || group.workspace.tab_count > 1 || tabPanes.length > 1 ? (
+            {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
               <TabDivider
-                label={label}
+                label={tabLabel}
                 count={tabPanes.length}
                 onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
                 onMenu={(x, y) =>
@@ -5231,28 +5430,7 @@ function Switcher({
                 }
               />
             ) : null}
-            {tabPanes.map((pane) => (
-              <PaneRow
-                key={`${group.bridgeId}:${pane.pane_id}`}
-                index={paneIndex++}
-                pane={pane}
-                pinned={isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id)}
-                active={group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id}
-                onSelect={() => onSelectPane(group.bridgeId, pane)}
-                onMenu={(x, y) =>
-                  onScopedMenu(
-                    "pane",
-                    group.bridgeId,
-                    pane.pane_id,
-                    paneTitle(pane),
-                    x,
-                    y,
-                    undefined,
-                    "pane",
-                  )
-                }
-              />
-            ))}
+            {paneRows}
           </div>
         );
       })}
@@ -5270,19 +5448,26 @@ function Switcher({
         return (
           <Fragment key={view.runtime.id}>
             <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-            {groups.map((group) => renderTabWorkspaceGroup(group, true, false, false))}
+            {groups.map((group) => renderTabWorkspaceGroup(group, true, false))}
           </Fragment>
         );
       });
     }
 
     if (agentGroup === "workspace" || agentGroup === "hostWorkspace") {
-      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true, false));
+      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true));
     }
 
-    const showContextInTabLabel = hostScope === "all" || scope === "all";
-    return spaceGroups.map((group) =>
-      renderTabWorkspaceGroup(group, false, showContextInTabLabel),
+    return flatTabEntries.map((entry) =>
+      renderTabWorkspaceGroup(
+        {
+          ...entry,
+          tabs: [{ tab: entry.tab, panes: entry.panes }],
+        },
+        false,
+        showGroupedHostContext,
+        `${entry.bridgeId}:${entry.tab.tab_id}`,
+      ),
     );
   };
   const renderDisconnectedBridgeRows = () =>
@@ -5771,6 +5956,7 @@ function Switcher({
           x={optionsMenu.x}
           y={optionsMenu.y}
           sidebarView={sidebarView}
+          showSort={shouldShowSidebarSort(sidebarView, agentFeaturesInTabs)}
           showGroup={showGroupControl}
           agentSort={agentSort}
           agentGroup={agentGroup}
@@ -5788,6 +5974,7 @@ function SidebarOptionsMenu({
   x,
   y,
   sidebarView,
+  showSort,
   showGroup,
   agentSort,
   agentGroup,
@@ -5799,6 +5986,7 @@ function SidebarOptionsMenu({
   x: number;
   y: number;
   sidebarView: SidebarView;
+  showSort: boolean;
   showGroup: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
@@ -5809,7 +5997,6 @@ function SidebarOptionsMenu({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const showSort = sidebarView === "agents";
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -6948,6 +7135,9 @@ function TabDivider({
 
 function PaneRow({
   pane,
+  workspaceLabel,
+  tabLabel,
+  bridgeLabel,
   pinned,
   active,
   index,
@@ -6955,6 +7145,9 @@ function PaneRow({
   onMenu,
 }: {
   pane: PaneInfo;
+  workspaceLabel?: string;
+  tabLabel?: string;
+  bridgeLabel?: string;
   pinned?: boolean;
   active: boolean;
   index: number;
@@ -6962,7 +7155,10 @@ function PaneRow({
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
-  const meta = paneMeta(pane);
+  const meta =
+    workspaceLabel || tabLabel || bridgeLabel
+      ? paneListSubtitle(pane, workspaceLabel, tabLabel, bridgeLabel)
+      : paneMeta(pane);
   return (
     <button
       className="pane-row"
@@ -6974,7 +7170,9 @@ function PaneRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className="pane-name">{paneTitle(pane)}</span>
+        <span className="pane-name pane-title">
+          <span className="pane-title-text">{paneTitle(pane)}</span>
+        </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
       </span>
       {isLoud(pane.agent_status) ? (
@@ -7023,12 +7221,12 @@ function AgentRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className="pane-name agent-title">
+        <span className="pane-name pane-title">
           {iconKind ? <AgentIcon kind={iconKind} /> : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
           ) : null}
-          <span className="agent-title-text">{agentTitle(pane)}</span>
+          <span className="pane-title-text">{agentTitle(pane)}</span>
         </span>
         <span className="pane-meta mono">{agentSubtitle(pane, workspace, tabLabel, bridgeLabel)}</span>
       </span>
@@ -7118,6 +7316,10 @@ function StatusBadge({ status }: { status: AgentStatus }) {
       {statusLabel(status)}
     </span>
   );
+}
+
+export function shouldRenderAgentRowInTabs(pane: PaneInfo, enabled: boolean) {
+  return enabled && isAgentPane(pane);
 }
 
 function isAgentPane(pane: PaneInfo) {
@@ -7256,6 +7458,13 @@ export function shouldShowLastStatusChangeSort(
   agentSort: AgentSort,
 ) {
   return agentActivitySupported || agentSort === "lastStatusChange";
+}
+
+export function shouldShowSidebarSort(
+  sidebarView: SidebarView,
+  agentFeaturesInTabs: boolean,
+) {
+  return sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
 }
 
 export function canAddNoteFromPaneMenu({

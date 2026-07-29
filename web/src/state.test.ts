@@ -7,6 +7,7 @@ import {
   chooseSelectedPane,
   chooseSelectedPaneForActiveWorkspace,
   displayTabLabel,
+  paneListSubtitle,
   paneTitle,
   sortPanesForPicker,
 } from "./state";
@@ -249,6 +250,39 @@ describe("paneTitle", () => {
       "herdr",
     );
     expect(paneTitle(pane("1-2"))).toBe("Terminal");
+  });
+});
+
+describe("paneListSubtitle", () => {
+  it("puts flat-list navigation context on the pane row", () => {
+    expect(
+      paneListSubtitle(
+        {
+          ...pane("1-1"),
+          display_agent: "Codex",
+          foreground_cwd: "/home/kevin/worktrees/herdr-web",
+        },
+        "development",
+        "review",
+        "srv",
+      ),
+    ).toBe("srv · development · review · herdr-web");
+  });
+
+  it("removes repeated title and context values", () => {
+    expect(
+      paneListSubtitle(
+        {
+          ...pane("1-1"),
+          label: "Codex",
+          display_agent: "Codex",
+          foreground_cwd: "/home/kevin/Codex",
+        },
+        "workspace",
+        "Codex",
+        "workspace",
+      ),
+    ).toBe("workspace");
   });
 });
 

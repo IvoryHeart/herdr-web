@@ -138,6 +138,20 @@ export function paneMeta(pane: PaneInfo) {
   return parts.join(" · ");
 }
 
+export function paneListSubtitle(
+  pane: PaneInfo,
+  workspaceLabel?: string,
+  tabLabel?: string,
+  bridgeLabel?: string,
+) {
+  const title = paneTitle(pane);
+  const parts = [bridgeLabel, workspaceLabel, tabLabel, ...paneMeta(pane).split(" · ")];
+  return parts
+    .filter((part): part is string => Boolean(part) && part !== title)
+    .filter((part, index, items) => items.indexOf(part) === index)
+    .join(" · ");
+}
+
 export function spaceSubtitle(workspace: WorkspaceInfo) {
   const tabs = `${workspace.tab_count} tab${workspace.tab_count === 1 ? "" : "s"}`;
   const panes = `${workspace.pane_count} pane${workspace.pane_count === 1 ? "" : "s"}`;

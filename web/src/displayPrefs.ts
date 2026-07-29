@@ -1,6 +1,7 @@
 export const DEFAULT_CONTENT_INSET_TOP_PX = 0;
 export const DEFAULT_CONTENT_INSET_BOTTOM_PX = 0;
 export const DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT = 100;
+export const DEFAULT_AGENT_FEATURES_IN_TABS = true;
 
 export const MIN_CONTENT_INSET_TOP_PX = 0;
 export const MAX_CONTENT_INSET_TOP_PX = 96;
@@ -34,6 +35,13 @@ export function parseMobileControlsScalePercent(value: unknown) {
     MAX_MOBILE_CONTROLS_SCALE_PERCENT,
     DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
   );
+}
+
+export function parseAgentFeaturesInTabs(
+  value: unknown,
+  fallback = DEFAULT_AGENT_FEATURES_IN_TABS,
+) {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function parseClampedInteger(value: unknown, min: number, max: number, fallback: number) {
