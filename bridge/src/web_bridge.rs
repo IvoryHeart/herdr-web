@@ -2472,6 +2472,7 @@ fn web_snapshot_from_session_snapshot(
     selected_pane_id: Option<String>,
 ) -> Snapshot {
     let SessionSnapshot {
+        focused_pane_id,
         workspaces,
         tabs,
         panes,
@@ -2479,7 +2480,11 @@ fn web_snapshot_from_session_snapshot(
         ..
     } = snapshot;
     let selected_pane_id = selected_pane_id
-        .filter(|pane_id| panes.iter().any(|pane| pane.pane_id == pane_id.as_str()));
+        .filter(|pane_id| panes.iter().any(|pane| pane.pane_id == pane_id.as_str()))
+        .or_else(|| {
+            focused_pane_id
+                .filter(|pane_id| panes.iter().any(|pane| pane.pane_id == pane_id.as_str()))
+        });
     let workspaces = workspaces
         .into_iter()
         .map(|workspace| {
@@ -4752,13 +4757,20 @@ mod tests {
     }
 
     #[test]
-    fn web_snapshot_adapter_drops_stale_selected_pane_ids() {
+    fn web_snapshot_adapter_falls_back_to_focused_pane_for_stale_selection() {
         let snapshot = web_snapshot_from_session_snapshot(
             test_session_snapshot(),
             Some("missing".to_string()),
         );
 
-        assert_eq!(snapshot.selected_pane_id, None);
+        assert_eq!(snapshot.selected_pane_id.as_deref(), Some("pane-1"));
+    }
+
+    #[test]
+    fn web_snapshot_adapter_uses_focused_pane_before_shared_selection_exists() {
+        let snapshot = web_snapshot_from_session_snapshot(test_session_snapshot(), None);
+
+        assert_eq!(snapshot.selected_pane_id.as_deref(), Some("pane-1"));
     }
 
     #[test]

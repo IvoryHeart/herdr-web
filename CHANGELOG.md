@@ -37,7 +37,8 @@
 
 - Fixed client-local navigation synchronization across reloads, reconnects, lagging snapshots, and
   rapid multi-client selection races. Sync-off split navigation now stays local, and independent
-  clients no longer rewrite shared navigation persistence.
+  clients no longer rewrite shared navigation persistence. After a bridge restart, the focused
+  Herdr pane now seeds shared navigation so synced clients immediately converge.
 
 ### Removed
 
