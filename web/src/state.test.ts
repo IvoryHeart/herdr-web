@@ -7,8 +7,10 @@ import {
   chooseSelectedPane,
   chooseSelectedPaneForActiveWorkspace,
   displayTabLabel,
+  paneListSubtitle,
   paneTitle,
   sortPanesForPicker,
+  spaceSubtitle,
 } from "./state";
 import type { PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "./types";
 
@@ -249,6 +251,49 @@ describe("paneTitle", () => {
       "herdr",
     );
     expect(paneTitle(pane("1-2"))).toBe("Terminal");
+  });
+});
+
+describe("paneListSubtitle", () => {
+  it("puts flat-list navigation context on the pane row", () => {
+    expect(
+      paneListSubtitle(
+        {
+          ...pane("1-1"),
+          display_agent: "Codex",
+          foreground_cwd: "/home/kevin/worktrees/herdr-web",
+        },
+        "development",
+        "review",
+        "srv",
+      ),
+    ).toBe("srv · development · review · herdr-web");
+  });
+
+  it("removes repeated title and context values", () => {
+    expect(
+      paneListSubtitle(
+        {
+          ...pane("1-1"),
+          label: "Codex",
+          display_agent: "Codex",
+          foreground_cwd: "/home/kevin/Codex",
+        },
+        "workspace",
+        "Codex",
+        "workspace",
+      ),
+    ).toBe("workspace");
+  });
+});
+
+describe("spaceSubtitle", () => {
+  it("prepends host context only when supplied and includes the agent count", () => {
+    const item = { ...workspace("repo"), tab_count: 2, pane_count: 3 };
+
+    expect(spaceSubtitle(item, "srv", 2)).toBe("srv · 2 tabs · 3 panes · 2 agents");
+    expect(spaceSubtitle(item, undefined, 1)).toBe("2 tabs · 3 panes · 1 agent");
+    expect(spaceSubtitle(item)).toBe("2 tabs · 3 panes");
   });
 });
 

@@ -60,6 +60,10 @@ type Props = {
   showMobileTerminalSettings: boolean;
   notesEnabled: boolean;
   onNotesEnabled: (enabled: boolean) => void;
+  agentFeaturesInTabs: boolean;
+  onAgentFeaturesInTabs: (enabled: boolean) => void;
+  multiHostSpaceSelection: boolean;
+  onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
   terminalInputTransport: TerminalInputTransport;
@@ -106,6 +110,10 @@ export function BackendSettingsDialog({
   showMobileTerminalSettings,
   notesEnabled,
   onNotesEnabled,
+  agentFeaturesInTabs,
+  onAgentFeaturesInTabs,
+  multiHostSpaceSelection,
+  onMultiHostSpaceSelection,
   terminalFontSizePx,
   onTerminalFontSizePx,
   terminalInputTransport,
@@ -501,6 +509,57 @@ export function BackendSettingsDialog({
 
             {activeArea === "display" ? (
               <div className="settings-section settings-section-flat">
+                <div className="settings-label">Sidebar</div>
+                <div className="settings-row">
+                  <span>Agent features in Tabs</span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Agent features in Tabs"
+                  >
+                    <button
+                      type="button"
+                      data-on={!agentFeaturesInTabs}
+                      aria-pressed={!agentFeaturesInTabs}
+                      onClick={() => onAgentFeaturesInTabs(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={agentFeaturesInTabs}
+                      aria-pressed={agentFeaturesInTabs}
+                      onClick={() => onAgentFeaturesInTabs(true)}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <span>Multi-host Space selection</span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Multi-host Space selection"
+                  >
+                    <button
+                      type="button"
+                      data-on={!multiHostSpaceSelection}
+                      aria-pressed={!multiHostSpaceSelection}
+                      onClick={() => onMultiHostSpaceSelection(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={multiHostSpaceSelection}
+                      aria-pressed={multiHostSpaceSelection}
+                      onClick={() => onMultiHostSpaceSelection(true)}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
                 <div className="settings-label">Display spacing</div>
                 <div className="settings-row">
                   <span>Top padding</span>

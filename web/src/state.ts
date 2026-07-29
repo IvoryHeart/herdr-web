@@ -138,10 +138,30 @@ export function paneMeta(pane: PaneInfo) {
   return parts.join(" · ");
 }
 
-export function spaceSubtitle(workspace: WorkspaceInfo) {
+export function paneListSubtitle(
+  pane: PaneInfo,
+  workspaceLabel?: string,
+  tabLabel?: string,
+  bridgeLabel?: string,
+) {
+  const title = paneTitle(pane);
+  const parts = [bridgeLabel, workspaceLabel, tabLabel, ...paneMeta(pane).split(" · ")];
+  return parts
+    .filter((part): part is string => Boolean(part) && part !== title)
+    .filter((part, index, items) => items.indexOf(part) === index)
+    .join(" · ");
+}
+
+export function spaceSubtitle(
+  workspace: WorkspaceInfo,
+  bridgeLabel?: string,
+  agentCount = 0,
+) {
   const tabs = `${workspace.tab_count} tab${workspace.tab_count === 1 ? "" : "s"}`;
   const panes = `${workspace.pane_count} pane${workspace.pane_count === 1 ? "" : "s"}`;
-  return `${tabs} · ${panes}`;
+  const agents =
+    agentCount > 0 ? `${agentCount} agent${agentCount === 1 ? "" : "s"}` : undefined;
+  return [bridgeLabel, tabs, panes, agents].filter(Boolean).join(" · ");
 }
 
 export function sortTabsForWorkspace(tabs: TabInfo[], workspaceId: string) {

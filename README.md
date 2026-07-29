@@ -152,9 +152,17 @@ Settings are grouped by area:
 
 - Bridge: same-origin and saved bridge profiles, reachability testing, and bridge enablement.
 - Features: client feature toggles such as Notes.
-- Display: top/bottom app padding and mobile terminal controls size.
+- Display: agent features in Tabs, multi-host Space selection, top/bottom app padding, and mobile
+  terminal controls size.
 - Terminal: browser-to-bridge terminal input transport and input batching delay.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
+
+When viewing all of multiple hosts, use the Spaces list `…` menu to group spaces by host or keep a
+flat list with host context in each row. The menu stays hidden in single-host scope.
+
+Multi-host Space selection is enabled by default, retaining one active Space per host in
+Space-scoped views. Turn it off under Settings → Display to keep only the selected host's Space,
+Agents, Tabs, and Notes in those views. All scope continues to show content from every host.
 
 Terminal input payloads can be sent as JSON or binary WebSocket frames. JSON remains the default;
 binary is available for comparing terminal input performance. Terminal input batching is off by

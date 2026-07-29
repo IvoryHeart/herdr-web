@@ -35,6 +35,7 @@ import type {
   FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MutableRefObject,
+  ReactNode,
   SetStateAction,
 } from "react";
 import { Capacitor } from "@capacitor/core";
@@ -68,9 +69,13 @@ import {
   DEFAULT_CONTENT_INSET_BOTTOM_PX,
   DEFAULT_CONTENT_INSET_TOP_PX,
   DEFAULT_MOBILE_CONTROLS_SCALE_PERCENT,
+  DEFAULT_AGENT_FEATURES_IN_TABS,
+  DEFAULT_MULTI_HOST_SPACE_SELECTION,
   parseContentInsetBottomPx,
   parseContentInsetTopPx,
   parseMobileControlsScalePercent,
+  parseAgentFeaturesInTabs,
+  parseMultiHostSpaceSelection,
 } from "./displayPrefs";
 import { LaunchDialog } from "./LaunchDialog";
 import { resolveLaunchSpec } from "./launch";
@@ -150,6 +155,7 @@ import {
   isAttention,
   isLoud,
   paneMeta,
+  paneListSubtitle,
   paneTitle,
   sortPanesForTab,
   sortTabsForWorkspace,
@@ -172,6 +178,7 @@ type HostScope = "selected" | "all";
 type SidebarView = "agents" | "tabs" | "notes";
 type AgentSort = "attention" | "status" | "workspace" | "lastStatusChange";
 type AgentGroup = "none" | "host" | "workspace" | "hostWorkspace";
+type SpaceGroup = "none" | "host";
 type MenuKind = "space" | "tab" | "pane";
 type ScopedPaneRef = {
   bridgeId: BridgeId;
@@ -316,8 +323,11 @@ type DisplayPrefs = {
   sidebarView: SidebarView;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  spaceGroup: SpaceGroup;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
+  agentFeaturesInTabs: boolean;
+  multiHostSpaceSelection: boolean;
   sidebarWidth: number;
   notesPanelWidth: number;
   notesListPaneWidth: number;
@@ -371,8 +381,11 @@ function readDisplayPrefs(): DisplayPrefs {
     sidebarView: "agents",
     agentSort: "attention",
     agentGroup: "none",
+    spaceGroup: "none",
     agentPinnedOnly: false,
     agentActiveOnly: false,
+    agentFeaturesInTabs: DEFAULT_AGENT_FEATURES_IN_TABS,
+    multiHostSpaceSelection: DEFAULT_MULTI_HOST_SPACE_SELECTION,
     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     notesPanelWidth: DEFAULT_NOTES_PANEL_WIDTH,
     notesListPaneWidth: DEFAULT_NOTES_LIST_PANE_WIDTH,
@@ -469,6 +482,10 @@ function parseDisplayPrefsValue(
       parsed.agentGroup === "hostWorkspace"
         ? parsed.agentGroup
         : fallback.agentGroup,
+    spaceGroup:
+      parsed.spaceGroup === "none" || parsed.spaceGroup === "host"
+        ? parsed.spaceGroup
+        : fallback.spaceGroup,
     agentPinnedOnly:
       typeof parsed.agentPinnedOnly === "boolean"
         ? parsed.agentPinnedOnly
@@ -477,6 +494,14 @@ function parseDisplayPrefsValue(
       typeof parsed.agentActiveOnly === "boolean"
         ? parsed.agentActiveOnly
         : fallback.agentActiveOnly,
+    agentFeaturesInTabs: parseAgentFeaturesInTabs(
+      parsed.agentFeaturesInTabs,
+      fallback.agentFeaturesInTabs,
+    ),
+    multiHostSpaceSelection: parseMultiHostSpaceSelection(
+      parsed.multiHostSpaceSelection,
+      fallback.multiHostSpaceSelection,
+    ),
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth:
@@ -767,8 +792,13 @@ export function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>(initialPrefs.sidebarView);
   const [agentSort, setAgentSort] = useState<AgentSort>(initialPrefs.agentSort);
   const [agentGroup, setAgentGroup] = useState<AgentGroup>(initialPrefs.agentGroup);
+  const [spaceGroup, setSpaceGroup] = useState<SpaceGroup>(initialPrefs.spaceGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
+  const [agentFeaturesInTabs, setAgentFeaturesInTabs] = useState(initialPrefs.agentFeaturesInTabs);
+  const [multiHostSpaceSelection, setMultiHostSpaceSelection] = useState(
+    initialPrefs.multiHostSpaceSelection,
+  );
   const [sidebarWidth, setSidebarWidth] = useState(initialPrefs.sidebarWidth);
   const [notesPanelWidth, setNotesPanelWidth] = useState(initialPrefs.notesPanelWidth);
   const [notesListPaneWidth, setNotesListPaneWidth] = useState(initialPrefs.notesListPaneWidth);
@@ -869,8 +899,11 @@ export function App() {
       setSidebarView(prefs.sidebarView);
       setAgentSort(prefs.agentSort);
       setAgentGroup(prefs.agentGroup);
+      setSpaceGroup(prefs.spaceGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
+      setAgentFeaturesInTabs(prefs.agentFeaturesInTabs);
+      setMultiHostSpaceSelection(prefs.multiHostSpaceSelection);
       setSidebarWidth(prefs.sidebarWidth);
       setNotesPanelWidth(prefs.notesPanelWidth);
       setNotesListPaneWidth(prefs.notesListPaneWidth);
@@ -1350,8 +1383,11 @@ export function App() {
       sidebarView,
       agentSort,
       agentGroup,
+      spaceGroup,
       agentPinnedOnly,
       agentActiveOnly,
+      agentFeaturesInTabs,
+      multiHostSpaceSelection,
       sidebarWidth,
       notesPanelWidth,
       notesListPaneWidth,
@@ -1385,8 +1421,11 @@ export function App() {
     sidebarView,
     agentSort,
     agentGroup,
+    spaceGroup,
     agentPinnedOnly,
     agentActiveOnly,
+    agentFeaturesInTabs,
+    multiHostSpaceSelection,
     sidebarWidth,
     notesPanelWidth,
     notesListPaneWidth,
@@ -1756,6 +1795,7 @@ export function App() {
         scope,
         activeSpace,
         activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
         notesIncludeArchived,
         notesIncludeDeleted,
       );
@@ -1765,6 +1805,7 @@ export function App() {
       activeWorkspacesByBridgeId,
       bridgeViews,
       hostScope,
+      multiHostSpaceSelection,
       notesEnabled,
       notesStates,
       notesIncludeArchived,
@@ -1786,6 +1827,7 @@ export function App() {
         "all",
         null,
         {},
+        true,
         true,
         true,
         false,
@@ -2540,6 +2582,7 @@ export function App() {
             scope,
             activeSpace,
             activeWorkspacesByBridgeId,
+            multiHostSpaceSelection,
           ),
           bridgeViews,
           hostScope,
@@ -2581,12 +2624,17 @@ export function App() {
           scope,
           activeSpace,
           activeWorkspacesByBridgeId,
+          multiHostSpaceSelection,
         ),
         bridgeViews,
         hostScope,
         agentGroup,
         pinnedAgentKeys,
         sidebarView === "tabs" && effectiveAgentPinnedOnly,
+        sidebarView === "tabs" && agentFeaturesInTabs,
+        agentSort,
+        agentActivityTransitions,
+        sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
       );
       const tabs = tabEntries;
       if (tabs.length === 0) {
@@ -2619,6 +2667,7 @@ export function App() {
     activeWorkspacesByBridgeId,
     agentActivityTransitions,
     agentActiveOnly,
+    agentFeaturesInTabs,
     effectiveAgentPinnedOnly,
     agentGroup,
     agentSort,
@@ -2629,6 +2678,7 @@ export function App() {
     isCompactLayout,
     launchTarget,
     menu,
+    multiHostSpaceSelection,
     paneFocusSupported,
     pinnedAgentKeys,
     scope,
@@ -3205,8 +3255,11 @@ export function App() {
           pinnedAgentKeys={pinnedAgentKeys}
           agentPinnedOnly={agentPinnedOnly}
           agentActiveOnly={agentActiveOnly}
+          agentFeaturesInTabs={agentFeaturesInTabs}
           agentSort={agentSort}
           agentGroup={agentGroup}
+          spaceGroup={spaceGroup}
+          multiHostSpaceSelection={multiHostSpaceSelection}
           activeSpace={activeSpace}
           activeWorkspacesByBridgeId={activeWorkspacesByBridgeId}
           selectedPane={selectedPane}
@@ -3219,6 +3272,7 @@ export function App() {
           onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
+          onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
           onSelectTab={selectTab}
@@ -3239,11 +3293,6 @@ export function App() {
           }
           onCreateTab={(bridgeId, workspaceId) =>
             setLaunchTarget({ mode: "tab", workspaceId, bridgeId })
-          }
-          onMenu={(kind, id, label, x, y, clearable) =>
-            selectedRuntime
-              ? setMenu({ kind, bridgeId: selectedRuntime.id, id, label, x, y, clearable })
-              : undefined
           }
           onScopedMenu={(kind, bridgeId, id, label, x, y, clearable, pinLabel) =>
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
@@ -3692,6 +3741,10 @@ export function App() {
           showMobileTerminalSettings={isTouchInput}
           notesEnabled={notesEnabled}
           onNotesEnabled={setNotesEnabled}
+          agentFeaturesInTabs={agentFeaturesInTabs}
+          onAgentFeaturesInTabs={setAgentFeaturesInTabs}
+          multiHostSpaceSelection={multiHostSpaceSelection}
+          onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
           terminalInputTransport={terminalInputTransport}
@@ -4039,9 +4092,13 @@ export function activeWorkspaceForBridgeView(
   selectedBridgeId: BridgeId | null,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection = true,
 ) {
   const viewSnapshot = view.snapshot;
   if (!viewSnapshot || viewSnapshot.workspaces.length === 0) {
+    return null;
+  }
+  if (!multiHostSpaceSelection && view.runtime.id !== selectedBridgeId) {
     return null;
   }
   const preferredWorkspaceId =
@@ -4123,6 +4180,7 @@ export function buildVisibleScopedWorkspaces(
   scope: Scope,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection = true,
 ): ScopedWorkspace[] {
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   return hostBridgeViews.flatMap((view) => {
@@ -4143,6 +4201,7 @@ export function buildVisibleScopedWorkspaces(
               selectedBridgeId,
               activeSpace,
               activeWorkspacesByBridgeId,
+              multiHostSpaceSelection,
             ),
           ].filter((workspace): workspace is WorkspaceInfo => workspace !== null);
     return workspaces.map((workspace) => ({
@@ -4285,21 +4344,44 @@ export function buildVisibleTabWorkspaceGroups(
   scopedWorkspaces: ScopedWorkspace[],
   pinnedAgentKeys: ReadonlySet<string> = EMPTY_AGENT_PIN_KEYS,
   pinnedOnly = false,
+  agentFeaturesInTabs = false,
+  agentSort: AgentSort = "workspace",
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+  activeOnly = false,
 ): ScopedTabWorkspace[] {
-  return scopedWorkspaces.map((entry) => ({
-    ...entry,
-    tabs: sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
-      .map((tab) => {
-        const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
-        return {
-          tab,
-          panes: pinnedOnly
+  return scopedWorkspaces
+    .map((entry) => {
+      const tabs = sortTabsForWorkspace(entry.snapshot.tabs, entry.workspace.workspace_id)
+        .map((tab) => {
+          const panes = sortPanesForTab(entry.snapshot.panes, tab.tab_id);
+          const pinnedPanes = pinnedOnly
             ? panes.filter((pane) => isAgentPinned(pinnedAgentKeys, entry.bridgeId, pane.pane_id))
-            : panes,
-        };
-      })
-      .filter((group) => group.panes.length > 0),
-  }));
+            : panes;
+          return {
+            tab,
+            panes:
+              agentFeaturesInTabs && activeOnly
+                ? pinnedPanes.filter(
+                    (pane) => isAgentPane(pane) && isActiveAgentStatus(pane.agent_status),
+                  )
+                : pinnedPanes,
+          };
+        })
+        .filter((group) => group.panes.length > 0);
+      if (!agentFeaturesInTabs) {
+        return { ...entry, tabs };
+      }
+      const sorted = sortScopedTabEntriesByAgents(
+        tabs.map(({ tab, panes }) => ({ ...entry, tab, panes })),
+        agentSort,
+        agentActivityTransitions,
+      );
+      return {
+        ...entry,
+        tabs: sorted.map(({ tab, panes }) => ({ tab, panes })),
+      };
+    })
+    .filter((group) => group.tabs.length > 0);
 }
 
 export function buildVisibleTabEntries(
@@ -4309,18 +4391,105 @@ export function buildVisibleTabEntries(
   agentGroup: AgentGroup,
   pinnedAgentKeys: ReadonlySet<string> = EMPTY_AGENT_PIN_KEYS,
   pinnedOnly = false,
+  agentFeaturesInTabs = false,
+  agentSort: AgentSort = "workspace",
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+  activeOnly = false,
 ): ScopedTabEntry[] {
-  const spaceGroups = buildVisibleTabWorkspaceGroups(scopedWorkspaces, pinnedAgentKeys, pinnedOnly);
+  const spaceGroups = buildVisibleTabWorkspaceGroups(
+    scopedWorkspaces,
+    pinnedAgentKeys,
+    pinnedOnly,
+    agentFeaturesInTabs,
+    agentSort,
+    agentActivityTransitions,
+    activeOnly,
+  );
   const flattenGroup = (group: ScopedTabWorkspace): ScopedTabEntry[] =>
     group.tabs.map(({ tab, panes }) => ({ ...group, tab, panes }));
-  if (agentGroup === "host" || (agentGroup === "hostWorkspace" && hostScope === "all")) {
+  if (agentFeaturesInTabs && agentGroup === "none") {
+    return sortScopedTabEntriesByAgents(
+      spaceGroups.flatMap(flattenGroup),
+      agentSort,
+      agentActivityTransitions,
+    );
+  }
+  if (agentGroup === "host") {
     return bridgeViews.flatMap((view) =>
-      spaceGroups
-        .filter((group) => group.bridgeId === view.runtime.id && group.tabs.length > 0)
-        .flatMap(flattenGroup),
+      sortScopedTabEntriesByAgents(
+        spaceGroups
+          .filter((group) => group.bridgeId === view.runtime.id && group.tabs.length > 0)
+          .flatMap(flattenGroup),
+        agentFeaturesInTabs ? agentSort : "workspace",
+        agentActivityTransitions,
+      ),
     );
   }
   return spaceGroups.flatMap(flattenGroup);
+}
+
+export function sortScopedTabEntriesByAgents(
+  entries: ScopedTabEntry[],
+  agentSort: AgentSort,
+  agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
+) {
+  if (agentSort === "workspace") {
+    return [...entries];
+  }
+  const ranked = entries.map((entry, index) => {
+    const agents = entry.panes.filter(isAgentPane);
+    let sortRank: number | undefined;
+    if (agentSort === "attention" || agentSort === "status") {
+      const order = agentSort === "attention" ? AGENT_ATTENTION_ORDER : AGENT_STATUS_ORDER;
+      sortRank =
+        agents.length > 0
+          ? Math.min(...agents.map((pane) => order[pane.agent_status]))
+          : undefined;
+    } else {
+      sortRank = agents.reduce<number | undefined>((latest, pane) => {
+        const transition = agentActivityTransitions.get(
+          agentActivityKey(entry.bridgeId, pane.pane_id, pane.terminal_id),
+        );
+        return transition === undefined || (latest !== undefined && latest >= transition)
+          ? latest
+          : transition;
+      }, undefined);
+    }
+    return { entry, index, agents, sortRank };
+  });
+  ranked.sort((a, b) => {
+    const agentPresence = Number(b.agents.length > 0) - Number(a.agents.length > 0);
+    if (agentPresence !== 0) {
+      return agentPresence;
+    }
+    if (a.agents.length === 0) {
+      return a.index - b.index;
+    }
+    if (a.sortRank !== undefined || b.sortRank !== undefined) {
+      if (a.sortRank === undefined) {
+        return 1;
+      }
+      if (b.sortRank === undefined) {
+        return -1;
+      }
+      if (a.sortRank !== b.sortRank) {
+        if (agentSort === "lastStatusChange") {
+          return b.sortRank - a.sortRank;
+        }
+        return a.sortRank - b.sortRank;
+      }
+    }
+    return a.index - b.index;
+  });
+  return ranked.map(({ entry }) => entry);
+}
+
+export function shouldShowTabDivider(
+  agentGroup: AgentGroup,
+  workspaceTabCount: number,
+  paneCount: number,
+) {
+  return agentGroup !== "none" && (workspaceTabCount > 1 || paneCount > 1);
 }
 
 export function buildVisibleScopedNotes(
@@ -4331,12 +4500,20 @@ export function buildVisibleScopedNotes(
   scope: Scope,
   activeSpace: WorkspaceInfo | null,
   activeWorkspacesByBridgeId: Record<string, string>,
+  multiHostSpaceSelection: boolean,
   includeArchived: boolean,
   includeDeleted: boolean,
   dedupeStores = true,
 ): ScopedNoteEntry[] {
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   const entries = hostBridgeViews.flatMap((view) => {
+    if (
+      scope === "space" &&
+      !multiHostSpaceSelection &&
+      view.runtime.id !== selectedBridgeId
+    ) {
+      return [];
+    }
     const notesState = notesStates[view.runtime.id];
     if (!notesState || notesState.connectionKey !== view.runtime.connectionKey) {
       return [];
@@ -4353,6 +4530,7 @@ export function buildVisibleScopedNotes(
             selectedBridgeId,
             activeSpace,
             activeWorkspacesByBridgeId,
+            multiHostSpaceSelection,
           )
         : null;
     return (notesState.response?.notes ?? [])
@@ -4967,8 +5145,11 @@ function Switcher({
   pinnedAgentKeys,
   agentPinnedOnly,
   agentActiveOnly,
+  agentFeaturesInTabs,
   agentSort,
   agentGroup,
+  spaceGroup,
+  multiHostSpaceSelection,
   activeSpace,
   activeWorkspacesByBridgeId,
   selectedPane,
@@ -4981,6 +5162,7 @@ function Switcher({
   onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
+  onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
   onSelectTab,
@@ -4990,7 +5172,6 @@ function Switcher({
   onBackendSettings,
   onCreateSpace,
   onCreateTab,
-  onMenu,
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
@@ -5013,8 +5194,11 @@ function Switcher({
   pinnedAgentKeys: ReadonlySet<string>;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
+  agentFeaturesInTabs: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  spaceGroup: SpaceGroup;
+  multiHostSpaceSelection: boolean;
   activeSpace: WorkspaceInfo | null;
   activeWorkspacesByBridgeId: Record<string, string>;
   selectedPane: PaneInfo | null;
@@ -5027,6 +5211,7 @@ function Switcher({
   onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
+  onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
   onSelectTab: (bridgeId: BridgeId, tabId: string) => void;
@@ -5036,14 +5221,6 @@ function Switcher({
   onBackendSettings: () => void;
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
-  onMenu: (
-    kind: MenuKind,
-    id: string,
-    label: string,
-    x: number,
-    y: number,
-    clearable?: boolean,
-  ) => void;
   onScopedMenu: (
     kind: MenuKind,
     bridgeId: BridgeId,
@@ -5056,14 +5233,50 @@ function Switcher({
   ) => void;
 }) {
   const [optionsMenu, setOptionsMenu] = useState<{ x: number; y: number } | null>(null);
+  const [spaceOptionsMenu, setSpaceOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const selectedBridgeView = selectedBridgeId
     ? (bridgeViews.find((view) => view.runtime.id === selectedBridgeId) ?? null)
     : null;
   const hostBridgeViews = visibleHostBridgeViews(bridgeViews, selectedBridgeId, hostScope);
   const activeWorkspaceForView = useCallback(
     (view: BridgeConnectionView) =>
-      activeWorkspaceForBridgeView(view, selectedBridgeId, activeSpace, activeWorkspacesByBridgeId),
-    [activeSpace, activeWorkspacesByBridgeId, selectedBridgeId],
+      activeWorkspaceForBridgeView(
+        view,
+        selectedBridgeId,
+        activeSpace,
+        activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
+      ),
+    [
+      activeSpace,
+      activeWorkspacesByBridgeId,
+      multiHostSpaceSelection,
+      selectedBridgeId,
+    ],
+  );
+  const spaceEntries = hostBridgeViews.flatMap((view) => {
+    const viewSnapshot = view.snapshot;
+    if (!viewSnapshot) {
+      return [];
+    }
+    const activeWorkspace = activeWorkspaceForView(view);
+    return viewSnapshot.workspaces.map((workspace) => {
+      const workspacePanes = viewSnapshot.panes.filter(
+        (pane) => pane.workspace_id === workspace.workspace_id,
+      );
+      return {
+        view,
+        workspace,
+        workspacePanes,
+        active: workspace.workspace_id === activeWorkspace?.workspace_id,
+      };
+    });
+  });
+  const canGroupSpacesByHost = shouldOfferSpaceHostGrouping(hostScope, hostBridgeViews.length);
+  const effectiveSpaceGroup = resolveEffectiveSpaceGroup(
+    spaceGroup,
+    hostScope,
+    hostBridgeViews.length,
   );
   const scopedWorkspaces = useMemo<ScopedWorkspace[]>(
     () =>
@@ -5074,8 +5287,17 @@ function Switcher({
         scope,
         activeSpace,
         activeWorkspacesByBridgeId,
+        multiHostSpaceSelection,
       ),
-    [activeSpace, activeWorkspacesByBridgeId, bridgeViews, hostScope, scope, selectedBridgeId],
+    [
+      activeSpace,
+      activeWorkspacesByBridgeId,
+      bridgeViews,
+      hostScope,
+      multiHostSpaceSelection,
+      scope,
+      selectedBridgeId,
+    ],
   );
   const panes = scopedWorkspaces.flatMap((entry) =>
     entry.snapshot.panes.filter((pane) => pane.workspace_id === entry.workspace.workspace_id),
@@ -5156,18 +5378,47 @@ function Switcher({
         scopedWorkspaces,
         pinnedAgentKeys,
         sidebarView === "tabs" && effectiveAgentPinnedOnly,
+        sidebarView === "tabs" && agentFeaturesInTabs,
+        agentSort,
+        agentActivityTransitions,
+        sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
       ),
-    [effectiveAgentPinnedOnly, pinnedAgentKeys, scopedWorkspaces, sidebarView],
+    [
+      agentActivityTransitions,
+      agentActiveOnly,
+      agentFeaturesInTabs,
+      agentSort,
+      effectiveAgentPinnedOnly,
+      pinnedAgentKeys,
+      scopedWorkspaces,
+      sidebarView,
+    ],
   );
-  const spaceCount = hostBridgeViews.reduce(
-    (count, view) => count + (view.snapshot?.workspaces.length ?? 0),
-    0,
+  const flatTabEntries = useMemo(
+    () =>
+      sortScopedTabEntriesByAgents(
+        spaceGroups.flatMap((group) =>
+          group.tabs.map(({ tab, panes: tabPanes }) => ({
+            ...group,
+            tab,
+            panes: tabPanes,
+          })),
+        ),
+        agentFeaturesInTabs ? agentSort : "workspace",
+        agentActivityTransitions,
+      ),
+    [agentActivityTransitions, agentFeaturesInTabs, agentSort, spaceGroups],
   );
+  const spaceCount = spaceEntries.length;
   const showGroupedHostContext = hostScope === "all";
   const showGroupControl =
     sidebarView !== "notes" &&
     (sidebarView === "agents" || hostScope === "all" || scope === "all" || agentGroup !== "none");
-  const showOptionsControl = sidebarView !== "notes" && (sidebarView === "agents" || showGroupControl);
+  const showOptionsControl =
+    sidebarView !== "notes" &&
+    (sidebarView === "agents" ||
+      showGroupControl ||
+      (sidebarView === "tabs" && agentFeaturesInTabs));
   const canCreateTabFromHeader = Boolean(
     sidebarView === "tabs" &&
       scope === "space" &&
@@ -5177,7 +5428,8 @@ function Switcher({
   const canCreateNoteFromHeader = notesViewActive && notesSupported;
   const showPinnedOnlyControl =
     (sidebarView === "agents" || sidebarView === "tabs") && agentPinsSupported;
-  const showActiveOnlyControl = sidebarView === "agents";
+  const showActiveOnlyControl =
+    sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
   const pinnedOnlyLabel = sidebarView === "tabs" ? "pinned panes" : "pinned agents";
 
   useEffect(() => {
@@ -5186,15 +5438,21 @@ function Switcher({
     }
   }, [optionsMenu, showOptionsControl]);
 
+  useEffect(() => {
+    if (spaceOptionsMenu && !canGroupSpacesByHost) {
+      setSpaceOptionsMenu(null);
+    }
+  }, [canGroupSpacesByHost, spaceOptionsMenu]);
+
   let agentPaneIndex = 0;
   let paneIndex = 0;
   const renderTabWorkspaceGroup = (
     group: ScopedTabWorkspace,
     showWorkspaceHeader: boolean,
-    showContextInTabLabel: boolean,
     showBridgeInWorkspaceHeader = showGroupedHostContext,
+    key = `${group.bridgeId}:${group.workspace.workspace_id}`,
   ) => (
-    <Fragment key={`${group.bridgeId}:${group.workspace.workspace_id}`}>
+    <Fragment key={key}>
       {showWorkspaceHeader ? (
         <GroupHeader
           label={
@@ -5208,14 +5466,73 @@ function Switcher({
       ) : null}
       {group.tabs.map(({ tab, panes: tabPanes }) => {
         const tabLabel = displayTabLabel(tab, group.snapshot.panes);
-        const label = showContextInTabLabel
-          ? `${group.bridgeLabel} / ${group.workspace.label} / ${tabLabel}`
-          : tabLabel;
+        const paneRows = tabPanes.map((pane) => {
+          const index = paneIndex++;
+          const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
+          const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
+          const active =
+            group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id;
+          const onSelect = () => onSelectPane(group.bridgeId, pane);
+          const onPaneMenu = (x: number, y: number) =>
+            onScopedMenu(
+              "pane",
+              group.bridgeId,
+              pane.pane_id,
+              paneTitle(pane),
+              x,
+              y,
+              undefined,
+              renderAsAgent ? "agent" : "pane",
+            );
+          if (renderAsAgent) {
+            return (
+              <AgentRow
+                key={`${group.bridgeId}:${pane.pane_id}`}
+                index={index}
+                pane={pane}
+                workspace={group.workspace}
+                tabLabel={tabLabel}
+                bridgeLabel={
+                  agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
+                }
+                pinned={pinned}
+                active={active}
+                onSelect={onSelect}
+                onMenu={onPaneMenu}
+              />
+            );
+          }
+          return (
+            <PaneRow
+              key={`${group.bridgeId}:${pane.pane_id}`}
+              index={index}
+              pane={pane}
+              workspaceLabel={
+                agentGroup === "none" || agentGroup === "host"
+                  ? group.workspace.label
+                  : undefined
+              }
+              tabLabel={
+                agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
+              }
+              bridgeLabel={
+                agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
+              }
+              pinned={pinned}
+              active={active}
+              onSelect={onSelect}
+              onMenu={onPaneMenu}
+            />
+          );
+        });
+        if (agentGroup === "none") {
+          return <Fragment key={`${group.bridgeId}:${tab.tab_id}`}>{paneRows}</Fragment>;
+        }
         return (
           <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
-            {showContextInTabLabel || group.workspace.tab_count > 1 || tabPanes.length > 1 ? (
+            {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
               <TabDivider
-                label={label}
+                label={tabLabel}
                 count={tabPanes.length}
                 onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
                 onMenu={(x, y) =>
@@ -5231,35 +5548,41 @@ function Switcher({
                 }
               />
             ) : null}
-            {tabPanes.map((pane) => (
-              <PaneRow
-                key={`${group.bridgeId}:${pane.pane_id}`}
-                index={paneIndex++}
-                pane={pane}
-                pinned={isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id)}
-                active={group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id}
-                onSelect={() => onSelectPane(group.bridgeId, pane)}
-                onMenu={(x, y) =>
-                  onScopedMenu(
-                    "pane",
-                    group.bridgeId,
-                    pane.pane_id,
-                    paneTitle(pane),
-                    x,
-                    y,
-                    undefined,
-                    "pane",
-                  )
-                }
-              />
-            ))}
+            {paneRows}
           </div>
         );
       })}
     </Fragment>
   );
   const renderTabGroups = () => {
-    if (agentGroup === "host" || (agentGroup === "hostWorkspace" && hostScope === "all")) {
+    if (agentGroup === "host") {
+      return hostBridgeViews.map((view) => {
+        const entries = flatTabEntries.filter(
+          (entry) => entry.bridgeId === view.runtime.id && entry.panes.length > 0,
+        );
+        if (entries.length === 0) {
+          return null;
+        }
+        return (
+          <Fragment key={view.runtime.id}>
+            <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
+            {entries.map((entry) =>
+              renderTabWorkspaceGroup(
+                {
+                  ...entry,
+                  tabs: [{ tab: entry.tab, panes: entry.panes }],
+                },
+                false,
+                false,
+                `${entry.bridgeId}:${entry.tab.tab_id}`,
+              ),
+            )}
+          </Fragment>
+        );
+      });
+    }
+
+    if (agentGroup === "hostWorkspace" && hostScope === "all") {
       return hostBridgeViews.map((view) => {
         const groups = spaceGroups.filter(
           (group) => group.bridgeId === view.runtime.id && group.tabs.length > 0,
@@ -5270,19 +5593,26 @@ function Switcher({
         return (
           <Fragment key={view.runtime.id}>
             <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-            {groups.map((group) => renderTabWorkspaceGroup(group, true, false, false))}
+            {groups.map((group) => renderTabWorkspaceGroup(group, true, false))}
           </Fragment>
         );
       });
     }
 
     if (agentGroup === "workspace" || agentGroup === "hostWorkspace") {
-      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true, false));
+      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true));
     }
 
-    const showContextInTabLabel = hostScope === "all" || scope === "all";
-    return spaceGroups.map((group) =>
-      renderTabWorkspaceGroup(group, false, showContextInTabLabel),
+    return flatTabEntries.map((entry) =>
+      renderTabWorkspaceGroup(
+        {
+          ...entry,
+          tabs: [{ tab: entry.tab, panes: entry.panes }],
+        },
+        false,
+        showGroupedHostContext,
+        `${entry.bridgeId}:${entry.tab.tab_id}`,
+      ),
     );
   };
   const renderDisconnectedBridgeRows = () =>
@@ -5390,6 +5720,33 @@ function Switcher({
       />
     ));
   };
+  const renderSpaceEntry = (
+    entry: (typeof spaceEntries)[number],
+    index: number,
+    showBridgeLabel: boolean,
+  ) => (
+    <SpaceRow
+      key={`${entry.view.runtime.id}:${entry.workspace.workspace_id}`}
+      index={index}
+      workspace={entry.workspace}
+      bridgeLabel={showBridgeLabel ? entry.view.runtime.label : undefined}
+      agentCount={entry.workspacePanes.filter(isAgentPane).length}
+      active={entry.active}
+      attention={countAttention(entry.workspacePanes)}
+      onSelect={() => onSelectSpace(entry.view.runtime.id, entry.workspace.workspace_id)}
+      onMenu={(x, y) =>
+        onScopedMenu(
+          "space",
+          entry.view.runtime.id,
+          entry.workspace.workspace_id,
+          entry.workspace.label,
+          x,
+          y,
+          canClearWorkspaceName(entry.workspace, entry.workspacePanes),
+        )
+      }
+    />
+  );
 
   return (
     <>
@@ -5557,75 +5914,48 @@ function Switcher({
                     <Plus size={14} />
                   </button>
                 ) : null}
+                {canGroupSpacesByHost ? (
+                  <button
+                    className="sec-add"
+                    type="button"
+                    aria-label="Space list options"
+                    title="Space list options"
+                    aria-haspopup="dialog"
+                    aria-expanded={spaceOptionsMenu ? "true" : "false"}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setOptionsMenu(null);
+                      setSpaceOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+                ) : null}
               </div>
               {spaceCount === 0 ? (
                 <div className="empty">
                   <strong>No spaces yet</strong>
                   <span>{hostScope === "selected" ? "Tap + to create one." : "No enabled host has spaces."}</span>
                 </div>
-              ) : hostScope === "all" ? (
+              ) : effectiveSpaceGroup === "host" ? (
                 hostBridgeViews.map((view) => {
-                  const viewSnapshot = view.snapshot;
-                  if (!viewSnapshot) {
+                  const entries = spaceEntries.filter(
+                    (entry) => entry.view.runtime.id === view.runtime.id,
+                  );
+                  if (entries.length === 0) {
                     return null;
                   }
-                  const activeWorkspace = activeWorkspaceForView(view);
                   return (
                     <Fragment key={view.runtime.id}>
                       <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-                      {viewSnapshot.workspaces.map((workspace, index) => (
-                        <SpaceRow
-                          key={`${view.runtime.id}:${workspace.workspace_id}`}
-                          index={index}
-                          workspace={workspace}
-                          active={workspace.workspace_id === activeWorkspace?.workspace_id}
-                          attention={countAttention(
-                            viewSnapshot.panes.filter(
-                              (pane) => pane.workspace_id === workspace.workspace_id,
-                            ),
-                          )}
-                          onSelect={() => onSelectSpace(view.runtime.id, workspace.workspace_id)}
-                          onMenu={(x, y) =>
-                            onScopedMenu(
-                              "space",
-                              view.runtime.id,
-                              workspace.workspace_id,
-                              workspace.label,
-                              x,
-                              y,
-                              canClearWorkspaceName(workspace, viewSnapshot.panes),
-                            )
-                          }
-                        />
-                      ))}
+                      {entries.map((entry, index) => renderSpaceEntry(entry, index, false))}
                     </Fragment>
                   );
                 })
               ) : (
-                snapshot?.workspaces.map((workspace, index) => (
-                  <SpaceRow
-                    key={workspace.workspace_id}
-                    index={index}
-                    workspace={workspace}
-                    active={workspace.workspace_id === activeSpace?.workspace_id}
-                    attention={countAttention(
-                      snapshot.panes.filter((pane) => pane.workspace_id === workspace.workspace_id),
-                    )}
-                    onSelect={() =>
-                      selectedBridgeId ? onSelectSpace(selectedBridgeId, workspace.workspace_id) : undefined
-                    }
-                    onMenu={(x, y) =>
-                      onMenu(
-                        "space",
-                        workspace.workspace_id,
-                        workspace.label,
-                        x,
-                        y,
-                        canClearWorkspaceName(workspace, snapshot.panes),
-                      )
-                    }
-                  />
-                )) ?? null
+                spaceEntries.map((entry, index) =>
+                  renderSpaceEntry(entry, index, canGroupSpacesByHost),
+                )
               )}
             </section>
             ) : null}
@@ -5694,8 +6024,8 @@ function Switcher({
                   <button
                     className="sec-add sec-add-active"
                     type="button"
-                    aria-label="Show active statuses only"
-                    title="Active statuses only"
+                    aria-label={`Show active ${sidebarView === "tabs" ? "agents" : "statuses"} only`}
+                    title={sidebarView === "tabs" ? "Active agents only" : "Active statuses only"}
                     aria-pressed={agentActiveOnly}
                     data-on={agentActiveOnly}
                     onClick={() => onAgentActiveOnly(!agentActiveOnly)}
@@ -5713,6 +6043,7 @@ function Switcher({
                     aria-expanded={optionsMenu ? "true" : "false"}
                     onClick={(event) => {
                       const rect = event.currentTarget.getBoundingClientRect();
+                      setSpaceOptionsMenu(null);
                       setOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
                     }}
                   >
@@ -5748,9 +6079,15 @@ function Switcher({
                   <>{renderDisconnectedBridgeRows()}</>
                 ) : (
                 <div className="empty">
-                  <strong>{effectiveAgentPinnedOnly ? "No pinned panes" : "No panes"}</strong>
+                  <strong>
+                    {agentFeaturesInTabs && agentActiveOnly
+                      ? emptyAgentListTitle(effectiveAgentPinnedOnly, true)
+                      : effectiveAgentPinnedOnly
+                        ? "No pinned panes"
+                        : "No panes"}
+                  </strong>
                   <span>
-                    {effectiveAgentPinnedOnly
+                    {effectiveAgentPinnedOnly || (agentFeaturesInTabs && agentActiveOnly)
                       ? ""
                       : scope === "space"
                         ? "This space has no panes yet."
@@ -5771,6 +6108,7 @@ function Switcher({
           x={optionsMenu.x}
           y={optionsMenu.y}
           sidebarView={sidebarView}
+          showSort={shouldShowSidebarSort(sidebarView, agentFeaturesInTabs)}
           showGroup={showGroupControl}
           agentSort={agentSort}
           agentGroup={agentGroup}
@@ -5778,6 +6116,15 @@ function Switcher({
           onAgentSort={onAgentSort}
           onAgentGroup={onAgentGroup}
           onClose={() => setOptionsMenu(null)}
+        />
+      ) : null}
+      {spaceOptionsMenu ? (
+        <SpaceOptionsMenu
+          x={spaceOptionsMenu.x}
+          y={spaceOptionsMenu.y}
+          spaceGroup={spaceGroup}
+          onSpaceGroup={onSpaceGroup}
+          onClose={() => setSpaceOptionsMenu(null)}
         />
       ) : null}
     </>
@@ -5788,6 +6135,7 @@ function SidebarOptionsMenu({
   x,
   y,
   sidebarView,
+  showSort,
   showGroup,
   agentSort,
   agentGroup,
@@ -5799,6 +6147,7 @@ function SidebarOptionsMenu({
   x: number;
   y: number;
   sidebarView: SidebarView;
+  showSort: boolean;
   showGroup: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
@@ -5807,9 +6156,91 @@ function SidebarOptionsMenu({
   onAgentGroup: (group: AgentGroup) => void;
   onClose: () => void;
 }) {
+  return (
+    <OptionsMenuShell
+      x={x}
+      y={y}
+      ariaLabel={`${sidebarView === "agents" ? "Agent" : "Tab"} list options`}
+      onClose={onClose}
+    >
+      {showSort ? (
+        <label className="sidebar-option-field">
+          <span>Sort</span>
+          <select
+            value={agentSort}
+            onChange={(event) => onAgentSort(event.currentTarget.value as AgentSort)}
+          >
+            <option value="attention">Attention</option>
+            <option value="status">Status</option>
+            {showLastStatusChangeSort ? (
+              <option value="lastStatusChange">Last status change</option>
+            ) : null}
+            <option value="workspace">Workspace</option>
+          </select>
+        </label>
+      ) : null}
+      {showGroup ? (
+        <label className="sidebar-option-field">
+          <span>Group</span>
+          <select
+            value={agentGroup}
+            onChange={(event) => onAgentGroup(event.currentTarget.value as AgentGroup)}
+          >
+            <option value="none">None</option>
+            <option value="host">Host</option>
+            <option value="workspace">Workspace</option>
+            <option value="hostWorkspace">Host + workspace</option>
+          </select>
+        </label>
+      ) : null}
+    </OptionsMenuShell>
+  );
+}
+
+function SpaceOptionsMenu({
+  x,
+  y,
+  spaceGroup,
+  onSpaceGroup,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  spaceGroup: SpaceGroup;
+  onSpaceGroup: (group: SpaceGroup) => void;
+  onClose: () => void;
+}) {
+  return (
+    <OptionsMenuShell x={x} y={y} ariaLabel="Space list options" onClose={onClose}>
+      <label className="sidebar-option-field">
+        <span>Group</span>
+        <select
+          value={spaceGroup}
+          onChange={(event) => onSpaceGroup(event.currentTarget.value as SpaceGroup)}
+        >
+          <option value="none">None</option>
+          <option value="host">Host</option>
+        </select>
+      </label>
+    </OptionsMenuShell>
+  );
+}
+
+function OptionsMenuShell({
+  x,
+  y,
+  ariaLabel,
+  onClose,
+  children,
+}: {
+  x: number;
+  y: number;
+  ariaLabel: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const showSort = sidebarView === "agents";
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -5859,7 +6290,7 @@ function SidebarOptionsMenu({
         ref={ref}
         className="sidebar-options-menu"
         role="dialog"
-        aria-label={`${sidebarView === "agents" ? "Agent" : "Tab"} list options`}
+        aria-label={ariaLabel}
         tabIndex={-1}
         style={{
           left: pos?.left ?? x,
@@ -5867,36 +6298,7 @@ function SidebarOptionsMenu({
           visibility: pos ? "visible" : "hidden",
         }}
       >
-        {showSort ? (
-          <label className="sidebar-option-field">
-            <span>Sort</span>
-            <select
-              value={agentSort}
-              onChange={(event) => onAgentSort(event.currentTarget.value as AgentSort)}
-            >
-              <option value="attention">Attention</option>
-              <option value="status">Status</option>
-              {showLastStatusChangeSort ? (
-                <option value="lastStatusChange">Last status change</option>
-              ) : null}
-              <option value="workspace">Workspace</option>
-            </select>
-          </label>
-        ) : null}
-        {showGroup ? (
-          <label className="sidebar-option-field">
-            <span>Group</span>
-            <select
-              value={agentGroup}
-              onChange={(event) => onAgentGroup(event.currentTarget.value as AgentGroup)}
-            >
-              <option value="none">None</option>
-              <option value="host">Host</option>
-              <option value="workspace">Workspace</option>
-              <option value="hostWorkspace">Host + workspace</option>
-            </select>
-          </label>
-        ) : null}
+        {children}
       </div>
     </div>
   );
@@ -6886,6 +7288,8 @@ function GroupHeader({
 
 function SpaceRow({
   workspace,
+  bridgeLabel,
+  agentCount,
   active,
   attention,
   index,
@@ -6893,6 +7297,8 @@ function SpaceRow({
   onMenu,
 }: {
   workspace: WorkspaceInfo;
+  bridgeLabel?: string;
+  agentCount: number;
   active: boolean;
   attention: number;
   index: number;
@@ -6911,7 +7317,9 @@ function SpaceRow({
       <span className="dot" data-status={workspace.agent_status} />
       <span className="space-body">
         <span className="space-name">{workspace.label}</span>
-        <span className="space-sub mono">{spaceSubtitle(workspace)}</span>
+        <span className="space-sub mono">
+          {spaceSubtitle(workspace, bridgeLabel, agentCount)}
+        </span>
       </span>
       {attention > 0 ? <span className="attn">{attention}</span> : null}
     </button>
@@ -6948,6 +7356,9 @@ function TabDivider({
 
 function PaneRow({
   pane,
+  workspaceLabel,
+  tabLabel,
+  bridgeLabel,
   pinned,
   active,
   index,
@@ -6955,6 +7366,9 @@ function PaneRow({
   onMenu,
 }: {
   pane: PaneInfo;
+  workspaceLabel?: string;
+  tabLabel?: string;
+  bridgeLabel?: string;
   pinned?: boolean;
   active: boolean;
   index: number;
@@ -6962,7 +7376,10 @@ function PaneRow({
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
-  const meta = paneMeta(pane);
+  const meta =
+    workspaceLabel || tabLabel || bridgeLabel
+      ? paneListSubtitle(pane, workspaceLabel, tabLabel, bridgeLabel)
+      : paneMeta(pane);
   return (
     <button
       className="pane-row"
@@ -6974,7 +7391,9 @@ function PaneRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className="pane-name">{paneTitle(pane)}</span>
+        <span className="pane-name pane-title">
+          <span className="pane-title-text">{paneTitle(pane)}</span>
+        </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
       </span>
       {isLoud(pane.agent_status) ? (
@@ -7023,12 +7442,12 @@ function AgentRow({
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
-        <span className="pane-name agent-title">
+        <span className="pane-name pane-title">
           {iconKind ? <AgentIcon kind={iconKind} /> : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
           ) : null}
-          <span className="agent-title-text">{agentTitle(pane)}</span>
+          <span className="pane-title-text">{agentTitle(pane)}</span>
         </span>
         <span className="pane-meta mono">{agentSubtitle(pane, workspace, tabLabel, bridgeLabel)}</span>
       </span>
@@ -7118,6 +7537,10 @@ function StatusBadge({ status }: { status: AgentStatus }) {
       {statusLabel(status)}
     </span>
   );
+}
+
+export function shouldRenderAgentRowInTabs(pane: PaneInfo, enabled: boolean) {
+  return enabled && isAgentPane(pane);
 }
 
 function isAgentPane(pane: PaneInfo) {
@@ -7258,6 +7681,25 @@ export function shouldShowLastStatusChangeSort(
   return agentActivitySupported || agentSort === "lastStatusChange";
 }
 
+export function shouldShowSidebarSort(
+  sidebarView: SidebarView,
+  agentFeaturesInTabs: boolean,
+) {
+  return sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
+}
+
+export function shouldOfferSpaceHostGrouping(hostScope: HostScope, hostCount: number) {
+  return hostScope === "all" && hostCount > 1;
+}
+
+export function resolveEffectiveSpaceGroup(
+  spaceGroup: SpaceGroup,
+  hostScope: HostScope,
+  hostCount: number,
+): SpaceGroup {
+  return shouldOfferSpaceHostGrouping(hostScope, hostCount) ? spaceGroup : "none";
+}
+
 export function canAddNoteFromPaneMenu({
   kind,
   notesEnabled,
@@ -7378,18 +7820,18 @@ function agentTitle(pane: PaneInfo) {
   return pane.display_agent || pane.label || pane.agent || pane.title || paneTitle(pane);
 }
 
-function agentSubtitle(
+export function agentSubtitle(
   pane: PaneInfo,
   workspace?: WorkspaceInfo,
   tabLabel?: string,
   bridgeLabel?: string,
 ) {
-  const stateText =
-    pane.custom_status ||
-    pane.state_labels?.[statusLabel(pane.agent_status)] ||
-    statusLabel(pane.agent_status);
   const dir = basename(pane.foreground_cwd || pane.cwd);
-  return [stateText, bridgeLabel, workspace?.label, tabLabel, dir].filter(Boolean).join(" · ");
+  const customStateText =
+    pane.custom_status || pane.state_labels?.[statusLabel(pane.agent_status)];
+  return [bridgeLabel, workspace?.label, tabLabel, dir, customStateText]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function SplitGlyph() {

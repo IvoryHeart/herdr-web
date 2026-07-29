@@ -4,9 +4,28 @@
 
 ### Breaking Changes
 
+- Changed the default ungrouped Tabs and Spaces sidebar presentation to compact rows with inline
+  host, Space, and tab context instead of contextual headers. Agent panes in Tabs also use the
+  Agents row presentation and agent-aware ordering by default. Choose a grouping mode to restore
+  contextual headers, or disable Agent features in Tabs to restore generic pane rows and the
+  original tab order. [PR #41](https://github.com/kcosr/herdr-web/pull/41)
+
 ### Added
 
+- Added default-on Agent features in Tabs, including consistent Agents row metadata and pin
+  placement, agent-aware sorting, and pinned-only and active-only filters. Non-agent tabs remain
+  visible at the bottom of agent-aware sorts; disabling the setting restores generic pane rows.
+  [PR #41](https://github.com/kcosr/herdr-web/pull/41)
+- Added multi-host Spaces controls: Spaces can be shown as a flat list with host context or grouped
+  under host headers, and the default-on Multi-host Space selection setting can be disabled to limit
+  Space-scoped Agents, Tabs, and Notes to one globally selected Space. All scope remains unchanged.
+  [PR #41](https://github.com/kcosr/herdr-web/pull/41)
+
 ### Changed
+
+- Simplified agent-row metadata by removing generic status text already communicated by the status
+  indicator and badge, while retaining custom status text and bridge-defined labels.
+  [PR #41](https://github.com/kcosr/herdr-web/pull/41)
 
 ### Fixed
 
