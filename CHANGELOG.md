@@ -15,6 +15,7 @@
 - Added a default-on client-local Sync navigation setting. Browser tabs and windows with sync off
   can view different panes through the same bridge without publishing or following shared pane
   selection or changing Herdr's focused tab through ordinary navigation.
+  [PR #42](https://github.com/kcosr/herdr-web/pull/42)
 - Added default-on Agent features in Tabs, including consistent Agents row metadata and pin
   placement, agent-aware sorting, and pinned-only and active-only filters. Non-agent tabs remain
   visible at the bottom of agent-aware sorts; disabling the setting restores generic pane rows.
