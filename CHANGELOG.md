@@ -33,6 +33,10 @@
 
 ### Fixed
 
+- Fixed client-local navigation synchronization across reloads, reconnects, lagging snapshots, and
+  rapid multi-client selection races. Sync-off split navigation now stays local, and independent
+  clients no longer rewrite shared navigation persistence.
+
 ### Removed
 
 ## [0.3.3] - 2026-07-19

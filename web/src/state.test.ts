@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canClearTabName,
   canClearWorkspaceName,
+  chooseDirectionalPane,
   choosePaneForTab,
   choosePaneForWorkspace,
   chooseSelectedPane,
@@ -102,6 +103,20 @@ describe("chooseSelectedPane", () => {
     ).toBe("1-2");
   });
 
+  it("uses the authoritative shared selection when no local publication is pending", () => {
+    expect(
+      chooseSelectedPane(
+        {
+          ...snapshot([pane("1-1"), pane("1-2", true)]),
+          selected_pane_id: "1-1",
+        },
+        "1-2",
+        true,
+        true,
+      ),
+    ).toBe("1-1");
+  });
+
   it("uses the snapshot selection when there is no current pane", () => {
     expect(
       chooseSelectedPane(
@@ -164,6 +179,17 @@ describe("chooseSelectedPaneForActiveWorkspace", () => {
 
     expect(chooseSelectedPaneForActiveWorkspace(data, "1-1", "missing")).toBe("1-1");
   });
+
+  it("uses the shared selection instead of a stale persisted workspace", () => {
+    const data = {
+      ...multiWorkspaceSnapshot(),
+      selected_pane_id: "2-2",
+    };
+
+    expect(
+      chooseSelectedPaneForActiveWorkspace(data, "1-1", "1", true, true),
+    ).toBe("2-2");
+  });
 });
 
 describe("projection selection helpers", () => {
@@ -183,6 +209,55 @@ describe("projection selection helpers", () => {
     ]);
 
     expect(choosePaneForTab(data, "1-2")).toBe("1-3");
+  });
+});
+
+describe("chooseDirectionalPane", () => {
+  const data = {
+    ...snapshot([
+      pane("top-left"),
+      pane("bottom-left"),
+      pane("right"),
+    ]),
+    layouts: [
+      {
+        workspace_id: "1",
+        tab_id: "1-1",
+        zoomed: false,
+        area: { x: 0, y: 0, width: 100, height: 100 },
+        focused_pane_id: "top-left",
+        panes: [
+          {
+            pane_id: "top-left",
+            focused: true,
+            rect: { x: 0, y: 0, width: 50, height: 50 },
+          },
+          {
+            pane_id: "bottom-left",
+            focused: false,
+            rect: { x: 0, y: 50, width: 50, height: 50 },
+          },
+          {
+            pane_id: "right",
+            focused: false,
+            rect: { x: 50, y: 0, width: 50, height: 100 },
+          },
+        ],
+        splits: [],
+      },
+    ],
+  } satisfies Snapshot;
+
+  it("chooses an adjacent pane without changing Herdr focus", () => {
+    expect(chooseDirectionalPane(data, "top-left", "right")?.pane_id).toBe("right");
+    expect(chooseDirectionalPane(data, "top-left", "down")?.pane_id).toBe("bottom-left");
+    expect(chooseDirectionalPane(data, "right", "left")?.pane_id).toBe("top-left");
+    expect(chooseDirectionalPane(data, "bottom-left", "up")?.pane_id).toBe("top-left");
+  });
+
+  it("returns null at an outer layout edge", () => {
+    expect(chooseDirectionalPane(data, "right", "right")).toBeNull();
+    expect(chooseDirectionalPane(data, "top-left", "up")).toBeNull();
   });
 });
 
