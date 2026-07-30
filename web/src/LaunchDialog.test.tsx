@@ -96,6 +96,34 @@ describe("LaunchDialog", () => {
     expect(createButton(container).disabled).toBe(true);
   });
 
+  it("selects and titles the first preset when an initially empty list loads", async () => {
+    const { container, onSubmit, root } = await renderDialog([], "Loading launchers…");
+
+    await act(async () => {
+      root.render(
+        <LaunchDialog
+          target={{ mode: "tab", workspaceId: "space-1" }}
+          options={[preset("builtin:codex", "Codex", "codex", true)]}
+          onCancel={vi.fn()}
+          onSubmit={onSubmit}
+        />,
+      );
+    });
+
+    expect(launchOptions(container)[0].getAttribute("aria-checked")).toBe("true");
+    expect(titleInput(container).value).toBe("Codex");
+    expect(createButton(container).disabled).toBe(false);
+
+    await act(async () => {
+      createButton(container).click();
+    });
+    expect(onSubmit).toHaveBeenCalledWith({
+      presetId: "builtin:codex",
+      label: "Codex",
+      title: "Codex",
+    });
+  });
+
   it("reselects the first option when the current preset disappears from the list", async () => {
     const { container, root } = await renderDialog([
       preset("builtin:shell", "Shell", null, true),

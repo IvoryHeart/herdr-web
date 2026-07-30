@@ -2,8 +2,9 @@
 
 `herdr-web` ships as separate desktop bridge/web tarballs and an Android APK.
 
-The desktop tarball does not include Herdr itself. Users still need a running Herdr `v0.7.2` or
-newer session or daemon; the bundled bridge connects to the normal Herdr socket.
+The desktop tarball does not include Herdr itself. Users still need a running Herdr `v0.7.5` or
+newer session or daemon that reports terminal protocol `17`; the bundled bridge connects to the
+normal Herdr socket.
 
 ## Release Artifacts
 
@@ -87,6 +88,11 @@ cat dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
 Confirm the archive contains the expected root directory, `bin/herdr-web`,
 `bin/herdr-web-bridge`, bundled `share/herdr-web/web/` assets, and `README.md`.
 
+Before release, run the unpacked wrapper against a Herdr `v0.7.5` or newer daemon reporting protocol
+`17`. Confirm the bridge accepts that combination and rejects a daemon reporting any other terminal
+protocol. Complete the launcher checks in [docs/release.md](release.md) with the packaged bridge, not
+only a development build.
+
 ## Build Android APK
 
 Follow [docs/android.md](android.md) for SDK prerequisites, then build:
@@ -121,7 +127,7 @@ dist-packages/herdr-web-vX.Y.Z-android.apk
 
 ## User Quick Start From Tarball
 
-Start or attach Herdr `v0.7.2` or newer first:
+Start or attach Herdr `v0.7.5` or newer with terminal protocol `17` first:
 
 ```bash
 herdr

@@ -34,9 +34,10 @@ export type PaneInfo = {
   label?: string;
   agent?: string;
   title?: string;
+  terminal_title?: string;
+  terminal_title_stripped?: string;
   display_agent?: string;
   agent_status: AgentStatus;
-  custom_status?: string;
   state_labels?: Record<string, string>;
   revision: number;
 };
@@ -85,7 +86,6 @@ export type PaneAgentStatusChangedMessage = {
   agent: string | null;
   title: string | null;
   display_agent: string | null;
-  custom_status: string | null;
   state_labels: Record<string, string>;
 };
 

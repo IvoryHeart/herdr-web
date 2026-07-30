@@ -12,6 +12,7 @@ import {
   buildVisibleTabEntries,
   buildVisibleTabWorkspaceGroups,
   isInFlightNoteSaveVisible,
+  launcherEmptyMessage,
   menuItems,
   nextVisibleAgentPaneEntry,
   nextVisibleTabEntry,
@@ -95,12 +96,31 @@ describe("App connection guards", () => {
 });
 
 describe("App multi-bridge helpers", () => {
+  it("reports actionable launcher unavailability and load errors", () => {
+    expect(launcherEmptyMessage(false, false, null)).toBe(
+      "Bridge is not ready. Close this dialog and reconnect.",
+    );
+    expect(launcherEmptyMessage(true, false, null)).toBe(
+      "Launching is unavailable on this bridge. Update the bridge and reconnect.",
+    );
+    expect(
+      launcherEmptyMessage(true, true, {
+        connectionKey: "bridge-a",
+        response: null,
+        loadState: "error",
+        error: "request timed out",
+      }),
+    ).toBe(
+      "Could not load launcher presets: request timed out. Close and reopen this dialog to retry.",
+    );
+  });
+
   it("keeps agent subtitles compact by omitting redundant status text", () => {
     expect(
       agentSubtitle(
         {
           ...pane("agent", "workspace-a", "tab-a", "working"),
-          custom_status: "Reviewing",
+          state_labels: { working: "Reviewing" },
           cwd: "/work/project",
         },
         workspace("workspace-a", 1),
@@ -115,6 +135,12 @@ describe("App multi-bridge helpers", () => {
       }),
     ).toBe("Running");
     expect(agentSubtitle(pane("agent", "workspace-a", "tab-a", "working"))).toBe("");
+    expect(
+      agentSubtitle({
+        ...pane("agent", "workspace-a", "tab-a", "unknown"),
+        state_labels: { unknown: "Connecting" },
+      }),
+    ).toBe("Connecting");
   });
 
   it("uses display preference selection before store fallback", () => {
@@ -170,6 +196,30 @@ describe("App multi-bridge helpers", () => {
     expect(shouldRenderAgentRowInTabs(agentPane, false)).toBe(false);
     expect(
       shouldRenderAgentRowInTabs(pane("shell", "workspace-a", "tab-a", "unknown"), true),
+    ).toBe(false);
+    expect(
+      shouldRenderAgentRowInTabs(
+        {
+          ...pane("state-label", "workspace-a", "tab-a", "unknown"),
+          state_labels: { idle: "Waiting" },
+        },
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRenderAgentRowInTabs(
+        { ...pane("shell-title", "workspace-a", "tab-a", "unknown"), title: "vim" },
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRenderAgentRowInTabs(
+        {
+          ...pane("terminal-title", "workspace-a", "tab-a", "unknown"),
+          terminal_title: "vim README.md",
+        },
+        true,
+      ),
     ).toBe(false);
   });
 

@@ -9,6 +9,7 @@ import {
   chooseSelectedPaneForActiveWorkspace,
   displayTabLabel,
   paneListSubtitle,
+  paneSubtitle,
   paneTitle,
   sortPanesForPicker,
   spaceSubtitle,
@@ -372,6 +373,32 @@ describe("paneListSubtitle", () => {
         "workspace",
       ),
     ).toBe("workspace");
+  });
+});
+
+describe("paneSubtitle", () => {
+  it("uses the current state label before agent identity fallbacks", () => {
+    expect(
+      paneSubtitle(
+        {
+          ...pane("1-1", false, "working"),
+          display_agent: "Codex",
+          state_labels: { working: "Reviewing" },
+          cwd: "/work/project",
+        },
+        workspace("repo"),
+        tab("review"),
+      ),
+    ).toBe("repo / review / Reviewing / /work/project");
+  });
+
+  it("uses an unknown-state label without remapping its protocol key", () => {
+    expect(
+      paneSubtitle({
+        ...pane("1-1", false, "unknown"),
+        state_labels: { unknown: "Connecting" },
+      }),
+    ).toBe("Connecting");
   });
 });
 
