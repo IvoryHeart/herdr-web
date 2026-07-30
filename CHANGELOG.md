@@ -62,7 +62,10 @@
 ### Fixed
 
 - Cleared and remounted the mobile terminal command field after Send or Stage so stale native input
-  cannot prefix the next command. [PR #44](https://github.com/kcosr/herdr-web/pull/44)
+  cannot prefix the next command. [PR #44](https://github.com/kcosr/herdr-web/pull/44), with an
+  earlier implementation contributed by
+  [Alexander Makarov (@AlexanderMakarov)](https://github.com/AlexanderMakarov) in
+  [PR #38](https://github.com/kcosr/herdr-web/pull/38).
 - Fixed client-local navigation synchronization across reloads, reconnects, lagging snapshots, and
   rapid multi-client selection races. Sync-off split navigation now stays local, and independent
   clients no longer rewrite shared navigation persistence. After a bridge restart, the focused
