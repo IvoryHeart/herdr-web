@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] - 2026-07-30
 
 ### Breaking Changes
 
@@ -56,8 +56,6 @@
   clients no longer rewrite shared navigation persistence. After a bridge restart, the focused
   Herdr pane now seeds shared navigation so synced clients immediately converge.
   [PR #43](https://github.com/kcosr/herdr-web/pull/43)
-
-### Removed
 
 ## [0.3.3] - 2026-07-19
 
