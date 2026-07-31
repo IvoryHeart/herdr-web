@@ -3,6 +3,7 @@ import {
   agentSubtitle,
   applySnapshotOverlays,
   buildVisibleAgentPaneEntries,
+  buildScopedAgentGroups,
   buildVisibleScopedNotes,
   canAddNoteFromPaneMenu,
   mergeCreatedPaneNoteList,
@@ -23,6 +24,7 @@ import {
   shouldBlockDirtyNoteAutosave,
   shouldCollapseHostScope,
   shouldRenderAgentRowInTabs,
+  sidebarRowContext,
   shouldOfferSpaceHostGrouping,
   shouldShowSidebarSort,
   shouldShowTabDivider,
@@ -392,6 +394,45 @@ describe("App multi-bridge helpers", () => {
         "attention",
       ).map((item) => `${item.bridgeId}:${item.pane.pane_id}`),
     ).toEqual(["bridge-a:pane-a", "bridge-b:pane-b"]);
+  });
+
+  it("uses workspace-only headers when grouping workspaces across hosts", () => {
+    const sharedWorkspace = workspace("shared-workspace", 1);
+    const groups = buildScopedAgentGroups(
+      [
+        entry("host-a", 0, sharedWorkspace, pane("pane-a", "shared-workspace", "tab-a"), 1),
+        entry("host-b", 1, sharedWorkspace, pane("pane-b", "shared-workspace", "tab-b"), 1),
+      ],
+      "workspace",
+    );
+
+    expect(groups.map((group) => group.label)).toEqual([
+      "shared-workspace",
+      "shared-workspace",
+    ]);
+  });
+
+  it("moves host context into rows only for flat and workspace grouping", () => {
+    expect(sidebarRowContext("none", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: "host-a",
+      workspaceLabel: "workspace-a",
+    });
+    expect(sidebarRowContext("host", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: "workspace-a",
+    });
+    expect(sidebarRowContext("workspace", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: "host-a",
+      workspaceLabel: undefined,
+    });
+    expect(sidebarRowContext("hostWorkspace", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: undefined,
+    });
+    expect(sidebarRowContext("workspace", "selected", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: undefined,
+    });
   });
 
   it("allows flat all-host agent shortcuts to follow attention priority across hosts", () => {

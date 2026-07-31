@@ -8,6 +8,10 @@
 
 ### Changed
 
+- Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group
+  headers and move host context into each detail row. Host + workspace grouping keeps its nested
+  host and workspace headers.
+
 ### Fixed
 
 ### Removed

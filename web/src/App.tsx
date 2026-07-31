@@ -4592,7 +4592,7 @@ export function buildVisibleAgentPaneEntries(
 
   if (agentSort === "lastStatusChange" && agentGroup !== "none") {
     const agentPanes = filterAgentEntries(buildRows("workspace"), pinnedOnly, activeOnly);
-    const groups = buildScopedAgentGroups(agentPanes, agentGroup, hostScope).map((group) => ({
+    const groups = buildScopedAgentGroups(agentPanes, agentGroup).map((group) => ({
       ...group,
       panes: sortedAgentEntriesWithinGroup(sortScopedAgentPanes(group.panes, agentSort)),
     }));
@@ -4613,7 +4613,7 @@ export function buildVisibleAgentPaneEntries(
     return agentPanes;
   }
 
-  const groups = buildScopedAgentGroups(agentPanes, agentGroup, hostScope).map((group) => ({
+  const groups = buildScopedAgentGroups(agentPanes, agentGroup).map((group) => ({
     ...group,
     panes: sortedAgentEntriesWithinGroup(group.panes),
   }));
@@ -4640,7 +4640,6 @@ function filterAgentEntries(
 export function buildScopedAgentGroups(
   agentPanes: ScopedAgentPane[],
   agentGroup: AgentGroup,
-  hostScope: HostScope,
 ) {
   const paneBuckets = new Map<string, ScopedAgentGroup>();
   const groupByWorkspace = agentGroup === "workspace" || agentGroup === "hostWorkspace";
@@ -4649,13 +4648,7 @@ export function buildScopedAgentGroups(
       ? `${entry.bridgeId}:${entry.pane.workspace_id}`
       : entry.bridgeId;
     const label =
-      agentGroup === "host"
-        ? entry.bridgeLabel
-        : agentGroup === "hostWorkspace"
-          ? (entry.workspace?.label ?? "workspace")
-          : hostScope === "all"
-            ? `${entry.bridgeLabel} / ${entry.workspace?.label ?? "workspace"}`
-            : (entry.workspace?.label ?? "workspace");
+      agentGroup === "host" ? entry.bridgeLabel : (entry.workspace?.label ?? "workspace");
     const existing =
       paneBuckets.get(key) ??
       {
@@ -4825,6 +4818,22 @@ export function shouldShowTabDivider(
   paneCount: number,
 ) {
   return agentGroup !== "none" && (workspaceTabCount > 1 || paneCount > 1);
+}
+
+export function sidebarRowContext(
+  agentGroup: AgentGroup,
+  hostScope: HostScope,
+  bridgeLabel: string,
+  workspaceLabel: string,
+) {
+  return {
+    bridgeLabel:
+      hostScope === "all" && (agentGroup === "none" || agentGroup === "workspace")
+        ? bridgeLabel
+        : undefined,
+    workspaceLabel:
+      agentGroup === "none" || agentGroup === "host" ? workspaceLabel : undefined,
+  };
 }
 
 export function buildVisibleScopedNotes(
@@ -5704,8 +5713,8 @@ function Switcher({
     if (agentGroup === "none") {
       return [];
     }
-    return buildScopedAgentGroups(agentPanes, agentGroup, hostScope);
-  }, [agentGroup, agentPanes, hostScope]);
+    return buildScopedAgentGroups(agentPanes, agentGroup);
+  }, [agentGroup, agentPanes]);
 
   const spaceGroups = useMemo<ScopedTabWorkspace[]>(
     () =>
@@ -5801,6 +5810,12 @@ function Switcher({
       ) : null}
       {group.tabs.map(({ tab, panes: tabPanes }) => {
         const tabLabel = displayTabLabel(tab, group.snapshot.panes);
+        const rowContext = sidebarRowContext(
+          agentGroup,
+          hostScope,
+          group.bridgeLabel,
+          group.workspace.label,
+        );
         const paneRows = tabPanes.map((pane) => {
           const index = paneIndex++;
           const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
@@ -5825,11 +5840,9 @@ function Switcher({
                 key={`${group.bridgeId}:${pane.pane_id}`}
                 index={index}
                 pane={pane}
-                workspace={group.workspace}
+                workspace={rowContext.workspaceLabel ? group.workspace : undefined}
                 tabLabel={tabLabel}
-                bridgeLabel={
-                  agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
-                }
+                bridgeLabel={rowContext.bridgeLabel}
                 pinned={pinned}
                 active={active}
                 onSelect={onSelect}
@@ -5842,17 +5855,11 @@ function Switcher({
               key={`${group.bridgeId}:${pane.pane_id}`}
               index={index}
               pane={pane}
-              workspaceLabel={
-                agentGroup === "none" || agentGroup === "host"
-                  ? group.workspace.label
-                  : undefined
-              }
+              workspaceLabel={rowContext.workspaceLabel}
               tabLabel={
                 agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
               }
-              bridgeLabel={
-                agentGroup === "none" && hostScope === "all" ? group.bridgeLabel : undefined
-              }
+              bridgeLabel={rowContext.bridgeLabel}
               pinned={pinned}
               active={active}
               onSelect={onSelect}
@@ -5934,7 +5941,11 @@ function Switcher({
       });
     }
 
-    if (agentGroup === "workspace" || agentGroup === "hostWorkspace") {
+    if (agentGroup === "workspace") {
+      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true, false));
+    }
+
+    if (agentGroup === "hostWorkspace") {
       return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true));
     }
 
@@ -5966,35 +5977,42 @@ function Switcher({
         onRetry={() => onRefreshBridge(view.runtime.id)}
       />
     ));
-  const showAgentRowBridgeLabel = showGroupedHostContext && agentGroup === "none";
-  const renderAgentRow = (entry: ScopedAgentPane, index: number) => (
-    <AgentRow
-      key={`${entry.bridgeId}:${entry.pane.pane_id}`}
-      index={index}
-      pane={entry.pane}
-      workspace={entry.workspace}
-      tabLabel={entry.tabLabel}
-      bridgeLabel={showAgentRowBridgeLabel ? entry.bridgeLabel : undefined}
-      pinned={entry.pinned === true}
-      active={
-        entry.bridgeId === selectedBridgeId &&
-        entry.pane.pane_id === selectedPane?.pane_id
-      }
-      onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
-      onMenu={(x, y) =>
-        onScopedMenu(
-          "pane",
-          entry.bridgeId,
-          entry.pane.pane_id,
-          paneTitle(entry.pane),
-          x,
-          y,
-          undefined,
-          "agent",
-        )
-      }
-    />
-  );
+  const renderAgentRow = (entry: ScopedAgentPane, index: number) => {
+    const rowContext = sidebarRowContext(
+      agentGroup,
+      hostScope,
+      entry.bridgeLabel,
+      entry.workspace?.label ?? "workspace",
+    );
+    return (
+      <AgentRow
+        key={`${entry.bridgeId}:${entry.pane.pane_id}`}
+        index={index}
+        pane={entry.pane}
+        workspace={rowContext.workspaceLabel ? entry.workspace : undefined}
+        tabLabel={entry.tabLabel}
+        bridgeLabel={rowContext.bridgeLabel}
+        pinned={entry.pinned === true}
+        active={
+          entry.bridgeId === selectedBridgeId &&
+          entry.pane.pane_id === selectedPane?.pane_id
+        }
+        onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
+        onMenu={(x, y) =>
+          onScopedMenu(
+            "pane",
+            entry.bridgeId,
+            entry.pane.pane_id,
+            paneTitle(entry.pane),
+            x,
+            y,
+            undefined,
+            "agent",
+          )
+        }
+      />
+    );
+  };
   const renderAgentGroupRows = () => {
     const renderGroup = (group: ScopedAgentGroup) => (
       <Fragment key={group.key}>
