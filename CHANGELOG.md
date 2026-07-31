@@ -9,14 +9,16 @@
 - Added persistent expand/collapse controls to grouped Agents, Tabs, and Spaces headers, including
   independent, visually nested host and workspace controls for Host + workspace grouping and a
   bulk expand/collapse control for the current Agents or Tabs list.
+  [PR #47](https://github.com/kcosr/herdr-web/pull/47)
 - Added a default-off Display setting that combines same-named workspaces across hosts when using
   Workspace grouping, while retaining host context on each agent or pane row.
+  [PR #47](https://github.com/kcosr/herdr-web/pull/47)
 
 ### Changed
 
 - Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group
   headers and move host context into each detail row. Host + workspace grouping keeps its nested
-  host and workspace headers.
+  host and workspace headers. [PR #47](https://github.com/kcosr/herdr-web/pull/47)
 
 ### Fixed
 
