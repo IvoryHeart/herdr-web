@@ -37,6 +37,7 @@ import {
   sidebarGroupCollapseKey,
   sortScopedAgentPanes,
   stableBridgeRefreshOffsetMs,
+  updateCollapsedSidebarGroups,
 } from "./App";
 import type { BridgeConnectionRef, BridgeConnectionView } from "./App";
 import type { BridgeRuntime } from "./bridge";
@@ -519,6 +520,23 @@ describe("App multi-bridge helpers", () => {
     ]);
     expect(parseCollapsedSidebarGroups(Array.from({ length: 300 }, (_, index) => `g-${index}`)))
       .toHaveLength(256);
+  });
+
+  it("collapses and expands a visible set of sidebar groups without changing other groups", () => {
+    expect(
+      updateCollapsedSidebarGroups(
+        ["other-group", "visible-a"],
+        ["visible-a", "visible-b"],
+        true,
+      ),
+    ).toEqual(["other-group", "visible-a", "visible-b"]);
+    expect(
+      updateCollapsedSidebarGroups(
+        ["other-group", "visible-a", "visible-b"],
+        ["visible-a", "visible-b"],
+        false,
+      ),
+    ).toEqual(["other-group"]);
   });
 
   it("hides keyboard-navigation entries inside collapsed nested groups", () => {

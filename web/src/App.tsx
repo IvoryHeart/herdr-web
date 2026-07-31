@@ -4,6 +4,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsDown,
+  ChevronsUp,
   Link2,
   MoreVertical,
   PanelLeft,
@@ -958,6 +960,14 @@ export function App() {
         : [...current, key].slice(-256),
     );
   }, []);
+  const setVisibleSidebarGroupsCollapsed = useCallback(
+    (keys: readonly string[], collapsed: boolean) => {
+      setCollapsedSidebarGroups((current) =>
+        updateCollapsedSidebarGroups(current, keys, collapsed),
+      );
+    },
+    [],
+  );
   const [spaceGroup, setSpaceGroup] = useState<SpaceGroup>(initialPrefs.spaceGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
@@ -3624,6 +3634,7 @@ export function App() {
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
           onToggleCollapsedGroup={toggleCollapsedSidebarGroup}
+          onSetCollapsedGroups={setVisibleSidebarGroupsCollapsed}
           onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
@@ -4729,6 +4740,25 @@ export function sidebarGroupCollapseKey(
   return [view, grouping, level, identity].map(encodeURIComponent).join(":");
 }
 
+export function updateCollapsedSidebarGroups(
+  current: readonly string[],
+  keys: readonly string[],
+  collapsed: boolean,
+) {
+  const targetKeys = new Set(keys);
+  if (!collapsed) {
+    return current.filter((key) => !targetKeys.has(key));
+  }
+  const next = [...current];
+  const knownKeys = new Set(current);
+  for (const key of targetKeys) {
+    if (!knownKeys.has(key)) {
+      next.push(key);
+    }
+  }
+  return next.slice(-256);
+}
+
 function workspaceGroupIdentity(
   bridgeId: BridgeId,
   workspaceId: string,
@@ -5731,6 +5761,7 @@ function Switcher({
   onAgentSort,
   onAgentGroup,
   onToggleCollapsedGroup,
+  onSetCollapsedGroups,
   onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
@@ -5783,6 +5814,7 @@ function Switcher({
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
   onToggleCollapsedGroup: (key: string) => void;
+  onSetCollapsedGroups: (keys: readonly string[], collapsed: boolean) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
@@ -6011,6 +6043,89 @@ function Switcher({
   const showActiveOnlyControl =
     sidebarView === "agents" || (sidebarView === "tabs" && agentFeaturesInTabs);
   const pinnedOnlyLabel = sidebarView === "tabs" ? "pinned panes" : "pinned agents";
+  const paneGroupCollapseKeys = (() => {
+    if (sidebarView === "agents") {
+      if (agentGroup === "none") {
+        return [];
+      }
+      if (agentGroup === "hostWorkspace" && hostScope === "all") {
+        return hostBridgeViews.flatMap((view) => {
+          const groups = agentGroups.filter((group) => group.bridgeId === view.runtime.id);
+          if (groups.length === 0) {
+            return [];
+          }
+          return [
+            sidebarGroupCollapseKey("agents", agentGroup, "host", view.runtime.id),
+            ...groups.map((group) =>
+              sidebarGroupCollapseKey("agents", agentGroup, "workspace", group.key),
+            ),
+          ];
+        });
+      }
+      const level = agentGroup === "host" ? "host" : "workspace";
+      return agentGroups.map((group) =>
+        sidebarGroupCollapseKey("agents", agentGroup, level, group.key),
+      );
+    }
+
+    if (sidebarView !== "tabs" || agentGroup === "none") {
+      return [];
+    }
+    if (agentGroup === "host") {
+      return hostBridgeViews.flatMap((view) =>
+        flatTabEntries.some(
+          (entry) => entry.bridgeId === view.runtime.id && entry.panes.length > 0,
+        )
+          ? [sidebarGroupCollapseKey("tabs", agentGroup, "host", view.runtime.id)]
+          : [],
+      );
+    }
+    if (agentGroup === "hostWorkspace" && hostScope === "all") {
+      return hostBridgeViews.flatMap((view) => {
+        const groups = spaceGroups.filter(
+          (group) => group.bridgeId === view.runtime.id && group.tabs.length > 0,
+        );
+        if (groups.length === 0) {
+          return [];
+        }
+        return [
+          sidebarGroupCollapseKey("tabs", agentGroup, "host", view.runtime.id),
+          ...groups.map((group) =>
+            sidebarGroupCollapseKey(
+              "tabs",
+              agentGroup,
+              "workspace",
+              `${group.bridgeId}:${group.workspace.workspace_id}`,
+            ),
+          ),
+        ];
+      });
+    }
+    if (combineWorkspaceGroups) {
+      return combinedTabWorkspaceGroups.map((group) =>
+        sidebarGroupCollapseKey("tabs", agentGroup, "workspace", group.key),
+      );
+    }
+    return spaceGroups.flatMap((group) =>
+      group.tabs.length > 0
+        ? [
+            sidebarGroupCollapseKey(
+              "tabs",
+              agentGroup,
+              "workspace",
+              `${group.bridgeId}:${group.workspace.workspace_id}`,
+            ),
+          ]
+        : [],
+    );
+  })();
+  const paneGroupToggleStateKeys =
+    agentGroup === "hostWorkspace" && hostScope === "all"
+      ? paneGroupCollapseKeys.filter((key) => key.split(":")[2] === "host")
+      : paneGroupCollapseKeys;
+  const allPaneGroupsCollapsed =
+    paneGroupToggleStateKeys.length > 0 &&
+    paneGroupToggleStateKeys.every((key) => collapsedSidebarGroupKeys.has(key));
 
   useEffect(() => {
     if (optionsMenu && !showOptionsControl) {
@@ -6032,6 +6147,7 @@ function Switcher({
     showBridgeInWorkspaceHeader = showGroupedHostContext,
     key = `${group.bridgeId}:${group.workspace.workspace_id}`,
     collapseKey?: string,
+    nestedHeader = false,
   ) => {
     const collapsed = collapseKey ? collapsedSidebarGroupKeys.has(collapseKey) : false;
     const paneCount = group.tabs.reduce((total, tab) => total + tab.panes.length, 0);
@@ -6136,6 +6252,7 @@ function Switcher({
             status={group.workspace.agent_status}
             count={paneCount}
             collapsed={collapsed}
+            nested={nestedHeader}
             onToggle={() => {
               if (collapseKey) {
                 onToggleCollapsedGroup(collapseKey);
@@ -6235,6 +6352,7 @@ function Switcher({
                       "workspace",
                       `${group.bridgeId}:${group.workspace.workspace_id}`,
                     ),
+                    true,
                   ),
                 )
               : null}
@@ -6379,7 +6497,7 @@ function Switcher({
     );
   };
   const renderAgentGroupRows = () => {
-    const renderGroup = (group: ScopedAgentGroup) => {
+    const renderGroup = (group: ScopedAgentGroup, nested = false) => {
       const level = agentGroup === "host" ? "host" : "workspace";
       const collapseKey = sidebarGroupCollapseKey(
         "agents",
@@ -6396,6 +6514,7 @@ function Switcher({
             status={group.status}
             count={group.panes.length}
             collapsed={collapsed}
+            nested={nested}
             onToggle={() => onToggleCollapsedGroup(collapseKey)}
           />
           {!collapsed
@@ -6406,7 +6525,7 @@ function Switcher({
     };
 
     if (agentGroup !== "hostWorkspace" || hostScope !== "all") {
-      return agentGroups.map(renderGroup);
+      return agentGroups.map((group) => renderGroup(group));
     }
 
     return hostBridgeViews.map((view) => {
@@ -6433,7 +6552,7 @@ function Switcher({
             collapsed={collapsed}
             onToggle={() => onToggleCollapsedGroup(collapseKey)}
           />
-          {!collapsed ? groups.map(renderGroup) : null}
+          {!collapsed ? groups.map((group) => renderGroup(group, true)) : null}
         </Fragment>
       );
     });
@@ -6796,6 +6915,25 @@ function Switcher({
                     onClick={() => onAgentActiveOnly(!agentActiveOnly)}
                   >
                     <Activity size={13} />
+                  </button>
+                ) : null}
+                {paneGroupCollapseKeys.length > 0 ? (
+                  <button
+                    className="sec-add"
+                    type="button"
+                    aria-label={
+                      allPaneGroupsCollapsed ? "Expand all groups" : "Collapse all groups"
+                    }
+                    title={allPaneGroupsCollapsed ? "Expand all groups" : "Collapse all groups"}
+                    onClick={() =>
+                      onSetCollapsedGroups(paneGroupCollapseKeys, !allPaneGroupsCollapsed)
+                    }
+                  >
+                    {allPaneGroupsCollapsed ? (
+                      <ChevronsDown size={14} />
+                    ) : (
+                      <ChevronsUp size={14} />
+                    )}
                   </button>
                 ) : null}
                 {showOptionsControl ? (
@@ -8031,6 +8169,7 @@ function GroupHeader({
   status,
   count,
   collapsed,
+  nested = false,
   onToggle,
 }: {
   label: string;
@@ -8038,6 +8177,7 @@ function GroupHeader({
   status?: AgentStatus;
   count: number;
   collapsed: boolean;
+  nested?: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -8045,6 +8185,7 @@ function GroupHeader({
       className="grp-space"
       type="button"
       data-group-header="true"
+      data-nested={nested ? "true" : undefined}
       aria-expanded={!collapsed}
       aria-label={`${collapsed ? "Expand" : "Collapse"} ${label} group`}
       title={`${collapsed ? "Expand" : "Collapse"} ${label}`}

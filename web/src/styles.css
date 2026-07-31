@@ -626,6 +626,10 @@ button {
   background: var(--row-hover);
 }
 
+.grp-space[data-nested="true"] {
+  padding-left: 26px;
+}
+
 .grp-space:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
