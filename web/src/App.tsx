@@ -4,9 +4,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsDown,
-  ChevronsUp,
   Link2,
+  ListCollapse,
+  ListRestart,
   MoreVertical,
   PanelLeft,
   Pin,
@@ -818,6 +818,8 @@ export function parseCombineMatchingWorkspaceNames(value: unknown, fallback = fa
   return typeof value === "boolean" ? value : fallback;
 }
 
+const MAX_COLLAPSED_SIDEBAR_GROUPS = 4096;
+
 export function parseCollapsedSidebarGroups(value: unknown, fallback: string[] = []) {
   if (!Array.isArray(value)) {
     return fallback;
@@ -826,7 +828,7 @@ export function parseCollapsedSidebarGroups(value: unknown, fallback: string[] =
     ...new Set(
       value.filter((item): item is string => typeof item === "string" && item.length > 0),
     ),
-  ].slice(-256);
+  ].slice(-MAX_COLLAPSED_SIDEBAR_GROUPS);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -955,9 +957,7 @@ export function App() {
   );
   const toggleCollapsedSidebarGroup = useCallback((key: string) => {
     setCollapsedSidebarGroups((current) =>
-      current.includes(key)
-        ? current.filter((item) => item !== key)
-        : [...current, key].slice(-256),
+      updateCollapsedSidebarGroups(current, [key], !current.includes(key)),
     );
   }, []);
   const setVisibleSidebarGroupsCollapsed = useCallback(
@@ -4749,14 +4749,22 @@ export function updateCollapsedSidebarGroups(
   if (!collapsed) {
     return current.filter((key) => !targetKeys.has(key));
   }
-  const next = [...current];
-  const knownKeys = new Set(current);
-  for (const key of targetKeys) {
-    if (!knownKeys.has(key)) {
-      next.push(key);
-    }
-  }
-  return next.slice(-256);
+  const unrelatedKeys = current.filter((key) => !targetKeys.has(key));
+  const limit = Math.max(MAX_COLLAPSED_SIDEBAR_GROUPS, targetKeys.size);
+  return [...unrelatedKeys, ...targetKeys].slice(-limit);
+}
+
+export function areAllVisibleSidebarGroupsCollapsed(
+  keys: readonly string[],
+  grouping: AgentGroup,
+  hostScope: HostScope,
+  collapsedKeys: ReadonlySet<string>,
+) {
+  const stateKeys =
+    grouping === "hostWorkspace" && hostScope === "all"
+      ? keys.filter((key) => key.split(":")[2] === "host")
+      : keys;
+  return stateKeys.length > 0 && stateKeys.every((key) => collapsedKeys.has(key));
 }
 
 function workspaceGroupIdentity(
@@ -5550,9 +5558,6 @@ function isShortcutTextEntryTarget(target: EventTarget | null) {
   if (target.classList.contains("ghostty-hidden-input")) {
     return false;
   }
-  if (target.closest("[data-group-header='true']")) {
-    return true;
-  }
   if (target.isContentEditable) {
     return true;
   }
@@ -6119,13 +6124,12 @@ function Switcher({
         : [],
     );
   })();
-  const paneGroupToggleStateKeys =
-    agentGroup === "hostWorkspace" && hostScope === "all"
-      ? paneGroupCollapseKeys.filter((key) => key.split(":")[2] === "host")
-      : paneGroupCollapseKeys;
-  const allPaneGroupsCollapsed =
-    paneGroupToggleStateKeys.length > 0 &&
-    paneGroupToggleStateKeys.every((key) => collapsedSidebarGroupKeys.has(key));
+  const allPaneGroupsCollapsed = areAllVisibleSidebarGroupsCollapsed(
+    paneGroupCollapseKeys,
+    agentGroup,
+    hostScope,
+    collapsedSidebarGroupKeys,
+  );
 
   useEffect(() => {
     if (optionsMenu && !showOptionsControl) {
@@ -6930,9 +6934,9 @@ function Switcher({
                     }
                   >
                     {allPaneGroupsCollapsed ? (
-                      <ChevronsDown size={14} />
+                      <ListRestart size={14} />
                     ) : (
-                      <ChevronsUp size={14} />
+                      <ListCollapse size={14} />
                     )}
                   </button>
                 ) : null}

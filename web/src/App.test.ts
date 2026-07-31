@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  areAllVisibleSidebarGroupsCollapsed,
   agentSubtitle,
   applySnapshotOverlays,
   buildCombinedTabWorkspaceGroups,
@@ -518,8 +519,8 @@ describe("App multi-bridge helpers", () => {
       "group-a",
       "group-b",
     ]);
-    expect(parseCollapsedSidebarGroups(Array.from({ length: 300 }, (_, index) => `g-${index}`)))
-      .toHaveLength(256);
+    expect(parseCollapsedSidebarGroups(Array.from({ length: 5000 }, (_, index) => `g-${index}`)))
+      .toHaveLength(4096);
   });
 
   it("collapses and expands a visible set of sidebar groups without changing other groups", () => {
@@ -537,6 +538,52 @@ describe("App multi-bridge helpers", () => {
         false,
       ),
     ).toEqual(["other-group"]);
+
+    const manyVisibleGroups = Array.from({ length: 300 }, (_, index) => `visible-${index}`);
+    const collapsed = updateCollapsedSidebarGroups(
+      ["other-group"],
+      manyVisibleGroups,
+      true,
+    );
+    expect(collapsed).toEqual(["other-group", ...manyVisibleGroups]);
+    expect(updateCollapsedSidebarGroups(collapsed, manyVisibleGroups, false)).toEqual([
+      "other-group",
+    ]);
+  });
+
+  it("uses visible host state to choose the nested bulk group action", () => {
+    const hostKey = sidebarGroupCollapseKey("agents", "hostWorkspace", "host", "bridge-a");
+    const workspaceKey = sidebarGroupCollapseKey(
+      "agents",
+      "hostWorkspace",
+      "workspace",
+      "bridge-a:workspace-a",
+    );
+
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [hostKey, workspaceKey],
+        "hostWorkspace",
+        "all",
+        new Set([hostKey]),
+      ),
+    ).toBe(true);
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [hostKey, workspaceKey],
+        "hostWorkspace",
+        "all",
+        new Set([workspaceKey]),
+      ),
+    ).toBe(false);
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [workspaceKey],
+        "workspace",
+        "all",
+        new Set([workspaceKey]),
+      ),
+    ).toBe(true);
   });
 
   it("hides keyboard-navigation entries inside collapsed nested groups", () => {
