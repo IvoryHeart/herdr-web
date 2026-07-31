@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added a default-off sidebar option that combines same-named workspaces across hosts when using
+  Workspace grouping, while retaining host context on each agent or pane row.
+
 ### Changed
 
 - Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group

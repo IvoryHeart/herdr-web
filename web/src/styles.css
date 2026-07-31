@@ -2195,6 +2195,38 @@ button {
   background: var(--mantle);
 }
 
+.sidebar-option-toggle {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  background: var(--mantle);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.sidebar-option-toggle strong {
+  color: var(--overlay1);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sidebar-option-toggle[data-on="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+}
+
+.sidebar-option-toggle[data-on="true"] strong {
+  color: var(--accent);
+}
+
 .modal {
   position: relative;
   z-index: 1;

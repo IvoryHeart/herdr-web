@@ -298,6 +298,12 @@ type ScopedWorkspace = {
 type ScopedTabWorkspace = ScopedWorkspace & {
   tabs: { tab: TabInfo; panes: PaneInfo[] }[];
 };
+type CombinedTabWorkspaceGroup = {
+  key: string;
+  label: string;
+  status: AgentStatus;
+  workspaces: ScopedTabWorkspace[];
+};
 export type ScopedTabEntry = ScopedWorkspace & {
   tab: TabInfo;
   panes: PaneInfo[];
@@ -361,6 +367,7 @@ type DisplayPrefs = {
   sidebarView: SidebarView;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  combineMatchingWorkspaceNames: boolean;
   spaceGroup: SpaceGroup;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
@@ -422,6 +429,7 @@ function readDisplayPrefs(): DisplayPrefs {
     sidebarView: "agents",
     agentSort: "attention",
     agentGroup: "none",
+    combineMatchingWorkspaceNames: false,
     spaceGroup: "none",
     agentPinnedOnly: false,
     agentActiveOnly: false,
@@ -586,6 +594,10 @@ function parseDisplayPrefsValue(
       parsed.agentGroup === "hostWorkspace"
         ? parsed.agentGroup
         : fallback.agentGroup,
+    combineMatchingWorkspaceNames: parseCombineMatchingWorkspaceNames(
+      parsed.combineMatchingWorkspaceNames,
+      fallback.combineMatchingWorkspaceNames,
+    ),
     spaceGroup:
       parsed.spaceGroup === "none" || parsed.spaceGroup === "host"
         ? parsed.spaceGroup
@@ -792,6 +804,10 @@ function parseStoredMobileLongPressBehavior(
   return DEFAULT_MOBILE_LONG_PRESS_BEHAVIOR;
 }
 
+export function parseCombineMatchingWorkspaceNames(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -906,6 +922,9 @@ export function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>(initialPrefs.sidebarView);
   const [agentSort, setAgentSort] = useState<AgentSort>(initialPrefs.agentSort);
   const [agentGroup, setAgentGroup] = useState<AgentGroup>(initialPrefs.agentGroup);
+  const [combineMatchingWorkspaceNames, setCombineMatchingWorkspaceNames] = useState(
+    initialPrefs.combineMatchingWorkspaceNames,
+  );
   const [spaceGroup, setSpaceGroup] = useState<SpaceGroup>(initialPrefs.spaceGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
@@ -1045,6 +1064,7 @@ export function App() {
       setSidebarView(prefs.sidebarView);
       setAgentSort(prefs.agentSort);
       setAgentGroup(prefs.agentGroup);
+      setCombineMatchingWorkspaceNames(prefs.combineMatchingWorkspaceNames);
       setSpaceGroup(prefs.spaceGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
@@ -1548,6 +1568,7 @@ export function App() {
       sidebarView,
       agentSort,
       agentGroup,
+      combineMatchingWorkspaceNames,
       spaceGroup,
       agentPinnedOnly,
       agentActiveOnly,
@@ -1581,6 +1602,7 @@ export function App() {
     sidebarView,
     agentSort,
     agentGroup,
+    combineMatchingWorkspaceNames,
     spaceGroup,
     agentPinnedOnly,
     agentActiveOnly,
@@ -2857,6 +2879,7 @@ export function App() {
           effectiveAgentPinnedOnly,
           agentActivityTransitions,
           agentActiveOnly,
+          combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace",
         );
         if (agentEntries.length === 0) {
           return;
@@ -2900,6 +2923,7 @@ export function App() {
         agentSort,
         agentActivityTransitions,
         sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
+        combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace",
       );
       const tabs = tabEntries;
       if (tabs.length === 0) {
@@ -2936,6 +2960,7 @@ export function App() {
     effectiveAgentPinnedOnly,
     agentGroup,
     agentSort,
+    combineMatchingWorkspaceNames,
     bridgeViews,
     busy,
     dialog,
@@ -3529,6 +3554,7 @@ export function App() {
           agentFeaturesInTabs={agentFeaturesInTabs}
           agentSort={agentSort}
           agentGroup={agentGroup}
+          combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
           spaceGroup={spaceGroup}
           multiHostSpaceSelection={multiHostSpaceSelection}
           activeSpace={activeSpace}
@@ -3543,6 +3569,7 @@ export function App() {
           onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
+          onCombineMatchingWorkspaceNames={setCombineMatchingWorkspaceNames}
           onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
@@ -4560,6 +4587,7 @@ export function buildVisibleAgentPaneEntries(
   pinnedOnly = false,
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
   activeOnly = false,
+  combineMatchingWorkspaceNames = false,
 ) {
   const buildRows = (sort: AgentSort) =>
     scopedWorkspaces.flatMap((entry) => {
@@ -4592,7 +4620,11 @@ export function buildVisibleAgentPaneEntries(
 
   if (agentSort === "lastStatusChange" && agentGroup !== "none") {
     const agentPanes = filterAgentEntries(buildRows("workspace"), pinnedOnly, activeOnly);
-    const groups = buildScopedAgentGroups(agentPanes, agentGroup).map((group) => ({
+    const groups = buildScopedAgentGroups(
+      agentPanes,
+      agentGroup,
+      combineMatchingWorkspaceNames,
+    ).map((group) => ({
       ...group,
       panes: sortedAgentEntriesWithinGroup(sortScopedAgentPanes(group.panes, agentSort)),
     }));
@@ -4613,7 +4645,11 @@ export function buildVisibleAgentPaneEntries(
     return agentPanes;
   }
 
-  const groups = buildScopedAgentGroups(agentPanes, agentGroup).map((group) => ({
+  const groups = buildScopedAgentGroups(
+    agentPanes,
+    agentGroup,
+    combineMatchingWorkspaceNames,
+  ).map((group) => ({
     ...group,
     panes: sortedAgentEntriesWithinGroup(group.panes),
   }));
@@ -4640,15 +4676,18 @@ function filterAgentEntries(
 export function buildScopedAgentGroups(
   agentPanes: ScopedAgentPane[],
   agentGroup: AgentGroup,
+  combineMatchingWorkspaceNames = false,
 ) {
   const paneBuckets = new Map<string, ScopedAgentGroup>();
   const groupByWorkspace = agentGroup === "workspace" || agentGroup === "hostWorkspace";
   for (const entry of agentPanes) {
+    const workspaceLabel = entry.workspace?.label.trim() || "workspace";
     const key = groupByWorkspace
-      ? `${entry.bridgeId}:${entry.pane.workspace_id}`
+      ? agentGroup === "workspace" && combineMatchingWorkspaceNames
+        ? `workspace-name:${workspaceLabel}`
+        : `${entry.bridgeId}:${entry.pane.workspace_id}`
       : entry.bridgeId;
-    const label =
-      agentGroup === "host" ? entry.bridgeLabel : (entry.workspace?.label ?? "workspace");
+    const label = agentGroup === "host" ? entry.bridgeLabel : workspaceLabel;
     const existing =
       paneBuckets.get(key) ??
       {
@@ -4656,7 +4695,10 @@ export function buildScopedAgentGroups(
         bridgeId: entry.bridgeId,
         label,
         bridgeColor: entry.bridgeColor,
-        status: groupByWorkspace ? entry.workspace?.agent_status : undefined,
+        status:
+          groupByWorkspace && !(agentGroup === "workspace" && combineMatchingWorkspaceNames)
+            ? entry.workspace?.agent_status
+            : undefined,
         panes: [],
       };
     existing.panes.push(entry);
@@ -4712,6 +4754,27 @@ export function buildVisibleTabWorkspaceGroups(
     .filter((group) => group.tabs.length > 0);
 }
 
+export function buildCombinedTabWorkspaceGroups(
+  workspaceGroups: ScopedTabWorkspace[],
+): CombinedTabWorkspaceGroup[] {
+  const buckets = new Map<string, Omit<CombinedTabWorkspaceGroup, "status">>();
+  for (const workspaceGroup of workspaceGroups) {
+    const label = workspaceGroup.workspace.label.trim() || "workspace";
+    const key = `workspace-name:${label}`;
+    const bucket = buckets.get(key) ?? { key, label, workspaces: [] };
+    bucket.workspaces.push(workspaceGroup);
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()].map((bucket) => ({
+    ...bucket,
+    status: aggregateStatus(
+      bucket.workspaces.flatMap((workspace) =>
+        workspace.tabs.flatMap((tab) => tab.panes),
+      ),
+    ),
+  }));
+}
+
 export function buildVisibleTabEntries(
   scopedWorkspaces: ScopedWorkspace[],
   bridgeViews: BridgeConnectionView[],
@@ -4723,6 +4786,7 @@ export function buildVisibleTabEntries(
   agentSort: AgentSort = "workspace",
   agentActivityTransitions: ReadonlyMap<string, number> = EMPTY_AGENT_ACTIVITY_TRANSITIONS,
   activeOnly = false,
+  combineMatchingWorkspaceNames = false,
 ): ScopedTabEntry[] {
   const spaceGroups = buildVisibleTabWorkspaceGroups(
     scopedWorkspaces,
@@ -4751,6 +4815,11 @@ export function buildVisibleTabEntries(
         agentFeaturesInTabs ? agentSort : "workspace",
         agentActivityTransitions,
       ),
+    );
+  }
+  if (agentGroup === "workspace" && hostScope === "all" && combineMatchingWorkspaceNames) {
+    return buildCombinedTabWorkspaceGroups(spaceGroups).flatMap((group) =>
+      group.workspaces.flatMap(flattenGroup),
     );
   }
   return spaceGroups.flatMap(flattenGroup);
@@ -5492,6 +5561,7 @@ function Switcher({
   agentFeaturesInTabs,
   agentSort,
   agentGroup,
+  combineMatchingWorkspaceNames,
   spaceGroup,
   multiHostSpaceSelection,
   activeSpace,
@@ -5506,6 +5576,7 @@ function Switcher({
   onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
+  onCombineMatchingWorkspaceNames,
   onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
@@ -5541,6 +5612,7 @@ function Switcher({
   agentFeaturesInTabs: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  combineMatchingWorkspaceNames: boolean;
   spaceGroup: SpaceGroup;
   multiHostSpaceSelection: boolean;
   activeSpace: WorkspaceInfo | null;
@@ -5555,6 +5627,7 @@ function Switcher({
   onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
+  onCombineMatchingWorkspaceNames: (combine: boolean) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
@@ -5667,6 +5740,8 @@ function Switcher({
     agentSort,
   );
   const effectiveAgentPinnedOnly = agentPinsSupported && agentPinnedOnly;
+  const combineWorkspaceGroups =
+    combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace";
   const notesLoading = notesEnabled && hostBridgeViews.some(
     (view) => notesStates[view.runtime.id]?.loadState === "loading",
   );
@@ -5696,6 +5771,7 @@ function Switcher({
       effectiveAgentPinnedOnly,
       agentActivityTransitions,
       agentActiveOnly,
+      combineWorkspaceGroups,
     );
   }, [
     agentActivityTransitions,
@@ -5704,6 +5780,7 @@ function Switcher({
     effectiveAgentPinnedOnly,
     agentSort,
     bridgeViews,
+    combineWorkspaceGroups,
     hostScope,
     pinnedAgentKeys,
     scopedWorkspaces,
@@ -5713,8 +5790,8 @@ function Switcher({
     if (agentGroup === "none") {
       return [];
     }
-    return buildScopedAgentGroups(agentPanes, agentGroup);
-  }, [agentGroup, agentPanes]);
+    return buildScopedAgentGroups(agentPanes, agentGroup, combineWorkspaceGroups);
+  }, [agentGroup, agentPanes, combineWorkspaceGroups]);
 
   const spaceGroups = useMemo<ScopedTabWorkspace[]>(
     () =>
@@ -5737,6 +5814,10 @@ function Switcher({
       scopedWorkspaces,
       sidebarView,
     ],
+  );
+  const combinedTabWorkspaceGroups = useMemo(
+    () => (combineWorkspaceGroups ? buildCombinedTabWorkspaceGroups(spaceGroups) : []),
+    [combineWorkspaceGroups, spaceGroups],
   );
   const flatTabEntries = useMemo(
     () =>
@@ -5942,6 +6023,21 @@ function Switcher({
     }
 
     if (agentGroup === "workspace") {
+      if (combineWorkspaceGroups) {
+        return combinedTabWorkspaceGroups.map((combinedGroup) => (
+          <Fragment key={combinedGroup.key}>
+            <GroupHeader label={combinedGroup.label} status={combinedGroup.status} />
+            {combinedGroup.workspaces.map((group) =>
+              renderTabWorkspaceGroup(
+                group,
+                false,
+                false,
+                `${combinedGroup.key}:${group.bridgeId}:${group.workspace.workspace_id}`,
+              ),
+            )}
+          </Fragment>
+        ));
+      }
       return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true, false));
     }
 
@@ -6465,9 +6561,12 @@ function Switcher({
           showGroup={showGroupControl}
           agentSort={agentSort}
           agentGroup={agentGroup}
+          combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
+          showCombineMatchingWorkspaceNames={hostScope === "all" && agentGroup === "workspace"}
           showLastStatusChangeSort={showLastStatusChangeSort}
           onAgentSort={onAgentSort}
           onAgentGroup={onAgentGroup}
+          onCombineMatchingWorkspaceNames={onCombineMatchingWorkspaceNames}
           onClose={() => setOptionsMenu(null)}
         />
       ) : null}
@@ -6492,9 +6591,12 @@ function SidebarOptionsMenu({
   showGroup,
   agentSort,
   agentGroup,
+  combineMatchingWorkspaceNames,
+  showCombineMatchingWorkspaceNames,
   showLastStatusChangeSort,
   onAgentSort,
   onAgentGroup,
+  onCombineMatchingWorkspaceNames,
   onClose,
 }: {
   x: number;
@@ -6504,9 +6606,12 @@ function SidebarOptionsMenu({
   showGroup: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
+  combineMatchingWorkspaceNames: boolean;
+  showCombineMatchingWorkspaceNames: boolean;
   showLastStatusChangeSort: boolean;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
+  onCombineMatchingWorkspaceNames: (combine: boolean) => void;
   onClose: () => void;
 }) {
   return (
@@ -6545,6 +6650,19 @@ function SidebarOptionsMenu({
             <option value="hostWorkspace">Host + workspace</option>
           </select>
         </label>
+      ) : null}
+      {showCombineMatchingWorkspaceNames ? (
+        <button
+          className="sidebar-option-toggle"
+          type="button"
+          role="switch"
+          aria-checked={combineMatchingWorkspaceNames}
+          data-on={combineMatchingWorkspaceNames ? "true" : undefined}
+          onClick={() => onCombineMatchingWorkspaceNames(!combineMatchingWorkspaceNames)}
+        >
+          <span>Combine matching names</span>
+          <strong>{combineMatchingWorkspaceNames ? "On" : "Off"}</strong>
+        </button>
       ) : null}
     </OptionsMenuShell>
   );

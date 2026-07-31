@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   agentSubtitle,
   applySnapshotOverlays,
-  buildVisibleAgentPaneEntries,
+  buildCombinedTabWorkspaceGroups,
   buildScopedAgentGroups,
+  buildVisibleAgentPaneEntries,
+  buildVisibleScopedWorkspaces,
   buildVisibleScopedNotes,
+  buildVisibleTabEntries,
+  buildVisibleTabWorkspaceGroups,
   canAddNoteFromPaneMenu,
   mergeCreatedPaneNoteList,
   mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
-  buildVisibleScopedWorkspaces,
-  buildVisibleTabEntries,
-  buildVisibleTabWorkspaceGroups,
+  parseCombineMatchingWorkspaceNames,
   isInFlightNoteSaveVisible,
   launcherEmptyMessage,
   menuItems,
@@ -398,18 +400,108 @@ describe("App multi-bridge helpers", () => {
 
   it("uses workspace-only headers when grouping workspaces across hosts", () => {
     const sharedWorkspace = workspace("shared-workspace", 1);
-    const groups = buildScopedAgentGroups(
-      [
-        entry("host-a", 0, sharedWorkspace, pane("pane-a", "shared-workspace", "tab-a"), 1),
-        entry("host-b", 1, sharedWorkspace, pane("pane-b", "shared-workspace", "tab-b"), 1),
-      ],
-      "workspace",
-    );
+    const entries = [
+      entry("host-a", 0, sharedWorkspace, pane("pane-a", "shared-workspace", "tab-a"), 1),
+      entry(
+        "host-b",
+        1,
+        sharedWorkspace,
+        pane("pane-b", "shared-workspace", "tab-b", "blocked"),
+        1,
+      ),
+    ];
+    const groups = buildScopedAgentGroups(entries, "workspace");
 
     expect(groups.map((group) => group.label)).toEqual([
       "shared-workspace",
       "shared-workspace",
     ]);
+
+    const combinedGroups = buildScopedAgentGroups(entries, "workspace", true);
+    expect(combinedGroups).toHaveLength(1);
+    expect(combinedGroups[0]).toMatchObject({
+      key: "workspace-name:shared-workspace",
+      label: "shared-workspace",
+      status: "blocked",
+    });
+    expect(combinedGroups[0].panes.map((item) => item.bridgeId)).toEqual(["host-a", "host-b"]);
+  });
+
+  it("combines matching Tab workspace groups across hosts without merging their entries", () => {
+    const bridgeViews = [
+      bridgeView(
+        "host-a",
+        bridgeSnapshot("shared-workspace", "tab-a", pane("pane-a", "shared-workspace", "tab-a")),
+      ),
+      bridgeView(
+        "host-b",
+        bridgeSnapshot("shared-workspace", "tab-b", pane("pane-b", "shared-workspace", "tab-b")),
+      ),
+    ];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "host-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+
+    const combinedGroups = buildCombinedTabWorkspaceGroups(
+      buildVisibleTabWorkspaceGroups(scopedWorkspaces),
+    );
+
+    expect(combinedGroups).toHaveLength(1);
+    expect(combinedGroups[0].label).toBe("shared-workspace");
+    expect(combinedGroups[0].workspaces.map((group) => group.bridgeId)).toEqual([
+      "host-a",
+      "host-b",
+    ]);
+
+    const bridgeViewsWithInterleavedWorkspace = [
+      bridgeView(
+        "host-a",
+        multiPaneSnapshot(
+          [workspace("shared-workspace", 1), workspace("unique-workspace", 2)],
+          [
+            pane("pane-a", "shared-workspace", "tab-a"),
+            pane("pane-unique", "unique-workspace", "tab-unique"),
+          ],
+        ),
+      ),
+      bridgeViews[1],
+    ];
+    const interleavedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViewsWithInterleavedWorkspace,
+      "host-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+    expect(
+      buildVisibleTabEntries(
+        interleavedWorkspaces,
+        bridgeViewsWithInterleavedWorkspace,
+        "all",
+        "workspace",
+        new Set(),
+        false,
+        true,
+        "workspace",
+        new Map(),
+        false,
+        true,
+      ).map((item) => `${item.bridgeId}:${item.tab.tab_id}`),
+    ).toEqual(["host-a:tab-a", "host-b:tab-b", "host-a:tab-unique"]);
+  });
+
+  it("keeps the matching-name preference default-off and boolean-only", () => {
+    expect(parseCombineMatchingWorkspaceNames(undefined)).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames("true")).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames("true", true)).toBe(true);
+    expect(parseCombineMatchingWorkspaceNames(false, true)).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames(true)).toBe(true);
   });
 
   it("moves host context into rows only for flat and workspace grouping", () => {
