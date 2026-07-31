@@ -1,7 +1,9 @@
 import {
   Activity,
   Archive,
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Link2,
   MoreVertical,
   PanelLeft,
@@ -368,6 +370,7 @@ type DisplayPrefs = {
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   combineMatchingWorkspaceNames: boolean;
+  collapsedSidebarGroups: string[];
   spaceGroup: SpaceGroup;
   agentPinnedOnly: boolean;
   agentActiveOnly: boolean;
@@ -430,6 +433,7 @@ function readDisplayPrefs(): DisplayPrefs {
     agentSort: "attention",
     agentGroup: "none",
     combineMatchingWorkspaceNames: false,
+    collapsedSidebarGroups: [],
     spaceGroup: "none",
     agentPinnedOnly: false,
     agentActiveOnly: false,
@@ -597,6 +601,10 @@ function parseDisplayPrefsValue(
     combineMatchingWorkspaceNames: parseCombineMatchingWorkspaceNames(
       parsed.combineMatchingWorkspaceNames,
       fallback.combineMatchingWorkspaceNames,
+    ),
+    collapsedSidebarGroups: parseCollapsedSidebarGroups(
+      parsed.collapsedSidebarGroups,
+      fallback.collapsedSidebarGroups,
     ),
     spaceGroup:
       parsed.spaceGroup === "none" || parsed.spaceGroup === "host"
@@ -808,6 +816,17 @@ export function parseCombineMatchingWorkspaceNames(value: unknown, fallback = fa
   return typeof value === "boolean" ? value : fallback;
 }
 
+export function parseCollapsedSidebarGroups(value: unknown, fallback: string[] = []) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+  return [
+    ...new Set(
+      value.filter((item): item is string => typeof item === "string" && item.length > 0),
+    ),
+  ].slice(-256);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -925,6 +944,20 @@ export function App() {
   const [combineMatchingWorkspaceNames, setCombineMatchingWorkspaceNames] = useState(
     initialPrefs.combineMatchingWorkspaceNames,
   );
+  const [collapsedSidebarGroups, setCollapsedSidebarGroups] = useState(
+    initialPrefs.collapsedSidebarGroups,
+  );
+  const collapsedSidebarGroupKeys = useMemo(
+    () => new Set(collapsedSidebarGroups),
+    [collapsedSidebarGroups],
+  );
+  const toggleCollapsedSidebarGroup = useCallback((key: string) => {
+    setCollapsedSidebarGroups((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key].slice(-256),
+    );
+  }, []);
   const [spaceGroup, setSpaceGroup] = useState<SpaceGroup>(initialPrefs.spaceGroup);
   const [agentPinnedOnly, setAgentPinnedOnly] = useState(initialPrefs.agentPinnedOnly);
   const [agentActiveOnly, setAgentActiveOnly] = useState(initialPrefs.agentActiveOnly);
@@ -1065,6 +1098,7 @@ export function App() {
       setAgentSort(prefs.agentSort);
       setAgentGroup(prefs.agentGroup);
       setCombineMatchingWorkspaceNames(prefs.combineMatchingWorkspaceNames);
+      setCollapsedSidebarGroups(prefs.collapsedSidebarGroups);
       setSpaceGroup(prefs.spaceGroup);
       setAgentPinnedOnly(prefs.agentPinnedOnly);
       setAgentActiveOnly(prefs.agentActiveOnly);
@@ -1569,6 +1603,7 @@ export function App() {
       agentSort,
       agentGroup,
       combineMatchingWorkspaceNames,
+      collapsedSidebarGroups,
       spaceGroup,
       agentPinnedOnly,
       agentActiveOnly,
@@ -1603,6 +1638,7 @@ export function App() {
     agentSort,
     agentGroup,
     combineMatchingWorkspaceNames,
+    collapsedSidebarGroups,
     spaceGroup,
     agentPinnedOnly,
     agentActiveOnly,
@@ -2861,25 +2897,33 @@ export function App() {
       }
 
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        const agentEntries = buildVisibleAgentPaneEntries(
-          buildVisibleScopedWorkspaces(
+        const combineWorkspaceGroupsForShortcut =
+          combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace";
+        const agentEntries = filterCollapsedAgentPaneEntries(
+          buildVisibleAgentPaneEntries(
+            buildVisibleScopedWorkspaces(
+              bridgeViews,
+              selectedRuntime?.id ?? null,
+              hostScope,
+              scope,
+              activeSpace,
+              activeWorkspacesByBridgeId,
+              multiHostSpaceSelection,
+            ),
             bridgeViews,
-            selectedRuntime?.id ?? null,
             hostScope,
-            scope,
-            activeSpace,
-            activeWorkspacesByBridgeId,
-            multiHostSpaceSelection,
+            agentGroup,
+            agentSort,
+            pinnedAgentKeys,
+            effectiveAgentPinnedOnly,
+            agentActivityTransitions,
+            agentActiveOnly,
+            combineWorkspaceGroupsForShortcut,
           ),
-          bridgeViews,
-          hostScope,
           agentGroup,
-          agentSort,
-          pinnedAgentKeys,
-          effectiveAgentPinnedOnly,
-          agentActivityTransitions,
-          agentActiveOnly,
-          combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace",
+          hostScope,
+          combineWorkspaceGroupsForShortcut,
+          collapsedSidebarGroupKeys,
         );
         if (agentEntries.length === 0) {
           return;
@@ -2904,26 +2948,34 @@ export function App() {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
         return;
       }
-      const tabEntries = buildVisibleTabEntries(
-        buildVisibleScopedWorkspaces(
+      const combineWorkspaceGroupsForShortcut =
+        combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace";
+      const tabEntries = filterCollapsedTabEntries(
+        buildVisibleTabEntries(
+          buildVisibleScopedWorkspaces(
+            bridgeViews,
+            selectedRuntime?.id ?? null,
+            hostScope,
+            scope,
+            activeSpace,
+            activeWorkspacesByBridgeId,
+            multiHostSpaceSelection,
+          ),
           bridgeViews,
-          selectedRuntime?.id ?? null,
           hostScope,
-          scope,
-          activeSpace,
-          activeWorkspacesByBridgeId,
-          multiHostSpaceSelection,
+          agentGroup,
+          pinnedAgentKeys,
+          sidebarView === "tabs" && effectiveAgentPinnedOnly,
+          sidebarView === "tabs" && agentFeaturesInTabs,
+          agentSort,
+          agentActivityTransitions,
+          sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
+          combineWorkspaceGroupsForShortcut,
         ),
-        bridgeViews,
-        hostScope,
         agentGroup,
-        pinnedAgentKeys,
-        sidebarView === "tabs" && effectiveAgentPinnedOnly,
-        sidebarView === "tabs" && agentFeaturesInTabs,
-        agentSort,
-        agentActivityTransitions,
-        sidebarView === "tabs" && agentFeaturesInTabs && agentActiveOnly,
-        combineMatchingWorkspaceNames && hostScope === "all" && agentGroup === "workspace",
+        hostScope,
+        combineWorkspaceGroupsForShortcut,
+        collapsedSidebarGroupKeys,
       );
       const tabs = tabEntries;
       if (tabs.length === 0) {
@@ -2961,6 +3013,7 @@ export function App() {
     agentGroup,
     agentSort,
     combineMatchingWorkspaceNames,
+    collapsedSidebarGroupKeys,
     bridgeViews,
     busy,
     dialog,
@@ -3555,6 +3608,7 @@ export function App() {
           agentSort={agentSort}
           agentGroup={agentGroup}
           combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
+          collapsedSidebarGroupKeys={collapsedSidebarGroupKeys}
           spaceGroup={spaceGroup}
           multiHostSpaceSelection={multiHostSpaceSelection}
           activeSpace={activeSpace}
@@ -3569,6 +3623,7 @@ export function App() {
           onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
+          onToggleCollapsedGroup={toggleCollapsedSidebarGroup}
           onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
@@ -4662,6 +4717,100 @@ export function buildVisibleAgentPaneEntries(
   return groups.flatMap((group) => group.panes);
 }
 
+type CollapsibleSidebarView = "agents" | "tabs" | "spaces";
+type CollapsibleGroupLevel = "host" | "workspace";
+
+export function sidebarGroupCollapseKey(
+  view: CollapsibleSidebarView,
+  grouping: AgentGroup | SpaceGroup,
+  level: CollapsibleGroupLevel,
+  identity: string,
+) {
+  return [view, grouping, level, identity].map(encodeURIComponent).join(":");
+}
+
+function workspaceGroupIdentity(
+  bridgeId: BridgeId,
+  workspaceId: string,
+  workspaceLabel: string,
+  combineMatchingWorkspaceNames: boolean,
+) {
+  return combineMatchingWorkspaceNames
+    ? `workspace-name:${workspaceLabel.trim() || "workspace"}`
+    : `${bridgeId}:${workspaceId}`;
+}
+
+function entryCollapseKeys(
+  view: "agents" | "tabs",
+  bridgeId: BridgeId,
+  workspaceId: string,
+  workspaceLabel: string,
+  agentGroup: AgentGroup,
+  hostScope: HostScope,
+  combineMatchingWorkspaceNames: boolean,
+) {
+  if (agentGroup === "none") {
+    return [];
+  }
+  if (agentGroup === "host") {
+    return [sidebarGroupCollapseKey(view, agentGroup, "host", bridgeId)];
+  }
+  const workspaceKey = sidebarGroupCollapseKey(
+    view,
+    agentGroup,
+    "workspace",
+    workspaceGroupIdentity(
+      bridgeId,
+      workspaceId,
+      workspaceLabel,
+      agentGroup === "workspace" && combineMatchingWorkspaceNames,
+    ),
+  );
+  return agentGroup === "hostWorkspace" && hostScope === "all"
+    ? [sidebarGroupCollapseKey(view, agentGroup, "host", bridgeId), workspaceKey]
+    : [workspaceKey];
+}
+
+export function filterCollapsedAgentPaneEntries(
+  entries: ScopedAgentPane[],
+  agentGroup: AgentGroup,
+  hostScope: HostScope,
+  combineMatchingWorkspaceNames: boolean,
+  collapsedGroupKeys: ReadonlySet<string>,
+) {
+  return entries.filter((entry) =>
+    entryCollapseKeys(
+      "agents",
+      entry.bridgeId,
+      entry.pane.workspace_id,
+      entry.workspace?.label ?? "workspace",
+      agentGroup,
+      hostScope,
+      combineMatchingWorkspaceNames,
+    ).every((key) => !collapsedGroupKeys.has(key)),
+  );
+}
+
+export function filterCollapsedTabEntries(
+  entries: ScopedTabEntry[],
+  agentGroup: AgentGroup,
+  hostScope: HostScope,
+  combineMatchingWorkspaceNames: boolean,
+  collapsedGroupKeys: ReadonlySet<string>,
+) {
+  return entries.filter((entry) =>
+    entryCollapseKeys(
+      "tabs",
+      entry.bridgeId,
+      entry.workspace.workspace_id,
+      entry.workspace.label,
+      agentGroup,
+      hostScope,
+      combineMatchingWorkspaceNames,
+    ).every((key) => !collapsedGroupKeys.has(key)),
+  );
+}
+
 function filterAgentEntries(
   entries: ScopedAgentPane[],
   pinnedOnly: boolean,
@@ -5371,6 +5520,9 @@ function isShortcutTextEntryTarget(target: EventTarget | null) {
   if (target.classList.contains("ghostty-hidden-input")) {
     return false;
   }
+  if (target.closest("[data-group-header='true']")) {
+    return true;
+  }
   if (target.isContentEditable) {
     return true;
   }
@@ -5563,6 +5715,7 @@ function Switcher({
   agentSort,
   agentGroup,
   combineMatchingWorkspaceNames,
+  collapsedSidebarGroupKeys,
   spaceGroup,
   multiHostSpaceSelection,
   activeSpace,
@@ -5577,6 +5730,7 @@ function Switcher({
   onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
+  onToggleCollapsedGroup,
   onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
@@ -5613,6 +5767,7 @@ function Switcher({
   agentSort: AgentSort;
   agentGroup: AgentGroup;
   combineMatchingWorkspaceNames: boolean;
+  collapsedSidebarGroupKeys: ReadonlySet<string>;
   spaceGroup: SpaceGroup;
   multiHostSpaceSelection: boolean;
   activeSpace: WorkspaceInfo | null;
@@ -5627,6 +5782,7 @@ function Switcher({
   onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
+  onToggleCollapsedGroup: (key: string) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
@@ -5875,53 +6031,63 @@ function Switcher({
     showWorkspaceHeader: boolean,
     showBridgeInWorkspaceHeader = showGroupedHostContext,
     key = `${group.bridgeId}:${group.workspace.workspace_id}`,
-  ) => (
-    <Fragment key={key}>
-      {showWorkspaceHeader ? (
-        <GroupHeader
-          label={
-            showBridgeInWorkspaceHeader
-              ? `${group.bridgeLabel} / ${group.workspace.label}`
-              : group.workspace.label
-          }
-          bridgeColor={showBridgeInWorkspaceHeader ? group.bridgeColor : undefined}
-          status={showBridgeInWorkspaceHeader ? undefined : group.workspace.agent_status}
-        />
-      ) : null}
-      {group.tabs.map(({ tab, panes: tabPanes }) => {
-        const tabLabel = displayTabLabel(tab, group.snapshot.panes);
-        const rowContext = sidebarRowContext(
-          agentGroup,
-          hostScope,
-          group.bridgeLabel,
-          group.workspace.label,
-        );
-        const paneRows = tabPanes.map((pane) => {
-          const index = paneIndex++;
-          const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
-          const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
-          const active =
-            group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id;
-          const onSelect = () => onSelectPane(group.bridgeId, pane);
-          const onPaneMenu = (x: number, y: number) =>
-            onScopedMenu(
-              "pane",
-              group.bridgeId,
-              pane.pane_id,
-              paneTitle(pane),
-              x,
-              y,
-              undefined,
-              renderAsAgent ? "agent" : "pane",
-            );
-          if (renderAsAgent) {
+    collapseKey?: string,
+  ) => {
+    const collapsed = collapseKey ? collapsedSidebarGroupKeys.has(collapseKey) : false;
+    const paneCount = group.tabs.reduce((total, tab) => total + tab.panes.length, 0);
+    const tabRows = collapsed
+      ? null
+      : group.tabs.map(({ tab, panes: tabPanes }) => {
+          const tabLabel = displayTabLabel(tab, group.snapshot.panes);
+          const rowContext = sidebarRowContext(
+            agentGroup,
+            hostScope,
+            group.bridgeLabel,
+            group.workspace.label,
+          );
+          const paneRows = tabPanes.map((pane) => {
+            const index = paneIndex++;
+            const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
+            const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
+            const active =
+              group.bridgeId === selectedBridgeId && pane.pane_id === selectedPane?.pane_id;
+            const onSelect = () => onSelectPane(group.bridgeId, pane);
+            const onPaneMenu = (x: number, y: number) =>
+              onScopedMenu(
+                "pane",
+                group.bridgeId,
+                pane.pane_id,
+                paneTitle(pane),
+                x,
+                y,
+                undefined,
+                renderAsAgent ? "agent" : "pane",
+              );
+            if (renderAsAgent) {
+              return (
+                <AgentRow
+                  key={`${group.bridgeId}:${pane.pane_id}`}
+                  index={index}
+                  pane={pane}
+                  workspace={rowContext.workspaceLabel ? group.workspace : undefined}
+                  tabLabel={tabLabel}
+                  bridgeLabel={rowContext.bridgeLabel}
+                  pinned={pinned}
+                  active={active}
+                  onSelect={onSelect}
+                  onMenu={onPaneMenu}
+                />
+              );
+            }
             return (
-              <AgentRow
+              <PaneRow
                 key={`${group.bridgeId}:${pane.pane_id}`}
                 index={index}
                 pane={pane}
-                workspace={rowContext.workspaceLabel ? group.workspace : undefined}
-                tabLabel={tabLabel}
+                workspaceLabel={rowContext.workspaceLabel}
+                tabLabel={
+                  agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
+                }
                 bridgeLabel={rowContext.bridgeLabel}
                 pinned={pinned}
                 active={active}
@@ -5929,53 +6095,58 @@ function Switcher({
                 onMenu={onPaneMenu}
               />
             );
+          });
+          if (agentGroup === "none") {
+            return <Fragment key={`${group.bridgeId}:${tab.tab_id}`}>{paneRows}</Fragment>;
           }
           return (
-            <PaneRow
-              key={`${group.bridgeId}:${pane.pane_id}`}
-              index={index}
-              pane={pane}
-              workspaceLabel={rowContext.workspaceLabel}
-              tabLabel={
-                agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
-              }
-              bridgeLabel={rowContext.bridgeLabel}
-              pinned={pinned}
-              active={active}
-              onSelect={onSelect}
-              onMenu={onPaneMenu}
-            />
+            <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
+              {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
+                <TabDivider
+                  label={tabLabel}
+                  count={tabPanes.length}
+                  onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
+                  onMenu={(x, y) =>
+                    onScopedMenu(
+                      "tab",
+                      group.bridgeId,
+                      tab.tab_id,
+                      tabLabel,
+                      x,
+                      y,
+                      canClearTabName(tab),
+                    )
+                  }
+                />
+              ) : null}
+              {paneRows}
+            </div>
           );
         });
-        if (agentGroup === "none") {
-          return <Fragment key={`${group.bridgeId}:${tab.tab_id}`}>{paneRows}</Fragment>;
-        }
-        return (
-          <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
-            {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
-              <TabDivider
-                label={tabLabel}
-                count={tabPanes.length}
-                onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
-                onMenu={(x, y) =>
-                  onScopedMenu(
-                    "tab",
-                    group.bridgeId,
-                    tab.tab_id,
-                    tabLabel,
-                    x,
-                    y,
-                    canClearTabName(tab),
-                  )
-                }
-              />
-            ) : null}
-            {paneRows}
-          </div>
-        );
-      })}
-    </Fragment>
-  );
+    return (
+      <Fragment key={key}>
+        {showWorkspaceHeader ? (
+          <GroupHeader
+            label={
+              showBridgeInWorkspaceHeader
+                ? `${group.bridgeLabel} / ${group.workspace.label}`
+                : group.workspace.label
+            }
+            bridgeColor={showBridgeInWorkspaceHeader ? group.bridgeColor : undefined}
+            status={group.workspace.agent_status}
+            count={paneCount}
+            collapsed={collapsed}
+            onToggle={() => {
+              if (collapseKey) {
+                onToggleCollapsedGroup(collapseKey);
+              }
+            }}
+          />
+        ) : null}
+        {tabRows}
+      </Fragment>
+    );
+  };
   const renderTabGroups = () => {
     if (agentGroup === "host") {
       return hostBridgeViews.map((view) => {
@@ -5985,20 +6156,36 @@ function Switcher({
         if (entries.length === 0) {
           return null;
         }
+        const collapseKey = sidebarGroupCollapseKey(
+          "tabs",
+          agentGroup,
+          "host",
+          view.runtime.id,
+        );
+        const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
         return (
           <Fragment key={view.runtime.id}>
-            <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-            {entries.map((entry) =>
-              renderTabWorkspaceGroup(
-                {
-                  ...entry,
-                  tabs: [{ tab: entry.tab, panes: entry.panes }],
-                },
-                false,
-                false,
-                `${entry.bridgeId}:${entry.tab.tab_id}`,
-              ),
-            )}
+            <GroupHeader
+              label={view.runtime.label}
+              bridgeColor={view.runtime.color}
+              status={aggregateStatus(entries.flatMap((entry) => entry.panes))}
+              count={entries.reduce((total, entry) => total + entry.panes.length, 0)}
+              collapsed={collapsed}
+              onToggle={() => onToggleCollapsedGroup(collapseKey)}
+            />
+            {!collapsed
+              ? entries.map((entry) =>
+                  renderTabWorkspaceGroup(
+                    {
+                      ...entry,
+                      tabs: [{ tab: entry.tab, panes: entry.panes }],
+                    },
+                    false,
+                    false,
+                    `${entry.bridgeId}:${entry.tab.tab_id}`,
+                  ),
+                )
+              : null}
           </Fragment>
         );
       });
@@ -6012,10 +6199,45 @@ function Switcher({
         if (groups.length === 0) {
           return null;
         }
+        const collapseKey = sidebarGroupCollapseKey(
+          "tabs",
+          agentGroup,
+          "host",
+          view.runtime.id,
+        );
+        const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
         return (
           <Fragment key={view.runtime.id}>
-            <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-            {groups.map((group) => renderTabWorkspaceGroup(group, true, false))}
+            <GroupHeader
+              label={view.runtime.label}
+              bridgeColor={view.runtime.color}
+              status={aggregateStatus(
+                groups.flatMap((group) => group.tabs.flatMap((tab) => tab.panes)),
+              )}
+              count={groups.reduce(
+                (total, group) =>
+                  total + group.tabs.reduce((subtotal, tab) => subtotal + tab.panes.length, 0),
+                0,
+              )}
+              collapsed={collapsed}
+              onToggle={() => onToggleCollapsedGroup(collapseKey)}
+            />
+            {!collapsed
+              ? groups.map((group) =>
+                  renderTabWorkspaceGroup(
+                    group,
+                    true,
+                    false,
+                    undefined,
+                    sidebarGroupCollapseKey(
+                      "tabs",
+                      agentGroup,
+                      "workspace",
+                      `${group.bridgeId}:${group.workspace.workspace_id}`,
+                    ),
+                  ),
+                )
+              : null}
           </Fragment>
         );
       });
@@ -6023,25 +6245,73 @@ function Switcher({
 
     if (agentGroup === "workspace") {
       if (combineWorkspaceGroups) {
-        return combinedTabWorkspaceGroups.map((combinedGroup) => (
-          <Fragment key={combinedGroup.key}>
-            <GroupHeader label={combinedGroup.label} status={combinedGroup.status} />
-            {combinedGroup.workspaces.map((group) =>
-              renderTabWorkspaceGroup(
-                group,
-                false,
-                false,
-                `${combinedGroup.key}:${group.bridgeId}:${group.workspace.workspace_id}`,
-              ),
-            )}
-          </Fragment>
-        ));
+        return combinedTabWorkspaceGroups.map((combinedGroup) => {
+          const collapseKey = sidebarGroupCollapseKey(
+            "tabs",
+            agentGroup,
+            "workspace",
+            combinedGroup.key,
+          );
+          const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
+          const count = combinedGroup.workspaces.reduce(
+            (total, group) =>
+              total + group.tabs.reduce((subtotal, tab) => subtotal + tab.panes.length, 0),
+            0,
+          );
+          return (
+            <Fragment key={combinedGroup.key}>
+              <GroupHeader
+                label={combinedGroup.label}
+                status={combinedGroup.status}
+                count={count}
+                collapsed={collapsed}
+                onToggle={() => onToggleCollapsedGroup(collapseKey)}
+              />
+              {!collapsed
+                ? combinedGroup.workspaces.map((group) =>
+                    renderTabWorkspaceGroup(
+                      group,
+                      false,
+                      false,
+                      `${combinedGroup.key}:${group.bridgeId}:${group.workspace.workspace_id}`,
+                    ),
+                  )
+                : null}
+            </Fragment>
+          );
+        });
       }
-      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true, false));
+      return spaceGroups.map((group) =>
+        renderTabWorkspaceGroup(
+          group,
+          true,
+          false,
+          undefined,
+          sidebarGroupCollapseKey(
+            "tabs",
+            agentGroup,
+            "workspace",
+            `${group.bridgeId}:${group.workspace.workspace_id}`,
+          ),
+        ),
+      );
     }
 
     if (agentGroup === "hostWorkspace") {
-      return spaceGroups.map((group) => renderTabWorkspaceGroup(group, true));
+      return spaceGroups.map((group) =>
+        renderTabWorkspaceGroup(
+          group,
+          true,
+          true,
+          undefined,
+          sidebarGroupCollapseKey(
+            "tabs",
+            agentGroup,
+            "workspace",
+            `${group.bridgeId}:${group.workspace.workspace_id}`,
+          ),
+        ),
+      );
     }
 
     return flatTabEntries.map((entry) =>
@@ -6109,16 +6379,31 @@ function Switcher({
     );
   };
   const renderAgentGroupRows = () => {
-    const renderGroup = (group: ScopedAgentGroup) => (
-      <Fragment key={group.key}>
-        <GroupHeader
-          label={group.label}
-          bridgeColor={agentGroup === "host" ? group.bridgeColor : undefined}
-          status={agentGroup === "workspace" || agentGroup === "hostWorkspace" ? group.status : undefined}
-        />
-        {group.panes.map((entry) => renderAgentRow(entry, agentPaneIndex++))}
-      </Fragment>
-    );
+    const renderGroup = (group: ScopedAgentGroup) => {
+      const level = agentGroup === "host" ? "host" : "workspace";
+      const collapseKey = sidebarGroupCollapseKey(
+        "agents",
+        agentGroup,
+        level,
+        group.key,
+      );
+      const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
+      return (
+        <Fragment key={group.key}>
+          <GroupHeader
+            label={group.label}
+            bridgeColor={agentGroup === "host" ? group.bridgeColor : undefined}
+            status={group.status}
+            count={group.panes.length}
+            collapsed={collapsed}
+            onToggle={() => onToggleCollapsedGroup(collapseKey)}
+          />
+          {!collapsed
+            ? group.panes.map((entry) => renderAgentRow(entry, agentPaneIndex++))
+            : null}
+        </Fragment>
+      );
+    };
 
     if (agentGroup !== "hostWorkspace" || hostScope !== "all") {
       return agentGroups.map(renderGroup);
@@ -6129,10 +6414,26 @@ function Switcher({
       if (groups.length === 0) {
         return null;
       }
+      const collapseKey = sidebarGroupCollapseKey(
+        "agents",
+        agentGroup,
+        "host",
+        view.runtime.id,
+      );
+      const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
       return (
         <Fragment key={view.runtime.id}>
-          <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-          {groups.map(renderGroup)}
+          <GroupHeader
+            label={view.runtime.label}
+            bridgeColor={view.runtime.color}
+            status={aggregateStatus(
+              groups.flatMap((group) => group.panes.map((entry) => entry.pane)),
+            )}
+            count={groups.reduce((total, group) => total + group.panes.length, 0)}
+            collapsed={collapsed}
+            onToggle={() => onToggleCollapsedGroup(collapseKey)}
+          />
+          {!collapsed ? groups.map(renderGroup) : null}
         </Fragment>
       );
     });
@@ -6393,10 +6694,26 @@ function Switcher({
                   if (entries.length === 0) {
                     return null;
                   }
+                  const collapseKey = sidebarGroupCollapseKey(
+                    "spaces",
+                    effectiveSpaceGroup,
+                    "host",
+                    view.runtime.id,
+                  );
+                  const collapsed = collapsedSidebarGroupKeys.has(collapseKey);
                   return (
                     <Fragment key={view.runtime.id}>
-                      <GroupHeader label={view.runtime.label} bridgeColor={view.runtime.color} />
-                      {entries.map((entry, index) => renderSpaceEntry(entry, index, false))}
+                      <GroupHeader
+                        label={view.runtime.label}
+                        bridgeColor={view.runtime.color}
+                        status={aggregateStatus(entries.flatMap((entry) => entry.workspacePanes))}
+                        count={entries.length}
+                        collapsed={collapsed}
+                        onToggle={() => onToggleCollapsedGroup(collapseKey)}
+                      />
+                      {!collapsed
+                        ? entries.map((entry, index) => renderSpaceEntry(entry, index, false))
+                        : null}
                     </Fragment>
                   );
                 })
@@ -7711,26 +8028,47 @@ export function NoteEditor({
 function GroupHeader({
   label,
   bridgeColor,
-  status = "unknown",
+  status,
+  count,
+  collapsed,
+  onToggle,
 }: {
   label: string;
   bridgeColor?: string;
   status?: AgentStatus;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div className="grp-space">
+    <button
+      className="grp-space"
+      type="button"
+      data-group-header="true"
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? "Expand" : "Collapse"} ${label} group`}
+      title={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+      onClick={onToggle}
+    >
+      {collapsed ? (
+        <ChevronRight className="grp-space-chevron" size={13} aria-hidden="true" />
+      ) : (
+        <ChevronDown className="grp-space-chevron" size={13} aria-hidden="true" />
+      )}
       {bridgeColor ? (
         <span
           className="bridge-chip-dot grp-bridge-dot"
           style={{ "--bridge-color": bridgeColor } as CSSProperties}
           aria-hidden="true"
         />
-      ) : (
+      ) : status ? (
         <span className="dot" data-status={status} />
-      )}
+      ) : null}
+      {bridgeColor && status ? <span className="dot" data-status={status} /> : null}
       <span className="grp-space-name">{label}</span>
+      <span className="grp-space-count mono">{count}</span>
       <span className="grp-space-line" />
-    </div>
+    </button>
   );
 }
 

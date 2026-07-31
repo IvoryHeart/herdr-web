@@ -10,10 +10,13 @@ import {
   buildVisibleTabEntries,
   buildVisibleTabWorkspaceGroups,
   canAddNoteFromPaneMenu,
+  filterCollapsedAgentPaneEntries,
+  filterCollapsedTabEntries,
   mergeCreatedPaneNoteList,
   mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
   parseCombineMatchingWorkspaceNames,
+  parseCollapsedSidebarGroups,
   isInFlightNoteSaveVisible,
   launcherEmptyMessage,
   menuItems,
@@ -31,6 +34,7 @@ import {
   shouldShowSidebarSort,
   shouldShowTabDivider,
   shouldShowLastStatusChangeSort,
+  sidebarGroupCollapseKey,
   sortScopedAgentPanes,
   stableBridgeRefreshOffsetMs,
 } from "./App";
@@ -502,6 +506,75 @@ describe("App multi-bridge helpers", () => {
     expect(parseCombineMatchingWorkspaceNames("true", true)).toBe(true);
     expect(parseCombineMatchingWorkspaceNames(false, true)).toBe(false);
     expect(parseCombineMatchingWorkspaceNames(true)).toBe(true);
+  });
+
+  it("parses persisted collapsed groups as a bounded unique string list", () => {
+    expect(parseCollapsedSidebarGroups(undefined)).toEqual([]);
+    expect(parseCollapsedSidebarGroups(undefined, ["existing-group"])).toEqual([
+      "existing-group",
+    ]);
+    expect(parseCollapsedSidebarGroups(["group-a", 3, "", "group-a", "group-b"])).toEqual([
+      "group-a",
+      "group-b",
+    ]);
+    expect(parseCollapsedSidebarGroups(Array.from({ length: 300 }, (_, index) => `g-${index}`)))
+      .toHaveLength(256);
+  });
+
+  it("hides keyboard-navigation entries inside collapsed nested groups", () => {
+    const bridgeViews = agentParityBridgeViews();
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+    const agentEntries = buildVisibleAgentPaneEntries(
+      scopedWorkspaces,
+      bridgeViews,
+      "all",
+      "hostWorkspace",
+      "workspace",
+    );
+    const collapsedAgentGroups = new Set([
+      sidebarGroupCollapseKey("agents", "hostWorkspace", "workspace", "bridge-a:workspace-a"),
+      sidebarGroupCollapseKey("agents", "hostWorkspace", "host", "bridge-b"),
+    ]);
+    expect(
+      filterCollapsedAgentPaneEntries(
+        agentEntries,
+        "hostWorkspace",
+        "all",
+        false,
+        collapsedAgentGroups,
+      ).map((entry) => `${entry.bridgeId}:${entry.pane.pane_id}`),
+    ).toEqual(["bridge-a:pane-b"]);
+
+    const tabEntries = buildVisibleTabEntries(
+      scopedWorkspaces,
+      bridgeViews,
+      "all",
+      "workspace",
+    );
+    const collapsedTabGroups = new Set([
+      sidebarGroupCollapseKey(
+        "tabs",
+        "workspace",
+        "workspace",
+        "workspace-name:workspace-a",
+      ),
+    ]);
+    expect(
+      filterCollapsedTabEntries(
+        tabEntries,
+        "workspace",
+        "all",
+        true,
+        collapsedTabGroups,
+      ).map((entry) => `${entry.bridgeId}:${entry.tab.tab_id}`),
+    ).toEqual(["bridge-a:tab-b"]);
   });
 
   it("moves host context into rows only for flat and workspace grouping", () => {

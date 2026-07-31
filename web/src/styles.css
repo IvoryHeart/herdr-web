@@ -611,9 +611,29 @@ button {
 /* group label when scope = all */
 .grp-space {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 9px;
   padding: 8px 10px 3px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.grp-space:hover {
+  background: var(--row-hover);
+}
+
+.grp-space:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.grp-space-chevron {
+  flex: 0 0 auto;
+  color: var(--overlay0);
 }
 
 .grp-space-name {
@@ -629,6 +649,12 @@ button {
   height: 1px;
   flex: 1 1 auto;
   background: var(--line-soft);
+}
+
+.grp-space-count {
+  flex: 0 0 auto;
+  color: var(--overlay0);
+  font-size: 10px;
 }
 
 /* ------------------------------------------------------------- pane row */

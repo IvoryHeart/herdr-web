@@ -6,6 +6,8 @@
 
 ### Added
 
+- Added persistent expand/collapse controls to grouped Agents, Tabs, and Spaces headers, including
+  independent host and workspace controls for Host + workspace grouping.
 - Added a default-off Display setting that combines same-named workspaces across hosts when using
   Workspace grouping, while retaining host context on each agent or pane row.
 
