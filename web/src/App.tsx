@@ -3569,7 +3569,6 @@ export function App() {
           onAgentActiveOnly={setAgentActiveOnly}
           onAgentSort={setAgentSort}
           onAgentGroup={setAgentGroup}
-          onCombineMatchingWorkspaceNames={setCombineMatchingWorkspaceNames}
           onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
@@ -4043,6 +4042,8 @@ export function App() {
           onNavigationSyncMode={changeNavigationSyncMode}
           agentFeaturesInTabs={agentFeaturesInTabs}
           onAgentFeaturesInTabs={setAgentFeaturesInTabs}
+          combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
+          onCombineMatchingWorkspaceNames={setCombineMatchingWorkspaceNames}
           multiHostSpaceSelection={multiHostSpaceSelection}
           onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
@@ -5576,7 +5577,6 @@ function Switcher({
   onAgentActiveOnly,
   onAgentSort,
   onAgentGroup,
-  onCombineMatchingWorkspaceNames,
   onSpaceGroup,
   onSelectBridge,
   onSelectSpace,
@@ -5627,7 +5627,6 @@ function Switcher({
   onAgentActiveOnly: (activeOnly: boolean) => void;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
-  onCombineMatchingWorkspaceNames: (combine: boolean) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
@@ -6561,12 +6560,9 @@ function Switcher({
           showGroup={showGroupControl}
           agentSort={agentSort}
           agentGroup={agentGroup}
-          combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
-          showCombineMatchingWorkspaceNames={hostScope === "all" && agentGroup === "workspace"}
           showLastStatusChangeSort={showLastStatusChangeSort}
           onAgentSort={onAgentSort}
           onAgentGroup={onAgentGroup}
-          onCombineMatchingWorkspaceNames={onCombineMatchingWorkspaceNames}
           onClose={() => setOptionsMenu(null)}
         />
       ) : null}
@@ -6591,12 +6587,9 @@ function SidebarOptionsMenu({
   showGroup,
   agentSort,
   agentGroup,
-  combineMatchingWorkspaceNames,
-  showCombineMatchingWorkspaceNames,
   showLastStatusChangeSort,
   onAgentSort,
   onAgentGroup,
-  onCombineMatchingWorkspaceNames,
   onClose,
 }: {
   x: number;
@@ -6606,12 +6599,9 @@ function SidebarOptionsMenu({
   showGroup: boolean;
   agentSort: AgentSort;
   agentGroup: AgentGroup;
-  combineMatchingWorkspaceNames: boolean;
-  showCombineMatchingWorkspaceNames: boolean;
   showLastStatusChangeSort: boolean;
   onAgentSort: (sort: AgentSort) => void;
   onAgentGroup: (group: AgentGroup) => void;
-  onCombineMatchingWorkspaceNames: (combine: boolean) => void;
   onClose: () => void;
 }) {
   return (
@@ -6650,19 +6640,6 @@ function SidebarOptionsMenu({
             <option value="hostWorkspace">Host + workspace</option>
           </select>
         </label>
-      ) : null}
-      {showCombineMatchingWorkspaceNames ? (
-        <button
-          className="sidebar-option-toggle"
-          type="button"
-          role="switch"
-          aria-checked={combineMatchingWorkspaceNames}
-          data-on={combineMatchingWorkspaceNames ? "true" : undefined}
-          onClick={() => onCombineMatchingWorkspaceNames(!combineMatchingWorkspaceNames)}
-        >
-          <span>Combine matching names</span>
-          <strong>{combineMatchingWorkspaceNames ? "On" : "Off"}</strong>
-        </button>
       ) : null}
     </OptionsMenuShell>
   );

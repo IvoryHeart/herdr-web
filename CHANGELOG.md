@@ -6,7 +6,7 @@
 
 ### Added
 
-- Added a default-off sidebar option that combines same-named workspaces across hosts when using
+- Added a default-off Display setting that combines same-named workspaces across hosts when using
   Workspace grouping, while retaining host context on each agent or pane row.
 
 ### Changed
