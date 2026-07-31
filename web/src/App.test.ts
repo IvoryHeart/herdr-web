@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  areAllVisibleSidebarGroupsCollapsed,
   agentSubtitle,
   applySnapshotOverlays,
+  buildCombinedTabWorkspaceGroups,
+  buildScopedAgentGroups,
   buildVisibleAgentPaneEntries,
+  buildVisibleScopedWorkspaces,
   buildVisibleScopedNotes,
+  buildVisibleTabEntries,
+  buildVisibleTabWorkspaceGroups,
   canAddNoteFromPaneMenu,
+  filterCollapsedAgentPaneEntries,
+  filterCollapsedTabEntries,
   mergeCreatedPaneNoteList,
   mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
-  buildVisibleScopedWorkspaces,
-  buildVisibleTabEntries,
-  buildVisibleTabWorkspaceGroups,
+  parseCombineMatchingWorkspaceNames,
+  parseCollapsedSidebarGroups,
   isInFlightNoteSaveVisible,
   launcherEmptyMessage,
   menuItems,
@@ -23,12 +30,15 @@ import {
   shouldBlockDirtyNoteAutosave,
   shouldCollapseHostScope,
   shouldRenderAgentRowInTabs,
+  sidebarRowContext,
   shouldOfferSpaceHostGrouping,
   shouldShowSidebarSort,
   shouldShowTabDivider,
   shouldShowLastStatusChangeSort,
+  sidebarGroupCollapseKey,
   sortScopedAgentPanes,
   stableBridgeRefreshOffsetMs,
+  updateCollapsedSidebarGroups,
 } from "./App";
 import type { BridgeConnectionRef, BridgeConnectionView } from "./App";
 import type { BridgeRuntime } from "./bridge";
@@ -392,6 +402,267 @@ describe("App multi-bridge helpers", () => {
         "attention",
       ).map((item) => `${item.bridgeId}:${item.pane.pane_id}`),
     ).toEqual(["bridge-a:pane-a", "bridge-b:pane-b"]);
+  });
+
+  it("uses workspace-only headers when grouping workspaces across hosts", () => {
+    const sharedWorkspace = workspace("shared-workspace", 1);
+    const entries = [
+      entry("host-a", 0, sharedWorkspace, pane("pane-a", "shared-workspace", "tab-a"), 1),
+      entry(
+        "host-b",
+        1,
+        sharedWorkspace,
+        pane("pane-b", "shared-workspace", "tab-b", "blocked"),
+        1,
+      ),
+    ];
+    const groups = buildScopedAgentGroups(entries, "workspace");
+
+    expect(groups.map((group) => group.label)).toEqual([
+      "shared-workspace",
+      "shared-workspace",
+    ]);
+
+    const combinedGroups = buildScopedAgentGroups(entries, "workspace", true);
+    expect(combinedGroups).toHaveLength(1);
+    expect(combinedGroups[0]).toMatchObject({
+      key: "workspace-name:shared-workspace",
+      label: "shared-workspace",
+      status: "blocked",
+    });
+    expect(combinedGroups[0].panes.map((item) => item.bridgeId)).toEqual(["host-a", "host-b"]);
+  });
+
+  it("combines matching Tab workspace groups across hosts without merging their entries", () => {
+    const bridgeViews = [
+      bridgeView(
+        "host-a",
+        bridgeSnapshot("shared-workspace", "tab-a", pane("pane-a", "shared-workspace", "tab-a")),
+      ),
+      bridgeView(
+        "host-b",
+        bridgeSnapshot("shared-workspace", "tab-b", pane("pane-b", "shared-workspace", "tab-b")),
+      ),
+    ];
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "host-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+
+    const combinedGroups = buildCombinedTabWorkspaceGroups(
+      buildVisibleTabWorkspaceGroups(scopedWorkspaces),
+    );
+
+    expect(combinedGroups).toHaveLength(1);
+    expect(combinedGroups[0].label).toBe("shared-workspace");
+    expect(combinedGroups[0].workspaces.map((group) => group.bridgeId)).toEqual([
+      "host-a",
+      "host-b",
+    ]);
+
+    const bridgeViewsWithInterleavedWorkspace = [
+      bridgeView(
+        "host-a",
+        multiPaneSnapshot(
+          [workspace("shared-workspace", 1), workspace("unique-workspace", 2)],
+          [
+            pane("pane-a", "shared-workspace", "tab-a"),
+            pane("pane-unique", "unique-workspace", "tab-unique"),
+          ],
+        ),
+      ),
+      bridgeViews[1],
+    ];
+    const interleavedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViewsWithInterleavedWorkspace,
+      "host-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+    expect(
+      buildVisibleTabEntries(
+        interleavedWorkspaces,
+        bridgeViewsWithInterleavedWorkspace,
+        "all",
+        "workspace",
+        new Set(),
+        false,
+        true,
+        "workspace",
+        new Map(),
+        false,
+        true,
+      ).map((item) => `${item.bridgeId}:${item.tab.tab_id}`),
+    ).toEqual(["host-a:tab-a", "host-b:tab-b", "host-a:tab-unique"]);
+  });
+
+  it("keeps the matching-name preference default-off and boolean-only", () => {
+    expect(parseCombineMatchingWorkspaceNames(undefined)).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames("true")).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames("true", true)).toBe(true);
+    expect(parseCombineMatchingWorkspaceNames(false, true)).toBe(false);
+    expect(parseCombineMatchingWorkspaceNames(true)).toBe(true);
+  });
+
+  it("parses persisted collapsed groups as a bounded unique string list", () => {
+    expect(parseCollapsedSidebarGroups(undefined)).toEqual([]);
+    expect(parseCollapsedSidebarGroups(undefined, ["existing-group"])).toEqual([
+      "existing-group",
+    ]);
+    expect(parseCollapsedSidebarGroups(["group-a", 3, "", "group-a", "group-b"])).toEqual([
+      "group-a",
+      "group-b",
+    ]);
+    expect(parseCollapsedSidebarGroups(Array.from({ length: 5000 }, (_, index) => `g-${index}`)))
+      .toHaveLength(4096);
+  });
+
+  it("collapses and expands a visible set of sidebar groups without changing other groups", () => {
+    expect(
+      updateCollapsedSidebarGroups(
+        ["other-group", "visible-a"],
+        ["visible-a", "visible-b"],
+        true,
+      ),
+    ).toEqual(["other-group", "visible-a", "visible-b"]);
+    expect(
+      updateCollapsedSidebarGroups(
+        ["other-group", "visible-a", "visible-b"],
+        ["visible-a", "visible-b"],
+        false,
+      ),
+    ).toEqual(["other-group"]);
+
+    const manyVisibleGroups = Array.from({ length: 300 }, (_, index) => `visible-${index}`);
+    const collapsed = updateCollapsedSidebarGroups(
+      ["other-group"],
+      manyVisibleGroups,
+      true,
+    );
+    expect(collapsed).toEqual(["other-group", ...manyVisibleGroups]);
+    expect(updateCollapsedSidebarGroups(collapsed, manyVisibleGroups, false)).toEqual([
+      "other-group",
+    ]);
+  });
+
+  it("uses visible host state to choose the nested bulk group action", () => {
+    const hostKey = sidebarGroupCollapseKey("agents", "hostWorkspace", "host", "bridge-a");
+    const workspaceKey = sidebarGroupCollapseKey(
+      "agents",
+      "hostWorkspace",
+      "workspace",
+      "bridge-a:workspace-a",
+    );
+
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [hostKey, workspaceKey],
+        "hostWorkspace",
+        "all",
+        new Set([hostKey]),
+      ),
+    ).toBe(true);
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [hostKey, workspaceKey],
+        "hostWorkspace",
+        "all",
+        new Set([workspaceKey]),
+      ),
+    ).toBe(false);
+    expect(
+      areAllVisibleSidebarGroupsCollapsed(
+        [workspaceKey],
+        "workspace",
+        "all",
+        new Set([workspaceKey]),
+      ),
+    ).toBe(true);
+  });
+
+  it("hides keyboard-navigation entries inside collapsed nested groups", () => {
+    const bridgeViews = agentParityBridgeViews();
+    const scopedWorkspaces = buildVisibleScopedWorkspaces(
+      bridgeViews,
+      "bridge-a",
+      "all",
+      "all",
+      null,
+      {},
+    );
+    const agentEntries = buildVisibleAgentPaneEntries(
+      scopedWorkspaces,
+      bridgeViews,
+      "all",
+      "hostWorkspace",
+      "workspace",
+    );
+    const collapsedAgentGroups = new Set([
+      sidebarGroupCollapseKey("agents", "hostWorkspace", "workspace", "bridge-a:workspace-a"),
+      sidebarGroupCollapseKey("agents", "hostWorkspace", "host", "bridge-b"),
+    ]);
+    expect(
+      filterCollapsedAgentPaneEntries(
+        agentEntries,
+        "hostWorkspace",
+        "all",
+        false,
+        collapsedAgentGroups,
+      ).map((entry) => `${entry.bridgeId}:${entry.pane.pane_id}`),
+    ).toEqual(["bridge-a:pane-b"]);
+
+    const tabEntries = buildVisibleTabEntries(
+      scopedWorkspaces,
+      bridgeViews,
+      "all",
+      "workspace",
+    );
+    const collapsedTabGroups = new Set([
+      sidebarGroupCollapseKey(
+        "tabs",
+        "workspace",
+        "workspace",
+        "workspace-name:workspace-a",
+      ),
+    ]);
+    expect(
+      filterCollapsedTabEntries(
+        tabEntries,
+        "workspace",
+        "all",
+        true,
+        collapsedTabGroups,
+      ).map((entry) => `${entry.bridgeId}:${entry.tab.tab_id}`),
+    ).toEqual(["bridge-a:tab-b"]);
+  });
+
+  it("moves host context into rows only for flat and workspace grouping", () => {
+    expect(sidebarRowContext("none", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: "host-a",
+      workspaceLabel: "workspace-a",
+    });
+    expect(sidebarRowContext("host", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: "workspace-a",
+    });
+    expect(sidebarRowContext("workspace", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: "host-a",
+      workspaceLabel: undefined,
+    });
+    expect(sidebarRowContext("hostWorkspace", "all", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: undefined,
+    });
+    expect(sidebarRowContext("workspace", "selected", "host-a", "workspace-a")).toEqual({
+      bridgeLabel: undefined,
+      workspaceLabel: undefined,
+    });
   });
 
   it("allows flat all-host agent shortcuts to follow attention priority across hosts", () => {

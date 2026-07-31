@@ -65,6 +65,8 @@ type Props = {
   onNavigationSyncMode: (mode: NavigationSyncMode) => void;
   agentFeaturesInTabs: boolean;
   onAgentFeaturesInTabs: (enabled: boolean) => void;
+  combineMatchingWorkspaceNames: boolean;
+  onCombineMatchingWorkspaceNames: (enabled: boolean) => void;
   multiHostSpaceSelection: boolean;
   onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
@@ -117,6 +119,8 @@ export function BackendSettingsDialog({
   onNavigationSyncMode,
   agentFeaturesInTabs,
   onAgentFeaturesInTabs,
+  combineMatchingWorkspaceNames,
+  onCombineMatchingWorkspaceNames,
   multiHostSpaceSelection,
   onMultiHostSpaceSelection,
   terminalFontSizePx,
@@ -562,6 +566,33 @@ export function BackendSettingsDialog({
                       data-on={agentFeaturesInTabs}
                       aria-pressed={agentFeaturesInTabs}
                       onClick={() => onAgentFeaturesInTabs(true)}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <span title="Combine same-named workspaces across hosts when grouping by Workspace">
+                    Combine matching workspace names
+                  </span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Combine matching workspace names"
+                  >
+                    <button
+                      type="button"
+                      data-on={!combineMatchingWorkspaceNames}
+                      aria-pressed={!combineMatchingWorkspaceNames}
+                      onClick={() => onCombineMatchingWorkspaceNames(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={combineMatchingWorkspaceNames}
+                      aria-pressed={combineMatchingWorkspaceNames}
+                      onClick={() => onCombineMatchingWorkspaceNames(true)}
                     >
                       On
                     </button>
