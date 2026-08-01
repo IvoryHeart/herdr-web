@@ -1,7 +1,7 @@
 # Spec 010 acceptance evidence
 
 This evidence applies to the Herdr Web tree at implementation commit
-`ad91ddcd23dc36d2c6189ae67bf80aa801c8be82`, descended from the immutable upstream baseline
+`6e0415f7e635f32b8f0d16ab3fb650c47a5f7ce2`, descended from the immutable upstream baseline
 `67a4ace73fcd554af39586769dc86d4d9e82f09b`. The approved product contract is
 ai-observability Spec 010 at `ecde9e1`.
 
@@ -22,11 +22,11 @@ Result:
 
 - vendor layout and frontend ESLint: pass;
 - Rust format checks: pass;
-- frontend unit/component tests: 35 files, 262 passed;
+- frontend unit/component tests: 35 files, 264 passed;
 - vendored Herdr compatibility tests: 112 passed;
 - Rust bridge tests: 131 passed;
 - frontend production build and Rust bridge build: pass;
-- browser fixture tests: 10 passed, with the environment-gated live SSH smoke skipped in the
+- browser fixture tests: 12 passed, with the environment-gated live SSH smoke skipped in the
   non-live suite and run separately below;
 - root and frontend npm audit: zero vulnerabilities;
 - Rust audit: zero vulnerabilities, with warnings for unmaintained `bincode 2.0.1`
@@ -35,10 +35,12 @@ Result:
 - `git diff --check`: pass.
 
 The final browser gate includes the review reproductions for malformed snapshot isolation,
-offline/stale row mutation suppression, per-host required-capability enforcement, and recovery
-through a fresh capability generation. Recovery against terminal protocol 16 remains incompatible
-and never restores controls. Unit tests additionally cover bounded snapshot collections and
-strings, topology references, missing capability feature lists, generation-safe caches, and
+offline/stale row mutation suppression, per-host required-capability enforcement, read-only attach
+without input/resize/scroll frames, partial structural-command lists, and recovery through a fresh
+capability generation. An HTTP-down/WS-up activity ordering cannot admit derived state while
+recovery is pending, and recovery against terminal protocol 16 remains incompatible. Unit tests
+additionally cover bounded snapshot collections and strings, topology references, missing
+capability feature lists, generation-safe caches, operation-specific terminal admission, and
 terminal-session identity rotation.
 
 ## Live Herdr evidence
@@ -90,20 +92,24 @@ configurations, OpenSSH processes, bridges, and disposable Herdr sessions were r
 1. Provenance: `UPSTREAM.md`, preserved `LICENSE`, exact baseline, both remotes, and Git ancestry.
 2. Baseline/delivered checks: `UPSTREAM.md`, `.github/workflows/ci.yml`, and the automated gate above.
 3. Boundaries: `AppShell.tsx`, the production `HostRegistry` context, `RuntimeConnection`,
-   `RuntimeCache`, generation-scoped `terminalSessionDescriptor`, `CoreNavigation.tsx`, enforced
-   `SurfaceRegistry` admission, and boundary tests mounted through the actual application.
+   `RuntimeCache`, generation- and operation-scoped `terminalSessionDescriptor`,
+   `CoreNavigation.tsx`, enforced `SurfaceRegistry` admission, and boundary tests mounted through
+   the actual application.
 4. Herdr authority: `live-authority-smoke.sh`, runtime-cache reconciliation tests, native snapshot
    adapter tests, and the live external mutation result above.
-5. Terminal fidelity: `live-bridge-smoke.mjs`, terminal protocol/renderer unit tests, and the live
-   output/input/resize/reconnect result above.
-6. Structural commands: the bridge's exact allowlist plus create/rename/split/move/launch/focus/
-   close validation and rollback tests; dangerous or unknown commands are rejected.
+5. Terminal fidelity: `live-bridge-smoke.mjs`, terminal protocol/renderer unit tests, independent
+   attach/input/resize/scroll/upload feature admission, and the live output/input/resize/reconnect
+   result above.
+6. Structural commands: every UI and execution dispatch requires its exact per-host advertised
+   command; the bridge's allowlist plus create/rename/split/move/launch/focus/close validation and
+   rollback tests reject dangerous, unknown, or undeclared operations.
 7. Two-host federation: `federation.spec.ts` uses colliding native IDs and proves All-host grouping,
    exact Host B input/command routing, zero Host A delivery, and no bridge-local selection/focus
    writes from retained stale Host B rows.
 8. Partial failure: the same browser fixture includes compatible, offline, protocol-incompatible,
-   malformed capability, malformed snapshot, missing-feature, and reachable hosts; failure and
-   controls remain profile-local, and recovery requires a fresh capability handshake plus snapshot.
+   malformed capability, malformed snapshot, missing-feature, partial-feature, partial-command,
+   HTTP-down/WS-up, and reachable hosts; failure and controls remain profile-local, and recovery
+   requires a fresh capability handshake plus snapshot.
 9. Multi-client: bridge fanout/attach/cleanup unit tests and the live two-subscriber smoke above.
 10. Security: request-policy/CSP/CLI tests, `security-audit.sh`, non-loopback explicit Host/Origin
     requirements, bounded errors and snapshot validation, npm/Rust audits, and credential/path scans
@@ -119,7 +125,8 @@ configurations, OpenSSH processes, bridges, and disposable Herdr sessions were r
 15. Independence: source and dependency-graph audit pass without legacy imports, routes, stacks,
     processes, caches, or test gates; ai-observability remained untouched during implementation.
 16. Operations: `README.md`, `docs/architecture.md`, `docs/federation.md`, and `docs/release.md` cover
-    one/two-host startup, compatibility, Origin/CSP, trusted exposure, transport ownership, and reload.
+    one/two-host startup, compatibility, Origin/CSP, headerless non-browser requests, loopback proxy
+    Host behavior, trusted exposure, transport ownership, and reload.
 17. Final hygiene: clean whitespace check plus tracked-tree credential, source-path, and bounded-
     diagnostic scans after this evidence was committed.
 
