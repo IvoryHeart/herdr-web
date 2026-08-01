@@ -41,4 +41,5 @@ test("one browser controls two operator-forwarded Herdr bridges", async ({
   ).toBeEnabled();
   await page.locator(".terminal-stage").click();
   await page.keyboard.type("printf 'SPEC010_SSH_BROWSER_OK\\n'\n");
+  await page.waitForTimeout(300);
 });

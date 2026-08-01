@@ -173,6 +173,15 @@ try {
     secondA.waitFor(interruptMarker),
   ]);
 
+  const keyMarker = `${markerA}_RAW_KEYS`;
+  firstA.send(
+    `python3 -c 'import os,termios,tty;a=termios.tcgetattr(0);tty.setraw(0);d=os.read(0,7);termios.tcsetattr(0,termios.TCSADRAIN,a);print("${keyMarker}_"+d.hex())'\n`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  secondA.send("\u001b[A\u001bOP\u0001");
+  const keyEvidence = `${keyMarker}_1b5b411b4f5001`;
+  await Promise.all([firstA.waitFor(keyEvidence), secondA.waitFor(keyEvidence)]);
+
   secondA.close();
   const reconnectedA = await attach(bridgeA, terminalA, 101, 31);
   try {
@@ -203,7 +212,7 @@ try {
         bridgeB: stateB.capabilities.configured_label,
         protocol: stateA.capabilities.terminal_protocol,
         fanout: "two clients received A output",
-        input: "shared input and Ctrl+C passed",
+        input: "shared paste, ArrowUp, F1, Ctrl+A, and Ctrl+C passed",
         resize: "last resize 28x91; explicit refit 31x101",
         reconnect: "passed without replacing the Herdr process",
         directRouting: "independent A and B terminal markers passed",

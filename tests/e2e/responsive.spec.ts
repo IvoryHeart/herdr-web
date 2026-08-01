@@ -62,6 +62,13 @@ test("captures the 375x812 switcher and usable terminal", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Refit terminal" }),
   ).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator(".stage")
+        .evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).m41),
+    )
+    .toBe(0);
   await page.screenshot({
     path: resolve(evidenceDir, "responsive-375x812-terminal.png"),
     fullPage: true,
