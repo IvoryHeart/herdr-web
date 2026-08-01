@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const staticDir = join(root, "web", "dist");
 const logs = new Map();
 const fixtureStates = new Map();
+const fixtureSockets = new Map();
 const servers = [];
 
 const fixtures = [
@@ -33,6 +34,7 @@ const fixtures = [
 for (const fixture of fixtures) {
   logs.set(fixture.id, emptyLog());
   fixtureStates.set(fixture.id, defaultFixtureState());
+  fixtureSockets.set(fixture.id, new Set());
   servers.push(await startFixture(fixture));
 }
 
@@ -77,6 +79,23 @@ async function startFixture(fixture) {
       json(response, 200, { ok: true });
       return;
     }
+    if (url.pathname === "/__fixture/ws-event" && request.method === "POST") {
+      const body = await readJson(request);
+      const clients = fixtureSockets.get(body.hostId);
+      if (!clients || typeof body.path !== "string" || typeof body.event !== "object") {
+        json(response, 400, { error: "invalid fixture WebSocket event" });
+        return;
+      }
+      let sent = 0;
+      for (const client of clients) {
+        if (client.path === body.path && client.socket.readyState === 1) {
+          client.socket.send(JSON.stringify(body.event));
+          sent += 1;
+        }
+      }
+      json(response, 200, { sent });
+      return;
+    }
     if (url.pathname === "/api/capabilities") {
       logs.get(fixture.id).capabilityRequests += 1;
       if (fixture.variant === "malformed") {
@@ -98,6 +117,27 @@ async function startFixture(fixture) {
         return;
       }
       json(response, 200, snapshot(fixture));
+      return;
+    }
+    if (url.pathname === "/api/launcher-presets" && request.method === "GET") {
+      json(response, 200, {
+        version: 1,
+        presets: [
+          {
+            id: "shell",
+            label: "Shell",
+            agent_hint: null,
+            built_in: true,
+          },
+        ],
+        warnings: [],
+      });
+      return;
+    }
+    if (url.pathname === "/api/launcher-presets/launch" && request.method === "POST") {
+      const body = await readJson(request);
+      logs.get(fixture.id).launches.push(body);
+      json(response, 200, { pane_id: `${fixture.id}-launched`, preset_id: body.preset_id });
       return;
     }
     if (url.pathname === "/api/command" && request.method === "POST") {
@@ -133,6 +173,9 @@ async function startFixture(fixture) {
 
   webSockets.on("connection", (webSocket) => {
     const url = webSocket.fixtureUrl;
+    const client = { socket: webSocket, path: url.pathname };
+    fixtureSockets.get(fixture.id).add(client);
+    webSocket.on("close", () => fixtureSockets.get(fixture.id).delete(client));
     if (url.pathname !== "/ws/terminal") {
       return;
     }
@@ -155,6 +198,8 @@ async function startFixture(fixture) {
           webSocket.send(Buffer.from(frame.data));
         } else if (frame.type === "resize") {
           log.terminalResize.push(frame);
+        } else if (frame.type === "scroll") {
+          log.terminalScroll.push(frame);
         }
       } catch {
         webSocket.close(1003, "invalid fixture frame");
@@ -181,13 +226,14 @@ function capabilities(fixture, state) {
         "snapshot",
         "structural_events",
         "shared_selection",
+        "launcher_presets",
         "terminal_attach",
         "terminal_input",
         "terminal_resize",
         "terminal_scroll",
         "terminal_shared_fanout",
       ],
-    commands: [
+    commands: state.commands ?? [
       "workspace.create",
       "workspace.rename",
       "workspace.close",
@@ -203,15 +249,18 @@ function capabilities(fixture, state) {
       "pane.move",
     ],
     web_compat: 1,
+    launcher_presets: { version: 1 },
   };
 }
 
 function emptyLog() {
   return {
     commands: [],
+    launches: [],
     selections: [],
     terminalInput: [],
     terminalResize: [],
+    terminalScroll: [],
     connections: 0,
     capabilityRequests: 0,
     snapshotRequests: 0,
@@ -223,6 +272,7 @@ function defaultFixtureState() {
     snapshotMode: "ready",
     terminalProtocol: null,
     features: null,
+    commands: null,
   };
 }
 
@@ -234,15 +284,18 @@ function setFixtureState(hostId, value) {
   const snapshotMode = value.snapshotMode ?? current.snapshotMode;
   const terminalProtocol = value.terminalProtocol ?? current.terminalProtocol;
   const features = value.features ?? current.features;
+  const commands = value.commands ?? current.commands;
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
     (terminalProtocol !== null && terminalProtocol !== 16 && terminalProtocol !== 17) ||
     (features !== null &&
-      (!Array.isArray(features) || features.some((feature) => typeof feature !== "string")))
+      (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
+    (commands !== null &&
+      (!Array.isArray(commands) || commands.some((command) => typeof command !== "string")))
   ) {
     return false;
   }
-  fixtureStates.set(hostId, { snapshotMode, terminalProtocol, features });
+  fixtureStates.set(hostId, { snapshotMode, terminalProtocol, features, commands });
   return true;
 }
 
