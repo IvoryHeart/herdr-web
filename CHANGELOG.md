@@ -10,6 +10,7 @@
   persistent host profiles, host-qualified runtime and terminal identities, direct multi-bridge
   browser federation, isolated compatibility/failure states, strict non-loopback admission policy,
   and browser/security/independence acceptance gates.
+  [PR #1](https://github.com/IvoryHeart/herdr-web/pull/1)
 - Added persistent expand/collapse controls to grouped Agents, Tabs, and Spaces headers, including
   independent, visually nested host and workspace controls for Host + workspace grouping and a
   bulk expand/collapse control for the current Agents or Tabs list.

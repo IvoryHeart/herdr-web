@@ -14,8 +14,15 @@ fi
 
 if git grep -nEI \
   '(BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|AKIA[0-9A-Z]{16}|https?://[^/@[:space:]]+:[^/@[:space:]]+@)' \
-  -- . ':!docs/evidence/**'; then
+  -- .; then
   echo "Potential committed credential material found" >&2
+  exit 1
+fi
+
+if git grep -nE \
+  '(/home/[^/[:space:]]+/|/Users/[^/[:space:]]+/|[A-Za-z]:\\Users\\)' \
+  -- docs/evidence; then
+  echo "Committed acceptance evidence contains a developer-local source path" >&2
   exit 1
 fi
 
