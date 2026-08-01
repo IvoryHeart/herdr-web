@@ -1204,6 +1204,10 @@ export function TerminalView({
       }
       return;
     }
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     if (uploadInFlightRef.current) {
       showUploadStatus("Upload already in progress", 2500);
       return;
@@ -1212,6 +1216,11 @@ export function TerminalView({
     setUploading(true);
     const uploadConnectionKey = connectionKey;
     const uploadTerminalId = pane.terminal_id;
+    const uploadStillAdmitted = () =>
+      uploadEnabledRef.current &&
+      inputEnabledRef.current &&
+      connectionKeyRef.current === uploadConnectionKey &&
+      terminalIdRef.current === uploadTerminalId;
     const uploadFiles = files.slice(0, MAX_UPLOAD_FILES);
     const skippedCount = files.length - uploadFiles.length;
     showUploadStatus(
@@ -1222,7 +1231,14 @@ export function TerminalView({
     try {
       const uploaded: UploadedFile[] = [];
       for (const file of uploadFiles) {
-        uploaded.push(await uploadWithOverwritePrompt(httpUrl, file, confirmUploadReplace));
+        uploaded.push(
+          await uploadWithOverwritePrompt(
+            httpUrl,
+            file,
+            confirmUploadReplace,
+            uploadStillAdmitted,
+          ),
+        );
       }
       if (
         connectionKeyRef.current !== uploadConnectionKey ||
@@ -1259,6 +1275,10 @@ export function TerminalView({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     void uploadAndInsert(files);
   };
 
@@ -1269,6 +1289,10 @@ export function TerminalView({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     void uploadAndInsert(files);
   };
 
@@ -1309,6 +1333,7 @@ export function TerminalView({
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
+          event.dataTransfer.dropEffect = uploadDisabled ? "none" : "copy";
         }
       }}
       onDropCapture={handleDrop}
@@ -1846,9 +1871,10 @@ async function uploadWithOverwritePrompt(
   httpUrl: (path: string, query?: URLSearchParams) => string,
   file: UploadCandidate,
   confirmReplace: (error: UploadConflictError) => Promise<boolean>,
+  isAdmitted: () => boolean,
 ): Promise<UploadedFile> {
   try {
-    return await uploadFile(httpUrl, file, false);
+    return await uploadFile(httpUrl, file, false, isAdmitted);
   } catch (error) {
     if (!(error instanceof UploadConflictError)) {
       throw error;
@@ -1857,7 +1883,7 @@ async function uploadWithOverwritePrompt(
     if (!replace) {
       throw new Error("Upload canceled");
     }
-    return uploadFile(httpUrl, file, true);
+    return uploadFile(httpUrl, file, true, isAdmitted);
   }
 }
 
@@ -1871,7 +1897,11 @@ async function uploadFile(
   httpUrl: (path: string, query?: URLSearchParams) => string,
   file: UploadCandidate,
   overwrite: boolean,
+  isAdmitted: () => boolean,
 ): Promise<UploadedFile> {
+  if (!isAdmitted()) {
+    throw new Error("File upload is unavailable for this host");
+  }
   const params = new URLSearchParams();
   if (file.name) {
     params.set("name", file.name);
