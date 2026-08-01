@@ -1,8 +1,7 @@
 import "@fontsource-variable/geist/wght.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import { BridgeProvider } from "./bridge";
+import { AppShell } from "./AppShell";
 import { startNativeControls } from "./native";
 import "./styles.css";
 
@@ -16,8 +15,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <BridgeProvider>
-      <App />
-    </BridgeProvider>
+    <AppShell />
   </StrictMode>,
 );

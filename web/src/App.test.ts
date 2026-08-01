@@ -1796,6 +1796,7 @@ function bridgeView(bridgeId: string, snapshot: Snapshot): BridgeConnectionView 
     runtime: bridgeRuntime(bridgeId),
     snapshot,
     loadState: "ready",
+    connectionState: "compatible",
   };
 }
 

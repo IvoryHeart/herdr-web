@@ -64,8 +64,7 @@ import type { AgentPinsListResponse } from "./agentPins";
 import { applyActivityMessage, parseActivityEventData, replayActivityMessages } from "./activity";
 import type { ActivityLogEntry } from "./activity";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
-import { useBridge } from "./bridge";
-import type { BridgeId, BridgeRuntime } from "./bridge";
+import type { BridgeId, BridgeRuntime, CapabilityState } from "./bridge";
 import { createCommands, createdPaneId } from "./commands";
 import type { LaunchSpec, PaneFocusDirection, SplitDirection } from "./commands";
 import { isConnectionResultCurrent } from "./connectionState";
@@ -134,7 +133,11 @@ import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
 import type { MenuItem } from "./overlays";
 import { createSnapshotRefreshController } from "./refreshCoordinator";
+import { useHostRegistry } from "./hostRegistry";
+import { hostConnectionState, runtimeControlsEnabled } from "./runtimeClient";
+import type { HostConnectionState } from "./runtimeClient";
 import { TerminalView } from "./TerminalView";
+import { terminalSessionKey } from "./terminalSessions";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
   DEFAULT_TERMINAL_INPUT_TRANSPORT,
@@ -213,6 +216,7 @@ export type BridgeConnectionView = {
   runtime: BridgeRuntime;
   snapshot: Snapshot | null;
   loadState: LoadState;
+  connectionState: HostConnectionState;
 };
 export type BridgeConnectionState = {
   connectionKey: string;
@@ -895,7 +899,7 @@ function usePointerDragResize(
 }
 
 export function App() {
-  const bridge = useBridge();
+  const bridge = useHostRegistry();
   const initialPrefs = useMemo(readDisplayPrefs, []);
   const initialSharedNavigationPrefs = useMemo(readSharedNavigationPrefs, []);
   const initialNavigationSyncMode = useMemo(readNavigationSyncMode, []);
@@ -1193,10 +1197,17 @@ export function App() {
       bridge.enabledRuntimes.map((runtime) => {
         const state = connectionStates[runtime.id];
         const currentState = state?.connectionKey === runtime.connectionKey ? state : null;
+        const loadState = currentState?.loadState ?? (runtime.canConnect ? "loading" : "ready");
+        const snapshot = currentState?.snapshot ?? null;
         return {
           runtime,
-          snapshot: currentState?.snapshot ?? null,
-          loadState: currentState?.loadState ?? (runtime.canConnect ? "loading" : "ready"),
+          snapshot,
+          loadState,
+          connectionState: hostConnectionState(
+            runtime.capabilityState,
+            loadState,
+            snapshot !== null,
+          ),
         };
       }),
     [bridge.enabledRuntimes, connectionStates],
@@ -1226,6 +1237,7 @@ export function App() {
       : null;
   const snapshot = selectedConnectionState?.snapshot ?? null;
   const loadState: LoadState = selectedConnectionState?.loadState ?? (selectedRuntime ? "loading" : "ready");
+  const selectedControlsEnabled = runtimeControlsEnabled(selectedRuntime, loadState);
   const selectedRawPaneId =
     selectedRuntime && selectedPaneRefState?.bridgeId === selectedRuntime.id
       ? selectedPaneRefState.paneId
@@ -1248,8 +1260,9 @@ export function App() {
     navigationIsShared,
     preferSharedSnapshotSelection,
   );
-  const supportedCommands =
-    selectedRuntime?.capabilityState === "ready" ? (selectedRuntime.capabilities?.commands ?? []) : [];
+  const supportedCommands = selectedControlsEnabled
+    ? (selectedRuntime?.capabilities?.commands ?? [])
+    : [];
   const splitSupported = supportedCommands.includes("pane.split");
   const paneFocusSupported = supportedCommands.includes("pane.focus_direction");
   const selectedHttpUrl = useMemo(
@@ -1978,6 +1991,7 @@ export function App() {
       ? agentPinsStates[selectedRuntime.id]
       : null;
   const selectedPanePinsSupported = Boolean(
+    selectedControlsEnabled &&
     selectedRuntime?.canConnect &&
       selectedRuntime.capabilityState === "ready" &&
       selectedPane &&
@@ -2163,7 +2177,7 @@ export function App() {
     return cells.length > 1 ? cells : null;
   }, [snapshot, selectedPane]);
 
-  const showSplit = !isCompactLayout && splitCells !== null;
+  const showSplit = selectedControlsEnabled && !isCompactLayout && splitCells !== null;
 
   // Shared navigation mirrors browser focus to Herdr so `active_tab_id` tracks
   // the synchronized view. Independent navigation deliberately leaves Herdr's
@@ -3320,8 +3334,12 @@ export function App() {
   ) {
     if (
       !runtime ||
-      runtime.capabilityState !== "ready" ||
-      !runtime.canConnect ||
+      !runtimeControlsEnabled(
+        runtime,
+        connectionStates[runtime.id]?.connectionKey === runtime.connectionKey
+          ? connectionStates[runtime.id].loadState
+          : "loading",
+      ) ||
       !connectionRefs.current[runtime.id]?.snapshot
     ) {
       setError("Bridge is not ready");
@@ -3732,6 +3750,7 @@ export function App() {
           snapshot={snapshot}
           activeSpace={activeSpace}
           selectedPane={selectedPane}
+          controlsEnabled={selectedControlsEnabled}
           onSelectTab={(tabId) => selectedRuntime && selectTab(selectedRuntime.id, tabId)}
           onCreateTab={(workspaceId) =>
             selectedRuntime &&
@@ -3828,7 +3847,7 @@ export function App() {
               <Pin size={16} />
             </button>
           ) : null}
-          {selectedPane ? (
+          {selectedPane && selectedControlsEnabled ? (
             <button
               className="icon-btn"
               type="button"
@@ -3866,6 +3885,7 @@ export function App() {
             terminalInputTransport={terminalInputTransport}
             terminalInputBatchDelayMs={terminalInputBatchDelayMs}
             terminalOutputCoalesceMs={terminalOutputCoalesceMs}
+            profileId={selectedRuntime?.id ?? "disconnected"}
             connectionKey={selectedRuntime?.connectionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
@@ -3873,8 +3893,16 @@ export function App() {
           />
         ) : renderTerminal ? (
           <TerminalView
-            pane={selectedPane}
-            connectionKey={selectedRuntime?.connectionKey ?? "disconnected"}
+            pane={selectedControlsEnabled ? selectedPane : null}
+            connectionKey={
+              selectedRuntime && selectedPane
+                ? terminalSessionKey(
+                    selectedRuntime.id,
+                    selectedRuntime.connectionKey,
+                    selectedPane.terminal_id,
+                  )
+                : "disconnected"
+            }
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
@@ -5587,6 +5615,7 @@ function SplitGrid({
   terminalInputTransport,
   terminalInputBatchDelayMs,
   terminalOutputCoalesceMs,
+  profileId,
   connectionKey,
   resumeToken,
   httpUrl,
@@ -5608,6 +5637,7 @@ function SplitGrid({
   terminalInputTransport: TerminalInputTransport;
   terminalInputBatchDelayMs: number;
   terminalOutputCoalesceMs: number;
+  profileId: string;
   connectionKey: string;
   resumeToken: number;
   httpUrl: (path: string, query?: URLSearchParams) => string;
@@ -5627,7 +5657,7 @@ function SplitGrid({
           >
             <TerminalView
               pane={pane}
-              connectionKey={connectionKey}
+              connectionKey={terminalSessionKey(profileId, connectionKey, pane.terminal_id)}
               resumeToken={resumeToken}
               httpUrl={httpUrl}
               wsUrl={wsUrl}
@@ -5658,6 +5688,7 @@ function TabBar({
   snapshot,
   activeSpace,
   selectedPane,
+  controlsEnabled,
   onSelectTab,
   onCreateTab,
   onMenu,
@@ -5665,6 +5696,7 @@ function TabBar({
   snapshot: Snapshot | null;
   activeSpace: WorkspaceInfo | null;
   selectedPane: PaneInfo | null;
+  controlsEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCreateTab: (workspaceId: string) => void;
   onMenu: (
@@ -5703,6 +5735,9 @@ function TabBar({
               onClick={() => onSelectTab(tab.tab_id)}
               onContextMenu={(event) => {
                 event.preventDefault();
+                if (!controlsEnabled) {
+                  return;
+                }
                 onMenu("tab", tab.tab_id, label, event.clientX, event.clientY, canClearTabName(tab));
               }}
             >
@@ -5717,6 +5752,7 @@ function TabBar({
         type="button"
         aria-label="New tab"
         title="New tab"
+        disabled={!controlsEnabled}
         onClick={() => onCreateTab(activeSpace.workspace_id)}
       >
         <Plus size={14} />
@@ -5788,7 +5824,7 @@ function Switcher({
   bridgeError: string | null;
   bridgeLabel: string;
   bridgeMode: "same-origin" | "configured" | "disconnected";
-  capabilityState: "idle" | "probing" | "ready" | "error";
+  capabilityState: CapabilityState;
   scope: Scope;
   sidebarView: SidebarView;
   notesEnabled: boolean;
@@ -6669,7 +6705,10 @@ function Switcher({
             type="button"
             style={{ "--bridge-color": view.runtime.color } as CSSProperties}
             data-on={hostScope === "selected" && selectedBridgeId === view.runtime.id}
+            data-connection={view.connectionState}
             aria-pressed={hostScope === "selected" && selectedBridgeId === view.runtime.id}
+            aria-label={`${view.runtime.label}, ${view.connectionState}`}
+            title={`${view.runtime.label}: ${view.connectionState}`}
             onClick={() => {
               onSelectBridge(view.runtime.id);
               onHostScope("selected");

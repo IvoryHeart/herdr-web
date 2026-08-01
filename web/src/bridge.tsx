@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import { fetchWithTimeout } from "./fetchWithTimeout";
+import { normalizeHostProfileId, normalizeHostProfileLabel } from "./hostProfile";
 import { addNativeResumeHandler } from "./native";
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
@@ -35,6 +36,12 @@ export type BridgeBackendStore = {
 export type BridgeMode = "same-origin" | "configured";
 
 export type BridgeCapabilities = {
+  bridge_api_version?: number;
+  bridge_version?: string;
+  herdr_version?: string;
+  terminal_protocol?: number;
+  configured_label?: string;
+  features?: string[];
   commands: string[];
   agent_activity?: {
     version: 1;
@@ -48,12 +55,17 @@ export type BridgeCapabilities = {
   launcher_presets?: {
     version: 1;
   };
-  bridge_version?: string;
   web_compat?: number;
   min_android_app_compat?: number;
 };
 
-export type CapabilityState = "idle" | "probing" | "ready" | "error";
+export type CapabilityState =
+  | "idle"
+  | "probing"
+  | "ready"
+  | "error"
+  | "offline"
+  | "incompatible";
 
 type BridgeProbeState = {
   connectionKey: string;
@@ -109,6 +121,11 @@ const LEGACY_STORE_KEY = "herdrWeb.bridgeBackends.v1";
 const NOTE_DRAFT_STORAGE_PREFIX = "herdr-web:note-draft:v1:";
 const STORE_VERSION = 2;
 const APP_MIN_WEB_COMPAT = 1;
+const APP_BRIDGE_API_VERSION = 1;
+const APP_TERMINAL_PROTOCOL = 17;
+const APP_MIN_HERDR_VERSION = [0, 7, 5] as const;
+const MAX_CAPABILITY_STRING_LENGTH = 120;
+const MAX_CAPABILITY_LIST_LENGTH = 128;
 export const SAME_ORIGIN_BRIDGE_COLOR = "#b4befe";
 const BACKEND_COLOR_PALETTE = [
   "#89b4fa",
@@ -725,9 +742,7 @@ export function parseBackendStore(value: unknown): BridgeBackendStore {
 
 function parseBackendStoreV2(value: Record<string, unknown>): BridgeBackendStore {
   const rawBackends = Array.isArray(value.backends) ? value.backends : [];
-  const backends = rawBackends
-    .map(parseBackendProfile)
-    .filter((backend): backend is BridgeBackendProfile => backend !== null);
+  const backends = parseBackendProfiles(rawBackends);
   const sameOriginAvailable = defaultBridgeMode() === "same-origin";
   const enabledBridgeIds = normalizeEnabledBridgeIds(
     Array.isArray(value.enabledBridgeIds) ? value.enabledBridgeIds : [],
@@ -744,9 +759,7 @@ function parseBackendStoreV2(value: Record<string, unknown>): BridgeBackendStore
 
 function migrateLegacyBackendStore(value: Record<string, unknown>): BridgeBackendStore {
   const rawBackends = Array.isArray(value.backends) ? value.backends : [];
-  const backends = rawBackends
-    .map(parseBackendProfile)
-    .filter((backend): backend is BridgeBackendProfile => backend !== null);
+  const backends = parseBackendProfiles(rawBackends);
   const activeBackendId =
     typeof value.activeBackendId === "string" &&
     backends.some((backend) => backend.id === value.activeBackendId)
@@ -775,10 +788,14 @@ function parseBackendProfile(value: unknown): BridgeBackendProfile | null {
     return null;
   }
   try {
+    const id = normalizeHostProfileId(value.id);
+    if (!id) {
+      return null;
+    }
     const baseUrl = normalizeBridgeBaseUrl(value.baseUrl);
     return {
-      id: value.id,
-      name: value.name.trim() || displayNameFromUrl(baseUrl),
+      id,
+      name: normalizeHostProfileLabel(value.name, displayNameFromUrl(baseUrl)),
       baseUrl,
       color: normalizeBackendColor(value.color) ?? undefined,
       lastConnectedAt: typeof value.lastConnectedAt === "string" ? value.lastConnectedAt : undefined,
@@ -786,6 +803,20 @@ function parseBackendProfile(value: unknown): BridgeBackendProfile | null {
   } catch {
     return null;
   }
+}
+
+function parseBackendProfiles(values: unknown[]) {
+  const backends: BridgeBackendProfile[] = [];
+  const profileIds = new Set<string>();
+  for (const value of values) {
+    const backend = parseBackendProfile(value);
+    if (!backend || profileIds.has(backend.id)) {
+      continue;
+    }
+    profileIds.add(backend.id);
+    backends.push(backend);
+  }
+  return backends;
 }
 
 function fallbackStore(): BridgeBackendStore {
@@ -1001,7 +1032,13 @@ export async function fetchCapabilities(
   if (!response.ok) {
     throw new Error(`capabilities failed: ${response.status}`);
   }
-  return parseCapabilities(await response.json());
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new CapabilityContractError("Bridge capability response is malformed");
+  }
+  return parseCapabilities(value);
 }
 
 export async function probeBridgeBaseUrl(baseUrl: string): Promise<BridgeCapabilities> {
@@ -1029,7 +1066,7 @@ export function capabilityProbeSuccess(
   if (error) {
     return {
       blocked: true,
-      state: "error",
+      state: "incompatible",
       capabilities: null,
       error,
       retry: false,
@@ -1045,12 +1082,13 @@ export function capabilityProbeSuccess(
 }
 
 export function capabilityProbeFailure(error: unknown): CapabilityProbeOutcome {
+  const contractFailure = error instanceof CapabilityContractError;
   return {
-    blocked: false,
-    state: "error",
+    blocked: true,
+    state: contractFailure ? "incompatible" : "offline",
     capabilities: null,
-    error: error instanceof Error ? error.message : "Bridge unavailable",
-    retry: true,
+    error: contractFailure ? error.message : "Bridge unavailable",
+    retry: !contractFailure,
   };
 }
 
@@ -1060,13 +1098,29 @@ export function capabilityRetryDelayMs(attempt: number) {
 
 export function parseCapabilities(value: unknown): BridgeCapabilities {
   if (!isRecord(value)) {
-    return { commands: [] };
+    throw new CapabilityContractError("Bridge capability response is malformed");
+  }
+  const bridgeApiVersion = boundedInteger(value.bridge_api_version);
+  const terminalProtocol = boundedInteger(value.terminal_protocol);
+  const bridgeVersion = boundedCapabilityString(value.bridge_version);
+  const herdrVersion = boundedCapabilityString(value.herdr_version);
+  if (
+    bridgeApiVersion === null ||
+    terminalProtocol === null ||
+    bridgeVersion === null ||
+    herdrVersion === null ||
+    !Array.isArray(value.commands)
+  ) {
+    throw new CapabilityContractError("Bridge capability response is malformed");
   }
   return {
-    commands: Array.isArray(value.commands)
-      ? value.commands.filter((command): command is string => typeof command === "string")
-      : [],
-    bridge_version: typeof value.bridge_version === "string" ? value.bridge_version : undefined,
+    bridge_api_version: bridgeApiVersion,
+    bridge_version: bridgeVersion,
+    herdr_version: herdrVersion,
+    terminal_protocol: terminalProtocol,
+    configured_label: optionalCapabilityString(value.configured_label),
+    features: boundedStringList(value.features),
+    commands: boundedStringList(value.commands) ?? [],
     web_compat: typeof value.web_compat === "number" ? value.web_compat : undefined,
     min_android_app_compat:
       typeof value.min_android_app_compat === "number" ? value.min_android_app_compat : undefined,
@@ -1090,6 +1144,15 @@ export function parseCapabilities(value: unknown): BridgeCapabilities {
 }
 
 function compatibilityError(capabilities: BridgeCapabilities) {
+  if (capabilities.bridge_api_version !== APP_BRIDGE_API_VERSION) {
+    return `Bridge API ${String(capabilities.bridge_api_version)} is incompatible; expected ${APP_BRIDGE_API_VERSION}`;
+  }
+  if (capabilities.terminal_protocol !== APP_TERMINAL_PROTOCOL) {
+    return `Terminal protocol ${String(capabilities.terminal_protocol)} is incompatible; expected ${APP_TERMINAL_PROTOCOL}`;
+  }
+  if (!minimumVersionSatisfied(capabilities.herdr_version, APP_MIN_HERDR_VERSION)) {
+    return "Herdr version is incompatible; expected 0.7.5 or newer";
+  }
   if (
     typeof capabilities.web_compat === "number" &&
     capabilities.web_compat < APP_MIN_WEB_COMPAT
@@ -1099,12 +1162,77 @@ function compatibilityError(capabilities: BridgeCapabilities) {
   return null;
 }
 
+export class CapabilityContractError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CapabilityContractError";
+  }
+}
+
+function boundedInteger(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+function boundedCapabilityString(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > MAX_CAPABILITY_STRING_LENGTH ||
+    hasControlCharacters(value)
+  ) {
+    return null;
+  }
+  return value;
+}
+
+function hasControlCharacters(value: string) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
+
+function optionalCapabilityString(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return boundedCapabilityString(value) ?? undefined;
+}
+
+function boundedStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const strings = value
+    .slice(0, MAX_CAPABILITY_LIST_LENGTH)
+    .map(boundedCapabilityString)
+    .filter((entry): entry is string => entry !== null);
+  return [...new Set(strings)];
+}
+
+function minimumVersionSatisfied(
+  value: string | undefined,
+  minimum: readonly [number, number, number],
+) {
+  if (!value) {
+    return false;
+  }
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:\+[0-9a-z.-]+)?$/iu.exec(value.trim());
+  if (!match) {
+    return false;
+  }
+  const version = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+  return version[0] > minimum[0] ||
+    (version[0] === minimum[0] && version[1] > minimum[1]) ||
+    (version[0] === minimum[0] && version[1] === minimum[1] && version[2] >= minimum[2]);
+}
+
 function backendDisplayName(
   name: string | undefined,
   baseUrl: string,
   existing: readonly BridgeBackendProfile[],
 ) {
-  const requested = name?.trim() || displayNameFromUrl(baseUrl);
+  const requested = normalizeHostProfileLabel(name, displayNameFromUrl(baseUrl));
   const names = new Set(existing.map((backend) => backend.name));
   if (!names.has(requested)) {
     return requested;
