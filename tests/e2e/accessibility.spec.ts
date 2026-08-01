@@ -4,7 +4,8 @@ import { hostStore } from "./hostStore";
 
 test.use({ reducedMotion: "reduce" });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4173/__fixture/reset");
   await page.addInitScript((store) => {
     localStorage.setItem("herdrWeb.bridgeBackends.v2", JSON.stringify(store));
   }, hostStore());

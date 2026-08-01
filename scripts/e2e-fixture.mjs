@@ -9,6 +9,7 @@ import { WebSocketServer } from "ws";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const staticDir = join(root, "web", "dist");
 const logs = new Map();
+const fixtureStates = new Map();
 const servers = [];
 
 const fixtures = [
@@ -30,12 +31,8 @@ const fixtures = [
 ];
 
 for (const fixture of fixtures) {
-  logs.set(fixture.id, {
-    commands: [],
-    terminalInput: [],
-    terminalResize: [],
-    connections: 0,
-  });
+  logs.set(fixture.id, emptyLog());
+  fixtureStates.set(fixture.id, defaultFixtureState());
   servers.push(await startFixture(fixture));
 }
 
@@ -64,25 +61,42 @@ async function startFixture(fixture) {
     }
     if (url.pathname === "/__fixture/reset" && request.method === "POST") {
       for (const [id] of logs) {
-        logs.set(id, {
-          commands: [],
-          terminalInput: [],
-          terminalResize: [],
-          connections: 0,
-        });
+        logs.set(id, emptyLog());
+        fixtureStates.set(id, defaultFixtureState());
+      }
+      json(response, 200, { ok: true });
+      return;
+    }
+    if (url.pathname === "/__fixture/state" && request.method === "POST") {
+      const body = await readJson(request);
+      const target = fixtures.find((candidate) => candidate.id === body.hostId);
+      if (!target || !setFixtureState(target.id, body)) {
+        json(response, 400, { error: "invalid fixture state" });
+        return;
       }
       json(response, 200, { ok: true });
       return;
     }
     if (url.pathname === "/api/capabilities") {
+      logs.get(fixture.id).capabilityRequests += 1;
       if (fixture.variant === "malformed") {
         json(response, 200, { bridge_api_version: "invalid", commands: "all" });
         return;
       }
-      json(response, 200, capabilities(fixture));
+      json(response, 200, capabilities(fixture, fixtureStates.get(fixture.id)));
       return;
     }
     if (url.pathname === "/api/snapshot") {
+      logs.get(fixture.id).snapshotRequests += 1;
+      const state = fixtureStates.get(fixture.id);
+      if (state.snapshotMode === "offline") {
+        json(response, 503, { error: "fixture offline" });
+        return;
+      }
+      if (state.snapshotMode === "malformed") {
+        json(response, 200, {});
+        return;
+      }
       json(response, 200, snapshot(fixture));
       return;
     }
@@ -93,6 +107,8 @@ async function startFixture(fixture) {
       return;
     }
     if (url.pathname === "/api/selection" && request.method === "POST") {
+      const body = await readJson(request);
+      logs.get(fixture.id).selections.push(body);
       json(response, 200, { ok: true });
       return;
     }
@@ -152,23 +168,25 @@ async function startFixture(fixture) {
   return server;
 }
 
-function capabilities(fixture) {
+function capabilities(fixture, state) {
   return {
     bridge_api_version: 1,
     bridge_version: "0.1.0",
     herdr_version: "0.7.5",
-    terminal_protocol: fixture.variant === "incompatible" ? 16 : 17,
+    terminal_protocol:
+      state.terminalProtocol ?? (fixture.variant === "incompatible" ? 16 : 17),
     configured_label: fixture.label,
-    features: [
-      "snapshot",
-      "structural_events",
-      "shared_selection",
-      "terminal_attach",
-      "terminal_input",
-      "terminal_resize",
-      "terminal_scroll",
-      "terminal_shared_fanout",
-    ],
+    features:
+      state.features ?? [
+        "snapshot",
+        "structural_events",
+        "shared_selection",
+        "terminal_attach",
+        "terminal_input",
+        "terminal_resize",
+        "terminal_scroll",
+        "terminal_shared_fanout",
+      ],
     commands: [
       "workspace.create",
       "workspace.rename",
@@ -186,6 +204,46 @@ function capabilities(fixture) {
     ],
     web_compat: 1,
   };
+}
+
+function emptyLog() {
+  return {
+    commands: [],
+    selections: [],
+    terminalInput: [],
+    terminalResize: [],
+    connections: 0,
+    capabilityRequests: 0,
+    snapshotRequests: 0,
+  };
+}
+
+function defaultFixtureState() {
+  return {
+    snapshotMode: "ready",
+    terminalProtocol: null,
+    features: null,
+  };
+}
+
+function setFixtureState(hostId, value) {
+  const current = fixtureStates.get(hostId);
+  if (!current) {
+    return false;
+  }
+  const snapshotMode = value.snapshotMode ?? current.snapshotMode;
+  const terminalProtocol = value.terminalProtocol ?? current.terminalProtocol;
+  const features = value.features ?? current.features;
+  if (
+    !["ready", "offline", "malformed"].includes(snapshotMode) ||
+    (terminalProtocol !== null && terminalProtocol !== 16 && terminalProtocol !== 17) ||
+    (features !== null &&
+      (!Array.isArray(features) || features.some((feature) => typeof feature !== "string")))
+  ) {
+    return false;
+  }
+  fixtureStates.set(hostId, { snapshotMode, terminalProtocol, features });
+  return true;
 }
 
 function snapshot(fixture) {

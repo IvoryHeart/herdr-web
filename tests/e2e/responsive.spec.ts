@@ -9,6 +9,10 @@ test.beforeAll(async () => {
   await mkdir(evidenceDir, { recursive: true });
 });
 
+test.beforeEach(async ({ request }) => {
+  await request.post("http://127.0.0.1:4173/__fixture/reset");
+});
+
 for (const viewport of [
   { width: 1440, height: 900 },
   { width: 1920, height: 1200 },
