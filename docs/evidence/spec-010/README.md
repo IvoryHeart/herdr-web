@@ -1,13 +1,13 @@
 # Spec 010 acceptance evidence
 
 This evidence applies to the Herdr Web tree at implementation commit
-`6e0415f7e635f32b8f0d16ab3fb650c47a5f7ce2`, descended from the immutable upstream baseline
+`34938f11a718bfab5fb0006e139eaba7273109a4`, descended from the immutable upstream baseline
 `67a4ace73fcd554af39586769dc86d4d9e82f09b`. The approved product contract is
 ai-observability Spec 010 at `ecde9e1`.
 
 ## Automated gate
 
-The final gate ran on 2026-08-01 with Node 22.16.0/npm 11.7.0, Chromium, and Rust stable 1.97.1:
+The final gate ran on 2026-08-02 with Node 22.16.0/npm 11.7.0, Chromium, and Rust stable 1.97.1:
 
 ```bash
 npm ci
@@ -36,12 +36,13 @@ Result:
 
 The final browser gate includes the review reproductions for malformed snapshot isolation,
 offline/stale row mutation suppression, per-host required-capability enforcement, read-only attach
-without input/resize/scroll frames, partial structural-command lists, and recovery through a fresh
-capability generation. An HTTP-down/WS-up activity ordering cannot admit derived state while
-recovery is pending, and recovery against terminal protocol 16 remains incompatible. Unit tests
-additionally cover bounded snapshot collections and strings, topology references, missing
-capability feature lists, generation-safe caches, operation-specific terminal admission, and
-terminal-session identity rotation.
+without input/resize/scroll frames or upload requests, partial structural-command lists, and
+recovery through a fresh capability generation. The read-only fixture dispatches both a real file
+drop and a real clipboard file paste and records zero `/api/uploads` requests. An HTTP-down/WS-up
+activity ordering cannot admit derived state while recovery is pending, and recovery against
+terminal protocol 16 remains incompatible. Unit tests additionally cover bounded snapshot
+collections and strings, topology references, missing capability feature lists, generation-safe
+caches, operation-specific terminal admission, and terminal-session identity rotation.
 
 ## Live Herdr evidence
 
@@ -98,8 +99,9 @@ configurations, OpenSSH processes, bridges, and disposable Herdr sessions were r
 4. Herdr authority: `live-authority-smoke.sh`, runtime-cache reconciliation tests, native snapshot
    adapter tests, and the live external mutation result above.
 5. Terminal fidelity: `live-bridge-smoke.mjs`, terminal protocol/renderer unit tests, independent
-   attach/input/resize/scroll/upload feature admission, and the live output/input/resize/reconnect
-   result above.
+   attach/input/resize/scroll/upload feature admission, request-boundary rechecks before initial or
+   overwrite upload requests, zero file-drop/paste upload calls from a read-only host, and the live
+   output/input/resize/reconnect result above.
 6. Structural commands: every UI and execution dispatch requires its exact per-host advertised
    command; the bridge's allowlist plus create/rename/split/move/launch/focus/close validation and
    rollback tests reject dangerous, unknown, or undeclared operations.
