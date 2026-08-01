@@ -26,6 +26,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: Install repository check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
       - name: Install root dependencies
         run: npm ci
       - name: Install web dependencies
