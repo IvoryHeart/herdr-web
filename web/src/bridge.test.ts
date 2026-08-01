@@ -346,6 +346,14 @@ describe("capabilities", () => {
     });
   });
 
+  it("rejects capabilities that omit the feature contract", () => {
+    const missingFeatures = compatibleCapabilities();
+    Reflect.deleteProperty(missingFeatures, "features");
+    expect(() => parseCapabilities(missingFeatures)).toThrow(
+      "Bridge capability response is malformed",
+    );
+  });
+
   it("probes configured bridge capabilities", async () => {
     const response = compatibleCapabilities({ commands: ["pane.move"] });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(

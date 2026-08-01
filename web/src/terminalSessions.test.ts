@@ -17,6 +17,20 @@ describe("terminal-session boundary", () => {
     expect(terminalSessionDescriptor(runtime("host-a"), testPane("terminal-1"), "error"))
       .toMatchObject({ inputEnabled: false });
   });
+
+  it("changes the terminal session identity after a capability recovery generation", () => {
+    const before = runtime("host-a");
+    const after = {
+      ...before,
+      capabilityGeneration: 1,
+      generationKey: `${before.connectionKey}:capability:1`,
+    };
+    expect(
+      terminalSessionDescriptor(before, testPane("terminal-1"), "ready")?.sessionKey,
+    ).not.toBe(
+      terminalSessionDescriptor(after, testPane("terminal-1"), "ready")?.sessionKey,
+    );
+  });
 });
 
 function runtime(id: string): BridgeRuntime {
@@ -27,6 +41,8 @@ function runtime(id: string): BridgeRuntime {
     color: "#89b4fa",
     backend: { id, name: id, baseUrl: `http://${id}.example:8787` },
     connectionKey: `configured:${id}`,
+    capabilityGeneration: 0,
+    generationKey: `configured:${id}:capability:0`,
     resumeToken: 0,
     capabilities: { bridge_api_version: 1, commands: [] },
     capabilityState: "ready",

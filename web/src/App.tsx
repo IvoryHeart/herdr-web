@@ -38,7 +38,6 @@ import type {
   Dispatch,
   FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
-  MutableRefObject,
   ReactNode,
   SetStateAction,
 } from "react";
@@ -61,8 +60,6 @@ import {
   unpinAgent,
 } from "./agentPins";
 import type { AgentPinsListResponse } from "./agentPins";
-import { applyActivityMessage, parseActivityEventData, replayActivityMessages } from "./activity";
-import type { ActivityLogEntry } from "./activity";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
 import type { BridgeId, BridgeRuntime, CapabilityState } from "./bridge";
 import { createCommands, createdPaneId } from "./commands";
@@ -85,7 +82,6 @@ import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
 import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
 import type { LauncherPresetsResponse } from "./launcherPresets";
-import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
   DEFAULT_MOBILE_COMMAND_ENTER_NEWLINE,
   DEFAULT_MOBILE_COMMAND_EXPANDING_INPUT,
@@ -132,12 +128,27 @@ import {
 import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
 import type { MenuItem } from "./overlays";
-import { createSnapshotRefreshController } from "./refreshCoordinator";
+import { useCoreNavigation } from "./CoreNavigation";
 import { useHostRegistry } from "./hostRegistry";
-import { hostConnectionState, runtimeControlsEnabled } from "./runtimeClient";
+import {
+  fetchRuntimeSnapshot,
+  hostConnectionState,
+  RuntimeCache,
+  runtimeAdmissionReady,
+} from "./runtimeClient";
 import type { HostConnectionState } from "./runtimeClient";
+import {
+  admitRuntimeSnapshot,
+  ensureBridgeConnectionRef,
+  isRuntimeGenerationCurrent,
+  markRuntimeUnavailable,
+  RuntimeConnection,
+} from "./runtimeConnection";
+import type { BridgeConnectionRef, BridgeConnectionState } from "./runtimeConnection";
+import { qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
-import { terminalSessionKey } from "./terminalSessions";
+import { terminalSessionDescriptor } from "./terminalSessions";
+import { coreSurfaceRegistry } from "./surfaceRegistry";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
   DEFAULT_TERMINAL_INPUT_TRANSPORT,
@@ -217,11 +228,7 @@ export type BridgeConnectionView = {
   snapshot: Snapshot | null;
   loadState: LoadState;
   connectionState: HostConnectionState;
-};
-export type BridgeConnectionState = {
-  connectionKey: string;
-  snapshot: Snapshot | null;
-  loadState: LoadState;
+  surfaceError: string | null;
 };
 type BridgeResourceState<Response> = {
   connectionKey: string;
@@ -271,17 +278,6 @@ export function launcherEmptyMessage(
 }
 type BridgeAgentPinsState = BridgeResourceState<AgentPinsListResponse>;
 type BridgeAgentActivityState = BridgeResourceState<AgentActivityListResponse>;
-export type BridgeConnectionRef = {
-  connectionKey: string;
-  snapshot: Snapshot | null;
-  activityGeneration: number;
-  resyncBarrierGeneration: number;
-  activityLog: ActivityLogEntry[];
-  sharedSelectionOverride: {
-    paneId: string;
-    expiresAtMs: number;
-  } | null;
-};
 export type ScopedAgentPane = {
   bridgeId: BridgeId;
   bridgeIndex: number;
@@ -900,6 +896,8 @@ function usePointerDragResize(
 
 export function App() {
   const bridge = useHostRegistry();
+  const { activeSurface } = useCoreNavigation();
+  const runtimeCache = useMemo(() => new RuntimeCache<Snapshot>(), []);
   const initialPrefs = useMemo(readDisplayPrefs, []);
   const initialSharedNavigationPrefs = useMemo(readSharedNavigationPrefs, []);
   const initialNavigationSyncMode = useMemo(readNavigationSyncMode, []);
@@ -1213,9 +1211,13 @@ export function App() {
     () =>
       bridge.enabledRuntimes.map((runtime) => {
         const state = connectionStates[runtime.id];
-        const currentState = state?.connectionKey === runtime.connectionKey ? state : null;
+        const currentState = state?.connectionKey === runtime.generationKey ? state : null;
         const loadState = currentState?.loadState ?? (runtime.canConnect ? "loading" : "ready");
         const snapshot = currentState?.snapshot ?? null;
+        const surfaceSupported = coreSurfaceRegistry.supports(
+          activeSurface.id,
+          runtime.capabilities,
+        );
         return {
           runtime,
           snapshot,
@@ -1224,10 +1226,41 @@ export function App() {
             runtime.capabilityState,
             loadState,
             snapshot !== null,
+            surfaceSupported,
           ),
+          surfaceError: surfaceSupported
+            ? null
+            : `Missing ${coreSurfaceRegistry
+                .missingCapabilities(activeSurface.id, runtime.capabilities)
+                .join(", ")} capability`,
         };
       }),
-    [bridge.enabledRuntimes, connectionStates],
+    [activeSurface.id, bridge.enabledRuntimes, connectionStates],
+  );
+  const runtimeIsAdmitted = useCallback(
+    (profileId: string) => {
+      const runtime = bridge.getRuntime(profileId);
+      return runtimeAdmissionReady(
+        runtime,
+        runtime ? connectionStates[runtime.id] : null,
+        activeSurface.requiredCapabilities,
+      );
+    },
+    [activeSurface.requiredCapabilities, bridge, connectionStates],
+  );
+  const routeRuntimeTarget = useCallback(
+    (
+      bridgeId: BridgeId,
+      kind: "workspace" | "tab" | "pane" | "terminal" | "agent",
+      nativeTargetId: string,
+      requiredCommand?: string,
+    ) =>
+      bridge.routeTarget(
+        qualifyRuntimeTarget(bridgeId, kind, nativeTargetId),
+        requiredCommand,
+        runtimeIsAdmitted,
+      ),
+    [bridge, runtimeIsAdmitted],
   );
   const pinnedAgentKeys = useMemo(
     () => buildAgentPinKeySet(bridgeViews, agentPinsStates),
@@ -1248,13 +1281,21 @@ export function App() {
         : null,
     [bridge.enabledRuntimes, selectedBridgeId],
   );
+  const selectedBridgeView = selectedRuntime
+    ? (bridgeViews.find((view) => view.runtime.id === selectedRuntime.id) ?? null)
+    : null;
   const selectedConnectionState =
-    selectedRuntime && connectionStates[selectedRuntime.id]?.connectionKey === selectedRuntime.connectionKey
+    selectedRuntime &&
+    connectionStates[selectedRuntime.id]?.connectionKey === selectedRuntime.generationKey
       ? connectionStates[selectedRuntime.id]
       : null;
   const snapshot = selectedConnectionState?.snapshot ?? null;
   const loadState: LoadState = selectedConnectionState?.loadState ?? (selectedRuntime ? "loading" : "ready");
-  const selectedControlsEnabled = runtimeControlsEnabled(selectedRuntime, loadState);
+  const selectedControlsEnabled = runtimeAdmissionReady(
+    selectedRuntime,
+    selectedConnectionState,
+    activeSurface.requiredCapabilities,
+  );
   const selectedRawPaneId =
     selectedRuntime && selectedPaneRefState?.bridgeId === selectedRuntime.id
       ? selectedPaneRefState.paneId
@@ -1297,7 +1338,7 @@ export function App() {
   const launchRuntime = launchTarget ? bridge.getRuntime(launchTarget.bridgeId) : null;
   const launchPresetState =
     launchRuntime &&
-    launcherPresetStates[launchRuntime.id]?.connectionKey === launchRuntime.connectionKey
+    launcherPresetStates[launchRuntime.id]?.connectionKey === launchRuntime.generationKey
       ? launcherPresetStates[launchRuntime.id]
       : null;
   const launcherSupported = supportsLauncherPresets(launchRuntime?.capabilities);
@@ -1319,7 +1360,7 @@ export function App() {
     }
     const current = launcherPresetStatesRef.current[launchRuntime.id];
     if (
-      current?.connectionKey === launchRuntime.connectionKey &&
+      current?.connectionKey === launchRuntime.generationKey &&
       current.loadState === "loading"
     ) {
       return;
@@ -1328,9 +1369,9 @@ export function App() {
     setLauncherPresetStates((states) => ({
       ...states,
       [runtime.id]: {
-        connectionKey: runtime.connectionKey,
+        connectionKey: runtime.generationKey,
         response:
-          current?.connectionKey === runtime.connectionKey ? current.response : null,
+          current?.connectionKey === runtime.generationKey ? current.response : null,
         loadState: "loading",
         error: null,
       },
@@ -1339,13 +1380,13 @@ export function App() {
       .then((response) => {
         setLauncherPresetStates((states) => {
           const current = states[runtime.id];
-          if (current && current.connectionKey !== runtime.connectionKey) {
+          if (current && current.connectionKey !== runtime.generationKey) {
             return states;
           }
           return {
             ...states,
             [runtime.id]: {
-              connectionKey: runtime.connectionKey,
+              connectionKey: runtime.generationKey,
               response,
               loadState: "ready",
               error: null,
@@ -1356,13 +1397,13 @@ export function App() {
       .catch((err: unknown) => {
         setLauncherPresetStates((states) => {
           const current = states[runtime.id];
-          if (current && current.connectionKey !== runtime.connectionKey) {
+          if (current && current.connectionKey !== runtime.generationKey) {
             return states;
           }
           return {
             ...states,
             [runtime.id]: {
-              connectionKey: runtime.connectionKey,
+              connectionKey: runtime.generationKey,
               response: null,
               loadState: "error",
               error: err instanceof Error ? err.message : String(err),
@@ -1371,20 +1412,19 @@ export function App() {
         });
       });
   }, [
-    launchRuntime?.connectionKey,
+    launchRuntime?.generationKey,
     launchRuntime?.id,
     launchRuntime?.capabilities,
   ]);
   const menuRuntime = menu ? bridge.getRuntime(menu.bridgeId) : null;
   const menuConnectionState =
-    menuRuntime && connectionStates[menuRuntime.id]?.connectionKey === menuRuntime.connectionKey
+    menuRuntime && connectionStates[menuRuntime.id]?.connectionKey === menuRuntime.generationKey
       ? connectionStates[menuRuntime.id]
       : null;
-  const menuCommandsReady = Boolean(
-    menuRuntime?.canConnect &&
-      menuRuntime.capabilityState === "ready" &&
-      menuConnectionState?.loadState === "ready" &&
-      menuConnectionState.snapshot,
+  const menuCommandsReady = runtimeAdmissionReady(
+    menuRuntime,
+    menuConnectionState,
+    activeSurface.requiredCapabilities,
   );
   const menuSupportedCommands = menuCommandsReady ? (menuRuntime?.capabilities?.commands ?? []) : [];
   const menuPaneMoveSupported = menuSupportedCommands.includes("pane.move");
@@ -1392,17 +1432,17 @@ export function App() {
     menu &&
       menu.kind === "pane" &&
       menu.pinLabel &&
-      menuRuntime?.canConnect &&
-      menuRuntime.capabilityState === "ready" &&
+      menuRuntime &&
+      menuCommandsReady &&
       supportsAgentPins(menuRuntime.capabilities),
   );
   const menuNotesSupported = canAddNoteFromPaneMenu({
     kind: menu?.kind ?? "space",
     notesEnabled,
-    runtimeCanConnect: menuRuntime?.canConnect === true,
+    runtimeCanConnect: menuCommandsReady,
     capabilityState: menuRuntime?.capabilityState ?? "idle",
     notesSupported: supportsNotes(menuRuntime?.capabilities),
-    runtimeConnectionKey: menuRuntime?.connectionKey ?? "",
+    runtimeConnectionKey: menuRuntime?.generationKey ?? "",
     stateConnectionKey: menuConnectionState?.connectionKey ?? null,
     paneExists: Boolean(
       menu &&
@@ -1880,9 +1920,11 @@ export function App() {
   }, [applyNavigationSyncMode]);
 
   useEffect(() => {
-    const activeBridgeIds = new Set(bridge.enabledRuntimes.map((runtime) => runtime.id));
+    const activeBridgeIds = new Set(
+      bridge.profiles.filter((profile) => profile.enabled).map((profile) => profile.profileId),
+    );
     const activeConnectionKeysByBridgeId = new Map(
-      bridge.enabledRuntimes.map((runtime) => [runtime.id, runtime.connectionKey]),
+      bridge.enabledRuntimes.map((runtime) => [runtime.id, runtime.generationKey]),
     );
 
     for (const [bridgeId, entries] of Object.entries(pendingCreatedPaneNotesRef.current)) {
@@ -1906,6 +1948,7 @@ export function App() {
     for (const bridgeId of Object.keys(connectionRefs.current)) {
       if (!activeBridgeIds.has(bridgeId)) {
         delete connectionRefs.current[bridgeId];
+        runtimeCache.remove(bridgeId);
       }
     }
     setConnectionStates((current) => {
@@ -1956,7 +1999,7 @@ export function App() {
       }
       return changed ? next : current;
     });
-  }, [bridge.enabledRuntimes, clearPendingSharedPaneSelection]);
+  }, [bridge.enabledRuntimes, bridge.profiles, clearPendingSharedPaneSelection, runtimeCache]);
 
   useEffect(() => {
     if (!error) {
@@ -2004,7 +2047,7 @@ export function App() {
   );
   const selectedAgentPinsState =
     selectedRuntime &&
-    agentPinsStates[selectedRuntime.id]?.connectionKey === selectedRuntime.connectionKey
+    agentPinsStates[selectedRuntime.id]?.connectionKey === selectedRuntime.generationKey
       ? agentPinsStates[selectedRuntime.id]
       : null;
   const selectedPanePinsSupported = Boolean(
@@ -2024,7 +2067,7 @@ export function App() {
     ? `Unpin ${selectedPanePinTarget}`
     : `Pin ${selectedPanePinTarget}`;
   const selectedNotesState =
-    selectedRuntime && notesStates[selectedRuntime.id]?.connectionKey === selectedRuntime.connectionKey
+    selectedRuntime && notesStates[selectedRuntime.id]?.connectionKey === selectedRuntime.generationKey
       ? notesStates[selectedRuntime.id]
       : null;
   const selectedBridgeNotes = notesEnabled
@@ -2200,27 +2243,30 @@ export function App() {
   // the synchronized view. Independent navigation deliberately leaves Herdr's
   // global focus alone. `tab.focus` also activates the tab's workspace.
   const publishSharedPaneSelection = (runtime: BridgeRuntime, paneId: string) => {
+    if (!runtimeIsAdmitted(runtime.id)) {
+      return;
+    }
     clearPendingSharedPaneSelection(runtime.id);
     const refreshIfConnectionIsCurrent = () => {
-      if (connectionRefs.current[runtime.id]?.connectionKey === runtime.connectionKey) {
+      if (connectionRefs.current[runtime.id]?.connectionKey === runtime.generationKey) {
         void refreshBridgeSnapshot(runtime, false);
       }
     };
     const timeoutId = window.setTimeout(() => {
       if (
-        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.connectionKey)
+        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.generationKey)
       ) {
         refreshIfConnectionIsCurrent();
       }
     }, SHARED_SELECTION_SETTLE_TIMEOUT_MS);
     pendingSharedPaneSelectionsRef.current[runtime.id] = {
       paneId,
-      connectionKey: runtime.connectionKey,
+      connectionKey: runtime.generationKey,
       timeoutId,
     };
     void syncSelectedPane(runtime.httpUrl, paneId).catch(() => {
       if (
-        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.connectionKey)
+        clearPendingSharedPaneSelection(runtime.id, paneId, runtime.generationKey)
       ) {
         refreshIfConnectionIsCurrent();
       }
@@ -2228,14 +2274,24 @@ export function App() {
   };
 
   const pushFocus = (runtime: BridgeRuntime | null, tabId?: string, workspaceId?: string) => {
-    if (!navigationIsShared || !runtime || runtime.capabilityState !== "ready") {
+    if (!navigationIsShared || !runtime || !runtimeIsAdmitted(runtime.id)) {
       return;
     }
-    const commands = createCommands(runtime.httpUrl);
-    if (tabId) {
-      void commands.focusTab(tabId).catch(() => {});
-    } else if (workspaceId) {
-      void commands.focusWorkspace(workspaceId).catch(() => {});
+    try {
+      if (tabId) {
+        const routed = routeRuntimeTarget(runtime.id, "tab", tabId, "tab.focus");
+        void createCommands(routed.httpUrl).focusTab(tabId).catch(() => {});
+      } else if (workspaceId) {
+        const routed = routeRuntimeTarget(
+          runtime.id,
+          "workspace",
+          workspaceId,
+          "workspace.focus",
+        );
+        void createCommands(routed.httpUrl).focusWorkspace(workspaceId).catch(() => {});
+      }
+    } catch {
+      // Stale and unsupported rows remain selectable locally but cannot mutate Herdr.
     }
   };
 
@@ -2271,7 +2327,7 @@ export function App() {
     setSelectedBridgeId(bridgeId);
     bridge.markBridgeUsed(bridgeId);
     rememberPaneSelection(bridgeId, pane.pane_id, pane.workspace_id);
-    if (navigationIsShared && runtime.capabilityState === "ready") {
+    if (navigationIsShared && runtimeIsAdmitted(runtime.id)) {
       publishSharedPaneSelection(runtime, pane.pane_id);
     }
     pushFocus(runtime, pane.tab_id, pane.workspace_id);
@@ -2298,11 +2354,11 @@ export function App() {
       return null;
     }
     const ref = connectionRefs.current[bridgeId];
-    if (ref?.connectionKey === runtime.connectionKey && ref.snapshot) {
+    if (ref?.connectionKey === runtime.generationKey && ref.snapshot) {
       return ref.snapshot;
     }
     const state = connectionStates[bridgeId];
-    return state?.connectionKey === runtime.connectionKey ? state.snapshot : null;
+    return state?.connectionKey === runtime.generationKey ? state.snapshot : null;
   };
 
   const selectSpace = (bridgeId: BridgeId, workspaceId: string) => {
@@ -2398,7 +2454,12 @@ export function App() {
       setError("Notes are disabled in settings");
       return;
     }
-    if (!selectedRuntime || !selectedPane || !supportsNotes(selectedRuntime.capabilities)) {
+    if (
+      !selectedRuntime ||
+      !selectedPane ||
+      !runtimeIsAdmitted(selectedRuntime.id) ||
+      !supportsNotes(selectedRuntime.capabilities)
+    ) {
       setError("Notes are not available for this bridge");
       return;
     }
@@ -2426,7 +2487,7 @@ export function App() {
       return;
     }
     const runtime = bridgeId ? bridge.getRuntime(bridgeId) : null;
-    if (!runtime || !supportsNotes(runtime.capabilities)) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Notes are not available for this bridge");
       return;
     }
@@ -2510,8 +2571,7 @@ export function App() {
     const runtime = bridge.getRuntime(bridgeId);
     if (
       !runtime ||
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
+      !runtimeIsAdmitted(runtime.id) ||
       !supportsNotes(runtime.capabilities)
     ) {
       setError("Notes are not available for this bridge");
@@ -2543,8 +2603,7 @@ export function App() {
     const runtime = bridge.getRuntime(target.bridgeId);
     if (
       !runtime ||
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
+      !runtimeIsAdmitted(runtime.id) ||
       !supportsNotes(runtime.capabilities)
     ) {
       setError("Notes are not available for this bridge");
@@ -2556,12 +2615,12 @@ export function App() {
       setError("Pane not found");
       return;
     }
-    const requestConnectionKey = runtime.connectionKey;
+    const requestConnectionKey = runtime.generationKey;
     const isCurrentConnection = () => {
       const currentRuntime = bridge.getRuntime(target.bridgeId);
       return Boolean(
         notesEnabledRef.current &&
-          currentRuntime?.connectionKey === requestConnectionKey &&
+          currentRuntime?.generationKey === requestConnectionKey &&
           isConnectionResultCurrent(
             connectionRefs.current[target.bridgeId]?.connectionKey ?? "",
             requestConnectionKey,
@@ -2644,7 +2703,7 @@ export function App() {
     expectedRevision: number,
   ) => {
     const runtime = bridge.getRuntime(entry.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Bridge is not ready");
       throw new Error("Bridge is not ready");
     }
@@ -2670,7 +2729,13 @@ export function App() {
   };
 
   const attachScopedNoteToCurrentPane = async (entry: ScopedNoteEntry) => {
-    if (!selectedRuntime || !selectedPane || selectedRuntime.id !== entry.bridgeId) {
+    if (
+      !selectedRuntime ||
+      !selectedPane ||
+      selectedRuntime.id !== entry.bridgeId ||
+      !runtimeIsAdmitted(selectedRuntime.id) ||
+      !supportsNotes(selectedRuntime.capabilities)
+    ) {
       setError("Select a pane on the same bridge first");
       return;
     }
@@ -2687,7 +2752,7 @@ export function App() {
 
   const detachScopedNote = async (entry: ScopedNoteEntry) => {
     const runtime = bridge.getRuntime(entry.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Bridge is not ready");
       return;
     }
@@ -2703,7 +2768,7 @@ export function App() {
 
   const archiveScopedNote = async (entry: ScopedNoteEntry) => {
     const runtime = bridge.getRuntime(entry.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Bridge is not ready");
       return;
     }
@@ -2719,7 +2784,7 @@ export function App() {
 
   const restoreScopedNote = async (entry: ScopedNoteEntry) => {
     const runtime = bridge.getRuntime(entry.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Bridge is not ready");
       return;
     }
@@ -2735,7 +2800,7 @@ export function App() {
 
   const deleteScopedNote = async (entry: ScopedNoteEntry) => {
     const runtime = bridge.getRuntime(entry.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id) || !supportsNotes(runtime.capabilities)) {
       setError("Bridge is not ready");
       return false;
     }
@@ -3087,53 +3152,41 @@ export function App() {
   };
 
   async function refreshBridgeSnapshot(runtime: BridgeRuntime, setLoading: boolean) {
-    const ref = ensureBridgeConnectionRef(connectionRefs, runtime);
-    const requestConnectionKey = runtime.connectionKey;
+    const ref = ensureBridgeConnectionRef(connectionRefs, runtime, runtimeCache);
+    const requestConnectionKey = runtime.generationKey;
     const refreshGeneration = ref.activityGeneration;
     if (setLoading) {
       setConnectionStates((current) => ({
         ...current,
         [runtime.id]: {
           connectionKey: requestConnectionKey,
-          snapshot: current[runtime.id]?.snapshot ?? null,
+          snapshot: ref.snapshot,
           loadState: "loading",
         },
       }));
     }
     try {
-      const next = await fetchSnapshot(runtime.httpUrl);
+      const next = await fetchRuntimeSnapshot(runtime.httpUrl);
       const currentRef = connectionRefs.current[runtime.id];
-      if (
-        !currentRef ||
-        !isConnectionResultCurrent(currentRef.connectionKey, requestConnectionKey)
-      ) {
+      if (!isRuntimeGenerationCurrent(currentRef, requestConnectionKey)) {
         return null;
       }
       if (currentRef.resyncBarrierGeneration > refreshGeneration) {
         return refreshBridgeSnapshot(runtime, false);
       }
-      const patched = applySnapshotOverlays(next, currentRef, refreshGeneration);
-      currentRef.snapshot = patched;
-      setConnectionStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          snapshot: patched,
-          loadState: "ready",
-        },
-      }));
-      return patched;
+      return admitRuntimeSnapshot({
+        runtime,
+        snapshot: next,
+        ref: currentRef,
+        refreshGeneration,
+        runtimeCache,
+        setConnectionStates,
+        onRecoveryDetected: bridge.retryBridgeProbe,
+      });
     } catch {
       const currentRef = connectionRefs.current[runtime.id];
-      if (currentRef?.connectionKey === requestConnectionKey) {
-        setConnectionStates((current) => ({
-          ...current,
-          [runtime.id]: {
-            connectionKey: requestConnectionKey,
-            snapshot: current[runtime.id]?.snapshot ?? null,
-            loadState: "error",
-          },
-        }));
+      if (isRuntimeGenerationCurrent(currentRef, requestConnectionKey)) {
+        markRuntimeUnavailable(runtime, currentRef, runtimeCache, setConnectionStates);
       }
       return null;
     }
@@ -3150,8 +3203,8 @@ export function App() {
     transformResponse?: (response: Resource, requestConnectionKey: string) => Resource;
   }): Promise<Resource | null> {
     const { runtime, setLoading, supported, setState, fetchResponse, fallbackError } = options;
-    ensureBridgeConnectionRef(connectionRefs, runtime);
-    const requestConnectionKey = runtime.connectionKey;
+    ensureBridgeConnectionRef(connectionRefs, runtime, runtimeCache);
+    const requestConnectionKey = runtime.generationKey;
     const isCurrentConnection = () =>
       isConnectionResultCurrent(
         connectionRefs.current[runtime.id]?.connectionKey ?? "",
@@ -3351,42 +3404,42 @@ export function App() {
   ) {
     if (
       !runtime ||
-      !runtimeControlsEnabled(
-        runtime,
-        connectionStates[runtime.id]?.connectionKey === runtime.connectionKey
-          ? connectionStates[runtime.id].loadState
-          : "loading",
-      ) ||
-      !connectionRefs.current[runtime.id]?.snapshot
+      !runtimeIsAdmitted(runtime.id) ||
+      !isRuntimeGenerationCurrent(
+        connectionRefs.current[runtime.id],
+        runtime.generationKey,
+      )
     ) {
       setError("Bridge is not ready");
       return false;
     }
-    const requestConnectionKey = runtime.connectionKey;
+    const requestConnectionKey = runtime.generationKey;
     setBusy(true);
     try {
       const result = await action();
       let ref = connectionRefs.current[runtime.id];
       let refreshGeneration = ref?.activityGeneration ?? 0;
-      let next = await fetchSnapshot(runtime.httpUrl);
+      let next = await fetchRuntimeSnapshot(runtime.httpUrl);
       while (ref && ref.resyncBarrierGeneration > refreshGeneration) {
         refreshGeneration = ref.activityGeneration;
-        next = await fetchSnapshot(runtime.httpUrl);
+        next = await fetchRuntimeSnapshot(runtime.httpUrl);
         ref = connectionRefs.current[runtime.id];
       }
-      if (!ref || !isConnectionResultCurrent(ref.connectionKey, requestConnectionKey)) {
+      if (!isRuntimeGenerationCurrent(ref, requestConnectionKey)) {
         return false;
       }
-      const patched = applySnapshotOverlays(next, ref, refreshGeneration);
-      ref.snapshot = patched;
-      setConnectionStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          snapshot: patched,
-          loadState: "ready",
-        },
-      }));
+      const patched = admitRuntimeSnapshot({
+        runtime,
+        snapshot: next,
+        ref,
+        refreshGeneration,
+        runtimeCache,
+        setConnectionStates,
+        onRecoveryDetected: bridge.retryBridgeProbe,
+      });
+      if (!patched) {
+        return false;
+      }
       if (selectCreated) {
         const paneId = createdPaneId(result);
         const created = paneId ? patched.panes.find((pane) => pane.pane_id === paneId) : undefined;
@@ -3415,14 +3468,13 @@ export function App() {
     const runtime = bridge.getRuntime(bridgeId);
     if (
       !runtime ||
-      !runtime.canConnect ||
-      runtime.capabilityState !== "ready" ||
+      !runtimeIsAdmitted(runtime.id) ||
       !supportsAgentPins(runtime.capabilities)
     ) {
       setError("Agent pins are unavailable");
       return;
     }
-    const requestConnectionKey = runtime.connectionKey;
+    const requestConnectionKey = runtime.generationKey;
     try {
       const response = pinned
         ? await unpinAgent(runtime.httpUrl, paneId)
@@ -3582,6 +3634,16 @@ export function App() {
     void exec(runtime, action, true).then((ok) => ok && setLaunchTarget(null));
   };
 
+  const selectedTerminalSession = terminalSessionDescriptor(
+    selectedRuntime,
+    selectedPane,
+    selectedConnectionState ?? {
+      connectionKey: "disconnected",
+      snapshot: null,
+      loadState: "loading",
+    },
+    activeSurface.requiredCapabilities,
+  );
   const renderTerminal = !isCompactLayout || showDetail;
   const appStyle = {
     "--sidebar-w": `${sidebarWidth}px`,
@@ -3615,12 +3677,15 @@ export function App() {
       data-detail={isCompactLayout && showDetail ? "true" : "false"}
     >
       {bridge.enabledRuntimes.map((runtime) => (
-        <BridgeConnectionController
+        <RuntimeConnection
           key={runtime.id}
           runtime={runtime}
+          requiredCapabilities={activeSurface.requiredCapabilities}
           followSharedSelection={navigationIsShared}
           connectionRefs={connectionRefs}
+          runtimeCache={runtimeCache}
           setConnectionStates={setConnectionStates}
+          onRecoveryDetected={bridge.retryBridgeProbe}
           onPaneSelection={applySharedPaneSelection}
           onAgentActivityChanged={refreshAgentActivityForBridge}
           onAgentPinsChanged={refreshAgentPinsForBridge}
@@ -3634,11 +3699,17 @@ export function App() {
           hostScope={hostScope}
           snapshot={snapshot}
           loadState={loadState}
-          bridgeCanConnect={selectedRuntime?.canConnect ?? false}
-          bridgeError={selectedRuntime?.capabilityError ?? null}
+          bridgeCanConnect={
+            Boolean(selectedRuntime?.canConnect) && !selectedBridgeView?.surfaceError
+          }
+          bridgeError={selectedBridgeView?.surfaceError ?? selectedRuntime?.capabilityError ?? null}
           bridgeLabel={selectedRuntime?.label ?? "No bridge"}
           bridgeMode={selectedRuntime?.mode ?? "configured"}
-          capabilityState={selectedRuntime?.capabilityState ?? "idle"}
+          capabilityState={
+            selectedBridgeView?.surfaceError
+              ? "incompatible"
+              : (selectedRuntime?.capabilityState ?? "idle")
+          }
           scope={scope}
           sidebarView={sidebarView}
           notesEnabled={notesEnabled}
@@ -3877,7 +3948,7 @@ export function App() {
           ) : null}
           {selectedPane ? <StatusBadge status={selectedPane.agent_status} /> : null}
         </header>
-        {showSplit && splitCells ? (
+        {showSplit && splitCells && selectedRuntime && selectedConnectionState ? (
           <SplitGrid
             cells={splitCells}
             selectedPaneId={selectedPane?.pane_id ?? null}
@@ -3902,24 +3973,17 @@ export function App() {
             terminalInputTransport={terminalInputTransport}
             terminalInputBatchDelayMs={terminalInputBatchDelayMs}
             terminalOutputCoalesceMs={terminalOutputCoalesceMs}
-            profileId={selectedRuntime?.id ?? "disconnected"}
-            connectionKey={selectedRuntime?.connectionKey ?? "disconnected"}
-            resumeToken={selectedRuntime?.resumeToken ?? 0}
+            runtime={selectedRuntime}
+            admission={selectedConnectionState}
+            requiredCapabilities={activeSurface.requiredCapabilities}
+            resumeToken={selectedRuntime.resumeToken}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
           />
         ) : renderTerminal ? (
           <TerminalView
-            pane={selectedControlsEnabled ? selectedPane : null}
-            connectionKey={
-              selectedRuntime && selectedPane
-                ? terminalSessionKey(
-                    selectedRuntime.id,
-                    selectedRuntime.connectionKey,
-                    selectedPane.terminal_id,
-                  )
-                : "disconnected"
-            }
+            pane={selectedTerminalSession?.inputEnabled ? selectedPane : null}
+            connectionKey={selectedTerminalSession?.sessionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
@@ -3955,7 +4019,7 @@ export function App() {
           selectedPane={selectedPane}
           selectedPaneNotes={selectedRuntime ? selectedPaneNotes.map((note) => ({
             bridgeId: selectedRuntime.id,
-            connectionKey: selectedRuntime.connectionKey,
+            connectionKey: selectedRuntime.generationKey,
             storeId: selectedNotesState?.response?.store_id ?? "unknown-store",
             sessionKey: note.session_key,
             bridgeSessionKey: selectedNotesState?.response?.session_key ?? note.session_key,
@@ -4199,7 +4263,6 @@ export function App() {
   );
 }
 
-const SNAPSHOT_REFRESH_INTERVAL_MS = 10000;
 const SHARED_SELECTION_SETTLE_TIMEOUT_MS = 2000;
 const NOTES_REFRESH_INTERVAL_MS = 15000;
 const MAX_PENDING_CREATED_PANE_NOTES = 32;
@@ -4226,325 +4289,6 @@ export function shouldCollapseHostScope(
   storeLoaded: boolean,
 ) {
   return storeLoaded && hostScope === "all" && enabledBridgeCount <= 1;
-}
-
-export function BridgeConnectionController({
-  runtime,
-  followSharedSelection,
-  connectionRefs,
-  setConnectionStates,
-  onPaneSelection,
-  onAgentActivityChanged,
-  onAgentPinsChanged,
-  onNotesChanged,
-}: {
-  runtime: BridgeRuntime;
-  followSharedSelection: boolean;
-  connectionRefs: MutableRefObject<Record<string, BridgeConnectionRef>>;
-  setConnectionStates: Dispatch<SetStateAction<Record<string, BridgeConnectionState>>>;
-  onPaneSelection: (bridgeId: BridgeId, paneId: string, workspaceId?: string) => void;
-  onAgentActivityChanged: (bridgeId: BridgeId) => void;
-  onAgentPinsChanged: (bridgeId: BridgeId) => void;
-  onNotesChanged: (bridgeId: BridgeId) => void;
-}) {
-  const httpUrlRef = useRef(runtime.httpUrl);
-  const wsUrlRef = useRef(runtime.wsUrl);
-  const onAgentActivityChangedRef = useRef(onAgentActivityChanged);
-  const onAgentPinsChangedRef = useRef(onAgentPinsChanged);
-  const onNotesChangedRef = useRef(onNotesChanged);
-  const followSharedSelectionRef = useRef(followSharedSelection);
-  const refreshOffsetRef = useRef(stableBridgeRefreshOffsetMs(runtime.id));
-
-  useEffect(() => {
-    httpUrlRef.current = runtime.httpUrl;
-    wsUrlRef.current = runtime.wsUrl;
-  }, [runtime.httpUrl, runtime.wsUrl]);
-
-  useEffect(() => {
-    followSharedSelectionRef.current = followSharedSelection;
-    onAgentActivityChangedRef.current = onAgentActivityChanged;
-    onAgentPinsChangedRef.current = onAgentPinsChanged;
-    onNotesChangedRef.current = onNotesChanged;
-  }, [
-    followSharedSelection,
-    onAgentActivityChanged,
-    onAgentPinsChanged,
-    onNotesChanged,
-  ]);
-
-  useEffect(() => {
-    let disposed = false;
-    let interval: number | null = null;
-    let intervalStartTimer: number | null = null;
-    const ref = ensureBridgeConnectionRef(connectionRefs, runtime);
-
-    if (!runtime.canConnect) {
-      ref.snapshot = null;
-      setConnectionStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: runtime.connectionKey,
-          snapshot: null,
-          loadState: "ready",
-        },
-      }));
-      return () => {
-        disposed = true;
-      };
-    }
-
-    setConnectionStates((current) => {
-      const existing = current[runtime.id];
-      if (existing?.connectionKey === runtime.connectionKey && existing.loadState !== "error") {
-        return current;
-      }
-      return {
-        ...current,
-        [runtime.id]: {
-          connectionKey: runtime.connectionKey,
-          snapshot: existing?.connectionKey === runtime.connectionKey ? existing.snapshot : null,
-          loadState: "loading",
-        },
-      };
-    });
-
-    const requestConnectionKey = runtime.connectionKey;
-    const isCurrentConnection = () =>
-      !disposed &&
-      isConnectionResultCurrent(
-        connectionRefs.current[runtime.id]?.connectionKey ?? "",
-        requestConnectionKey,
-      );
-    const refreshController = createSnapshotRefreshController({
-      fetchSnapshot: () => fetchSnapshot(httpUrlRef.current),
-      getGeneration: () => connectionRefs.current[runtime.id]?.activityGeneration ?? 0,
-      getBarrierGeneration: () =>
-        connectionRefs.current[runtime.id]?.resyncBarrierGeneration ?? 0,
-      isCurrent: isCurrentConnection,
-      onError: () =>
-        setConnectionStates((current) => ({
-          ...current,
-          [runtime.id]: {
-            connectionKey: requestConnectionKey,
-            snapshot:
-              current[runtime.id]?.connectionKey === requestConnectionKey
-                ? current[runtime.id]?.snapshot ?? null
-                : null,
-            loadState: "error",
-          },
-        })),
-      applySnapshot: (next, refreshGeneration) => {
-        const currentRef = connectionRefs.current[runtime.id];
-        if (!currentRef || currentRef.connectionKey !== requestConnectionKey) {
-          return;
-        }
-        const patched = applySnapshotOverlays(next, currentRef, refreshGeneration);
-        currentRef.snapshot = patched;
-        setConnectionStates((current) => ({
-          ...current,
-          [runtime.id]: {
-            connectionKey: requestConnectionKey,
-            snapshot: patched,
-            loadState: "ready",
-          },
-        }));
-      },
-    });
-    const refresh = () => refreshController.request();
-    const requestActivityResync = () => {
-      const currentRef = connectionRefs.current[runtime.id];
-      if (!currentRef) {
-        return;
-      }
-      currentRef.activityGeneration += 1;
-      currentRef.resyncBarrierGeneration = currentRef.activityGeneration;
-      refresh();
-    };
-
-    refresh();
-    const refreshOffset = refreshOffsetRef.current;
-    intervalStartTimer = window.setTimeout(() => {
-      refresh();
-      interval = window.setInterval(refresh, SNAPSHOT_REFRESH_INTERVAL_MS);
-    }, SNAPSHOT_REFRESH_INTERVAL_MS + refreshOffset);
-
-    const events = openEventsSocket(wsUrlRef.current, "/ws/events", refresh);
-    const activity = openEventsSocket(
-      wsUrlRef.current,
-      "/ws/activity",
-      (event) => {
-        if (!isCurrentConnection()) {
-          return;
-        }
-        const currentRef = connectionRefs.current[runtime.id];
-        if (!currentRef) {
-          return;
-        }
-        const parsed = parseActivityEventData(event.data);
-        if (parsed.status === "ignored") {
-          return;
-        }
-        if (parsed.status === "invalid_known") {
-          requestActivityResync();
-          return;
-        }
-        const result = applyActivityMessage(currentRef.snapshot, parsed.message);
-        if (result.status === "applied") {
-          currentRef.activityGeneration += 1;
-          currentRef.activityLog = [
-            ...currentRef.activityLog,
-            { generation: currentRef.activityGeneration, message: parsed.message },
-          ].slice(-100);
-          currentRef.snapshot = result.snapshot;
-          setConnectionStates((current) => ({
-            ...current,
-            [runtime.id]: {
-              connectionKey: requestConnectionKey,
-              snapshot: result.snapshot,
-              loadState: "ready",
-            },
-          }));
-        } else if (result.status === "resync") {
-          requestActivityResync();
-        }
-      },
-      { onOpen: refresh },
-    );
-    const uiEvents = openEventsSocket(
-      wsUrlRef.current,
-      "/ws/ui-events",
-      (event) => {
-        if (!isCurrentConnection()) {
-          return;
-        }
-        const paneId = selectionPaneId(event);
-        if (paneId) {
-          const currentRef = connectionRefs.current[runtime.id];
-          if (!currentRef) {
-            return;
-          }
-          currentRef.activityGeneration += 1;
-          currentRef.resyncBarrierGeneration = currentRef.activityGeneration;
-          currentRef.sharedSelectionOverride = {
-            paneId,
-            expiresAtMs: Date.now() + SHARED_SELECTION_SETTLE_TIMEOUT_MS,
-          };
-          const currentSnapshot = currentRef.snapshot;
-          if (currentSnapshot) {
-            const patched = {
-              ...currentSnapshot,
-              selected_pane_id: paneId,
-            };
-            currentRef.snapshot = patched;
-            setConnectionStates((current) => ({
-              ...current,
-              [runtime.id]: {
-                connectionKey: requestConnectionKey,
-                snapshot: patched,
-                loadState: "ready",
-              },
-            }));
-          }
-          const pane = currentSnapshot?.panes.find(
-            (item) => item.pane_id === paneId,
-          );
-          if (followSharedSelectionRef.current) {
-            onPaneSelection(runtime.id, paneId, pane?.workspace_id);
-          }
-          refresh();
-          return;
-        }
-        if (isNotesChangedEvent(event)) {
-          onNotesChangedRef.current(runtime.id);
-          return;
-        }
-        if (isAgentActivityChangedEvent(event)) {
-          onAgentActivityChangedRef.current(runtime.id);
-          return;
-        }
-        if (isAgentPinsChangedEvent(event)) {
-          onAgentPinsChangedRef.current(runtime.id);
-          return;
-        }
-        refresh();
-      },
-      { onOpen: () => onAgentActivityChangedRef.current(runtime.id) },
-    );
-
-    return () => {
-      disposed = true;
-      events?.close();
-      activity?.close();
-      uiEvents?.close();
-      if (intervalStartTimer !== null) {
-        window.clearTimeout(intervalStartTimer);
-      }
-      if (interval !== null) {
-        window.clearInterval(interval);
-      }
-    };
-  }, [
-    connectionRefs,
-    onPaneSelection,
-    runtime.canConnect,
-    runtime.connectionKey,
-    runtime.id,
-    runtime.resumeToken,
-    setConnectionStates,
-  ]);
-
-  return null;
-}
-
-export function stableBridgeRefreshOffsetMs(bridgeId: BridgeId) {
-  let hash = 0;
-  for (let index = 0; index < bridgeId.length; index += 1) {
-    hash = (hash * 31 + bridgeId.charCodeAt(index)) >>> 0;
-  }
-  return hash % SNAPSHOT_REFRESH_INTERVAL_MS;
-}
-
-export function applySnapshotOverlays(
-  snapshot: Snapshot,
-  ref: BridgeConnectionRef,
-  refreshGeneration: number,
-) {
-  const patched = replayActivityMessages(snapshot, ref.activityLog, refreshGeneration);
-  const selectionOverride = ref.sharedSelectionOverride;
-  if (!selectionOverride) {
-    return patched;
-  }
-  if (
-    patched.selected_pane_id === selectionOverride.paneId ||
-    Date.now() >= selectionOverride.expiresAtMs
-  ) {
-    ref.sharedSelectionOverride = null;
-    return patched;
-  }
-  return {
-    ...patched,
-    selected_pane_id: selectionOverride.paneId,
-  };
-}
-
-function ensureBridgeConnectionRef(
-  connectionRefs: MutableRefObject<Record<string, BridgeConnectionRef>>,
-  runtime: BridgeRuntime,
-) {
-  const existing = connectionRefs.current[runtime.id];
-  if (existing?.connectionKey === runtime.connectionKey) {
-    return existing;
-  }
-  const next: BridgeConnectionRef = {
-    connectionKey: runtime.connectionKey,
-    snapshot: null,
-    activityGeneration: 0,
-    resyncBarrierGeneration: 0,
-    activityLog: [],
-    sharedSelectionOverride: null,
-  };
-  connectionRefs.current[runtime.id] = next;
-  return next;
 }
 
 export function visibleHostBridgeViews(
@@ -4607,7 +4351,7 @@ export function buildAgentPinKeySet(
   const keys = new Set<string>();
   for (const view of bridgeViews) {
     const state = agentPinsStates[view.runtime.id];
-    if (!state || state.connectionKey !== view.runtime.connectionKey) {
+    if (!state || state.connectionKey !== view.runtime.generationKey) {
       continue;
     }
     for (const key of agentPinKeys(view.runtime.id, state.response)) {
@@ -4624,7 +4368,7 @@ export function buildAgentActivityTransitionMap(
   const transitions = new Map<string, number>();
   for (const view of bridgeViews) {
     const state = agentActivityStates[view.runtime.id];
-    if (!state || state.connectionKey !== view.runtime.connectionKey) {
+    if (!state || state.connectionKey !== view.runtime.generationKey) {
       continue;
     }
     for (const [key, value] of agentActivityTimestamps(view.runtime.id, state.response)) {
@@ -5161,7 +4905,7 @@ export function buildVisibleScopedNotes(
       return [];
     }
     const notesState = notesStates[view.runtime.id];
-    if (!notesState || notesState.connectionKey !== view.runtime.connectionKey) {
+    if (!notesState || notesState.connectionKey !== view.runtime.generationKey) {
       return [];
     }
     const snapshot = view.snapshot;
@@ -5187,7 +4931,7 @@ export function buildVisibleScopedNotes(
         const workspaceId = pane?.workspace_id ?? note.attachment?.workspace_id;
         return {
           bridgeId: view.runtime.id,
-          connectionKey: view.runtime.connectionKey,
+          connectionKey: view.runtime.generationKey,
           storeId: notesState.response?.store_id ?? "unknown-store",
           sessionKey: note.session_key,
           bridgeSessionKey: notesState.response?.session_key ?? note.session_key,
@@ -5632,8 +5376,9 @@ function SplitGrid({
   terminalInputTransport,
   terminalInputBatchDelayMs,
   terminalOutputCoalesceMs,
-  profileId,
-  connectionKey,
+  runtime,
+  admission,
+  requiredCapabilities,
   resumeToken,
   httpUrl,
   wsUrl,
@@ -5654,8 +5399,9 @@ function SplitGrid({
   terminalInputTransport: TerminalInputTransport;
   terminalInputBatchDelayMs: number;
   terminalOutputCoalesceMs: number;
-  profileId: string;
-  connectionKey: string;
+  runtime: BridgeRuntime;
+  admission: BridgeConnectionState;
+  requiredCapabilities: readonly string[];
   resumeToken: number;
   httpUrl: (path: string, query?: URLSearchParams) => string;
   wsUrl: (path: string, query?: URLSearchParams) => string;
@@ -5664,6 +5410,12 @@ function SplitGrid({
     <div className="pane-grid" aria-label="Split panes">
       {cells.map(({ pane, style }) => {
         const selected = pane.pane_id === selectedPaneId;
+        const terminalSession = terminalSessionDescriptor(
+          runtime,
+          pane,
+          admission,
+          requiredCapabilities,
+        );
         return (
           <div
             key={pane.pane_id}
@@ -5674,7 +5426,7 @@ function SplitGrid({
           >
             <TerminalView
               pane={pane}
-              connectionKey={terminalSessionKey(profileId, connectionKey, pane.terminal_id)}
+              connectionKey={terminalSession?.sessionKey ?? "disconnected"}
               resumeToken={resumeToken}
               httpUrl={httpUrl}
               wsUrl={wsUrl}
@@ -8999,14 +8751,6 @@ function stageBreadcrumb(
   return [workspace?.label, tabLabel].filter(Boolean).join(" · ") || pane.pane_id;
 }
 
-async function fetchSnapshot(httpUrl: (path: string, query?: URLSearchParams) => string) {
-  const response = await fetchWithTimeout(httpUrl("/api/snapshot"));
-  if (!response.ok) {
-    throw new Error(`snapshot failed: ${response.status}`);
-  }
-  return (await response.json()) as Snapshot;
-}
-
 function disconnectedHttpUrl(): string {
   throw new Error("Bridge is not connected");
 }
@@ -9029,56 +8773,6 @@ async function syncSelectedPane(
   }
 }
 
-function selectionPaneId(event: MessageEvent) {
-  if (typeof event.data !== "string") {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(event.data) as { type?: unknown; pane_id?: unknown };
-    return parsed.type === "herdr_web.selection_changed" && typeof parsed.pane_id === "string"
-      ? parsed.pane_id
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function isNotesChangedEvent(event: MessageEvent) {
-  if (typeof event.data !== "string") {
-    return false;
-  }
-  try {
-    const parsed = JSON.parse(event.data) as { type?: unknown };
-    return parsed.type === "herdr_web.notes_changed";
-  } catch {
-    return false;
-  }
-}
-
-function isAgentActivityChangedEvent(event: MessageEvent) {
-  if (typeof event.data !== "string") {
-    return false;
-  }
-  try {
-    const parsed = JSON.parse(event.data) as { type?: unknown };
-    return parsed.type === "herdr_web.agent_activity_changed";
-  } catch {
-    return false;
-  }
-}
-
-function isAgentPinsChangedEvent(event: MessageEvent) {
-  if (typeof event.data !== "string") {
-    return false;
-  }
-  try {
-    const parsed = JSON.parse(event.data) as { type?: unknown };
-    return parsed.type === "herdr_web.agent_pins_changed";
-  } catch {
-    return false;
-  }
-}
-
 function blurActiveTextInput() {
   const element = document.activeElement;
   if (!(element instanceof HTMLElement)) {
@@ -9092,53 +8786,4 @@ function blurActiveTextInput() {
   ) {
     element.blur();
   }
-}
-
-function openEventsSocket(
-  wsUrl: (path: string, query?: URLSearchParams) => string,
-  path: string,
-  onEvent: (event: MessageEvent) => void,
-  options: { onOpen?: () => void } = {},
-) {
-  const url = wsUrl(path);
-  let socket: WebSocket | null = null;
-  let closed = false;
-  let reconnectTimer: number | null = null;
-  let attempts = 0;
-
-  const connect = () => {
-    if (closed) {
-      return;
-    }
-    const next = new WebSocket(url);
-    socket = next;
-    next.addEventListener("open", () => {
-      attempts = 0;
-      options.onOpen?.();
-    });
-    next.addEventListener("message", onEvent);
-    next.addEventListener("close", () => {
-      if (closed || socket !== next || reconnectTimer !== null) {
-        return;
-      }
-      const delay = Math.min(500 * 2 ** attempts, 5000);
-      attempts += 1;
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null;
-        connect();
-      }, delay);
-    });
-  };
-
-  connect();
-  return {
-    close() {
-      closed = true;
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      socket?.close();
-    },
-  };
 }

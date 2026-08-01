@@ -1,8 +1,8 @@
 import type { BridgeRuntime } from "./bridge";
 import type { PaneInfo } from "./types";
 import { qualifyRuntimeTarget, qualifiedRuntimeKey } from "./runtimeIdentity";
-import type { RuntimeLoadState } from "./runtimeClient";
-import { runtimeControlsEnabled } from "./runtimeClient";
+import type { RuntimeAdmissionState, RuntimeLoadState } from "./runtimeClient";
+import { runtimeAdmissionReady } from "./runtimeClient";
 
 export type TerminalSessionDescriptor = {
   profileId: string;
@@ -15,17 +15,26 @@ export type TerminalSessionDescriptor = {
 export function terminalSessionDescriptor(
   runtime: BridgeRuntime | null,
   pane: PaneInfo | null,
-  loadState: RuntimeLoadState,
+  admission: RuntimeAdmissionState | RuntimeLoadState,
+  requiredCapabilities: readonly string[] = [],
 ): TerminalSessionDescriptor | null {
   if (!runtime || !pane) {
     return null;
   }
+  const state =
+    typeof admission === "string"
+      ? {
+          connectionKey: runtime.generationKey,
+          snapshot: admission === "ready" ? {} : null,
+          loadState: admission,
+        }
+      : admission;
   return {
     profileId: runtime.id,
-    connectionKey: runtime.connectionKey,
+    connectionKey: runtime.generationKey,
     terminalId: pane.terminal_id,
-    sessionKey: terminalSessionKey(runtime.id, runtime.connectionKey, pane.terminal_id),
-    inputEnabled: runtimeControlsEnabled(runtime, loadState),
+    sessionKey: terminalSessionKey(runtime.id, runtime.generationKey, pane.terminal_id),
+    inputEnabled: runtimeAdmissionReady(runtime, state, requiredCapabilities),
   };
 }
 

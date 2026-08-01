@@ -13,6 +13,10 @@ export type SurfaceDefinition = {
   load: () => Promise<{ default: ComponentType }>;
 };
 
+type SurfaceCapabilities = {
+  features?: readonly string[];
+} | null;
+
 export class SurfaceRegistry {
   readonly #definitions = new Map<string, SurfaceDefinition>();
   readonly #components = new Map<string, LazyExoticComponent<ComponentType>>();
@@ -55,6 +59,19 @@ export class SurfaceRegistry {
       this.#components.set(id, component);
     }
     return component;
+  }
+
+  missingCapabilities(id: string, capabilities: SurfaceCapabilities) {
+    const definition = this.get(id);
+    if (!definition) {
+      return [];
+    }
+    const available = new Set(capabilities?.features ?? []);
+    return definition.requiredCapabilities.filter((capability) => !available.has(capability));
+  }
+
+  supports(id: string, capabilities: SurfaceCapabilities) {
+    return this.missingCapabilities(id, capabilities).length === 0;
   }
 }
 

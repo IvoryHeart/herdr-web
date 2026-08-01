@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   areAllVisibleSidebarGroupsCollapsed,
   agentSubtitle,
-  applySnapshotOverlays,
   buildCombinedTabWorkspaceGroups,
   buildScopedAgentGroups,
   buildVisibleAgentPaneEntries,
@@ -37,10 +36,9 @@ import {
   shouldShowLastStatusChangeSort,
   sidebarGroupCollapseKey,
   sortScopedAgentPanes,
-  stableBridgeRefreshOffsetMs,
   updateCollapsedSidebarGroups,
 } from "./App";
-import type { BridgeConnectionRef, BridgeConnectionView } from "./App";
+import type { BridgeConnectionView } from "./App";
 import type { BridgeRuntime } from "./bridge";
 import { agentActivityKey } from "./agentActivity";
 import {
@@ -48,6 +46,11 @@ import {
   isConnectionResultCurrent,
 } from "./connectionState";
 import type { AgentStatus, PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "./types";
+import {
+  applySnapshotOverlays,
+  stableBridgeRefreshOffsetMs,
+} from "./runtimeConnection";
+import type { BridgeConnectionRef } from "./runtimeConnection";
 import { notesForPane } from "./notes";
 import type { PaneNote } from "./notes";
 
@@ -68,6 +71,7 @@ describe("App connection guards", () => {
       ],
     );
     const ref: BridgeConnectionRef = {
+      profileConnectionKey: "bridge-a",
       connectionKey: "bridge-a",
       snapshot: data,
       activityGeneration: 1,
@@ -77,6 +81,8 @@ describe("App connection guards", () => {
         paneId: "pane-b",
         expiresAtMs: Date.now() + 2000,
       },
+      recoveryRequired: false,
+      awaitingCapabilityHandshake: false,
     };
 
     expect(
@@ -1797,6 +1803,7 @@ function bridgeView(bridgeId: string, snapshot: Snapshot): BridgeConnectionView 
     snapshot,
     loadState: "ready",
     connectionState: "compatible",
+    surfaceError: null,
   };
 }
 
@@ -1842,6 +1849,8 @@ function bridgeRuntime(bridgeId: string): BridgeRuntime {
     color: "#89b4fa",
     backend: null,
     connectionKey: bridgeId,
+    capabilityGeneration: 0,
+    generationKey: `${bridgeId}:capability:0`,
     resumeToken: 0,
     capabilities: null,
     capabilityState: "ready",
@@ -1913,7 +1922,7 @@ function notesState(
 ) {
   return {
     [bridgeId]: {
-      connectionKey: bridgeId,
+      connectionKey: `${bridgeId}:capability:0`,
       response: {
         store_id: storeId,
         session_key: sessionKey,

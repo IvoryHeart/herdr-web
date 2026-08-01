@@ -21,6 +21,14 @@ describe("internal surface registry", () => {
       requiredCapabilities: ["snapshot", "terminal_attach"],
     });
     expect(coreSurfaceRegistry.get("world")).toBeNull();
+    expect(
+      coreSurfaceRegistry.supports("spaces", {
+        features: ["snapshot", "terminal_attach"],
+      }),
+    ).toBe(true);
+    expect(
+      coreSurfaceRegistry.missingCapabilities("spaces", { features: ["snapshot"] }),
+    ).toEqual(["terminal_attach"]);
   });
 
   it("mounts a core surface lazily through navigation and the registry", async () => {

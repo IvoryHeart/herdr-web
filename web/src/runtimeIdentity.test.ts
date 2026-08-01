@@ -51,6 +51,8 @@ function runtime(id: string, ready = true): BridgeRuntime {
     color: "#89b4fa",
     backend: { id, name: id, baseUrl: `http://${id}.example:8787` },
     connectionKey: `configured:${id}`,
+    capabilityGeneration: 0,
+    generationKey: `configured:${id}:capability:0`,
     resumeToken: 0,
     capabilities: { commands: ["pane.close"], bridge_api_version: 1 },
     capabilityState: ready ? "ready" : "error",

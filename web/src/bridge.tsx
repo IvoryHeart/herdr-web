@@ -69,6 +69,7 @@ export type CapabilityState =
 
 type BridgeProbeState = {
   connectionKey: string;
+  capabilityGeneration: number;
   capabilities: BridgeCapabilities | null;
   capabilityState: CapabilityState;
   capabilityError: string | null;
@@ -82,6 +83,8 @@ export type BridgeRuntime = {
   color: string;
   backend: BridgeBackendProfile | null;
   connectionKey: string;
+  capabilityGeneration: number;
+  generationKey: string;
   resumeToken: number;
   capabilities: BridgeCapabilities | null;
   capabilityState: CapabilityState;
@@ -179,11 +182,12 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     () =>
       buildAvailableRuntimes({
         backends: store.backends,
+        capabilityGenerations: probeRetryTokens,
         probeStates,
         resumeToken,
         sameOriginAvailable,
       }),
-    [probeStates, resumeToken, sameOriginAvailable, store.backends],
+    [probeRetryTokens, probeStates, resumeToken, sameOriginAvailable, store.backends],
   );
 
   const availableRuntimeIds = useMemo(
@@ -438,7 +442,6 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         <BridgeCapabilityProbe
           key={`${runtime.connectionKey}:${runtime.resumeToken}`}
           runtime={runtime}
-          retryToken={probeRetryTokens[runtime.id] ?? 0}
           onReach={markBridgeReachable}
           onState={(state) =>
             setProbeStates((current) => ({
@@ -454,12 +457,10 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
 
 function BridgeCapabilityProbe({
   runtime,
-  retryToken,
   onReach,
   onState,
 }: {
   runtime: BridgeRuntime;
-  retryToken: number;
   onReach: (bridgeId: BridgeId) => void;
   onState: (state: BridgeProbeState) => void;
 }) {
@@ -477,13 +478,14 @@ function BridgeCapabilityProbe({
 
   useEffect(() => {
     setCapabilityRetry(0);
-  }, [retryToken, runtime.connectionKey]);
+  }, [runtime.capabilityGeneration, runtime.connectionKey]);
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | null = null;
     onStateRef.current({
       connectionKey: runtime.connectionKey,
+      capabilityGeneration: runtime.capabilityGeneration,
       capabilities: null,
       capabilityState: "probing",
       capabilityError: null,
@@ -500,6 +502,7 @@ function BridgeCapabilityProbe({
         }
         onStateRef.current({
           connectionKey: runtime.connectionKey,
+          capabilityGeneration: runtime.capabilityGeneration,
           capabilities: outcome.capabilities,
           capabilityState: outcome.state,
           capabilityError: outcome.error,
@@ -513,6 +516,7 @@ function BridgeCapabilityProbe({
         const outcome = capabilityProbeFailure(error);
         onStateRef.current({
           connectionKey: runtime.connectionKey,
+          capabilityGeneration: runtime.capabilityGeneration,
           capabilities: outcome.capabilities,
           capabilityState: outcome.state,
           capabilityError: outcome.error,
@@ -531,7 +535,13 @@ function BridgeCapabilityProbe({
         window.clearTimeout(retryTimer);
       }
     };
-  }, [capabilityRetry, onReach, retryToken, runtime.connectionKey, runtime.id]);
+  }, [
+    capabilityRetry,
+    onReach,
+    runtime.capabilityGeneration,
+    runtime.connectionKey,
+    runtime.id,
+  ]);
 
   return null;
 }
@@ -546,11 +556,13 @@ export function useBridge() {
 
 function buildAvailableRuntimes({
   backends,
+  capabilityGenerations,
   probeStates,
   resumeToken,
   sameOriginAvailable,
 }: {
   backends: BridgeBackendProfile[];
+  capabilityGenerations: Record<string, number>;
   probeStates: Record<string, BridgeProbeState>;
   resumeToken: number;
   sameOriginAvailable: boolean;
@@ -564,6 +576,7 @@ function buildAvailableRuntimes({
         label: "Same origin",
         backend: null,
         baseUrl: null,
+        capabilityGeneration: capabilityGenerations[SAME_ORIGIN_BRIDGE_ID] ?? 0,
         probeState: probeStates[SAME_ORIGIN_BRIDGE_ID],
         resumeToken,
       }),
@@ -577,6 +590,7 @@ function buildAvailableRuntimes({
         label: backend.name,
         backend,
         baseUrl: backend.baseUrl,
+        capabilityGeneration: capabilityGenerations[backend.id] ?? 0,
         probeState: probeStates[backend.id],
         resumeToken,
       }),
@@ -591,6 +605,7 @@ function createBridgeRuntime({
   label,
   backend,
   baseUrl,
+  capabilityGeneration,
   probeState,
   resumeToken,
 }: {
@@ -599,6 +614,7 @@ function createBridgeRuntime({
   label: string;
   backend: BridgeBackendProfile | null;
   baseUrl: string | null;
+  capabilityGeneration: number;
   probeState: BridgeProbeState | undefined;
   resumeToken: number;
 }): BridgeRuntime {
@@ -606,7 +622,11 @@ function createBridgeRuntime({
     mode === "same-origin"
       ? SAME_ORIGIN_BRIDGE_ID
       : configuredBridgeConnectionKey(id, baseUrl ?? "");
-  const currentProbeState = probeState?.connectionKey === connectionKey ? probeState : undefined;
+  const currentProbeState =
+    probeState?.connectionKey === connectionKey &&
+    probeState.capabilityGeneration === capabilityGeneration
+      ? probeState
+      : undefined;
   const httpUrl = (path: string, query?: URLSearchParams) => buildHttpUrl(baseUrl, path, query);
   const wsUrl = (path: string, query?: URLSearchParams) => buildWsUrl(baseUrl, path, query);
   const color =
@@ -618,6 +638,8 @@ function createBridgeRuntime({
     color,
     backend,
     connectionKey,
+    capabilityGeneration,
+    generationKey: `${connectionKey}:capability:${capabilityGeneration}`,
     resumeToken,
     capabilities: currentProbeState?.capabilities ?? null,
     capabilityState: currentProbeState?.capabilityState ?? "idle",
@@ -1109,6 +1131,7 @@ export function parseCapabilities(value: unknown): BridgeCapabilities {
     terminalProtocol === null ||
     bridgeVersion === null ||
     herdrVersion === null ||
+    !Array.isArray(value.features) ||
     !Array.isArray(value.commands)
   ) {
     throw new CapabilityContractError("Bridge capability response is malformed");
@@ -1119,7 +1142,7 @@ export function parseCapabilities(value: unknown): BridgeCapabilities {
     herdr_version: herdrVersion,
     terminal_protocol: terminalProtocol,
     configured_label: optionalCapabilityString(value.configured_label),
-    features: boundedStringList(value.features),
+    features: boundedStringList(value.features) ?? [],
     commands: boundedStringList(value.commands) ?? [],
     web_compat: typeof value.web_compat === "number" ? value.web_compat : undefined,
     min_android_app_compat:
