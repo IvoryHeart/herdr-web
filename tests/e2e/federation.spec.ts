@@ -173,10 +173,35 @@ test("read-only terminal attach does not imply input, resize, scroll, or upload"
     })
     .toBe(1);
   await expect(page.getByRole("button", { name: "Refit terminal" })).toBeDisabled();
+  await expect(page.locator("button[aria-label='Upload file']")).toBeDisabled();
 
   await page.locator(".terminal-stage").click();
   await page.keyboard.type("sent-without-terminal-input-capability");
   await page.locator(".terminal-stage").dispatchEvent("wheel", { deltaY: 120 });
+  await page.locator(".terminal-stage").evaluate((stage) => {
+    const dropTransfer = new DataTransfer();
+    dropTransfer.items.add(
+      new File(["review drop bypass"], "review-drop.txt", { type: "text/plain" }),
+    );
+    stage.dispatchEvent(
+      new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dropTransfer,
+      }),
+    );
+    const pasteTransfer = new DataTransfer();
+    pasteTransfer.items.add(
+      new File(["review paste bypass"], "review-paste.txt", { type: "text/plain" }),
+    );
+    stage.dispatchEvent(
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: pasteTransfer,
+      }),
+    );
+  });
 
   await expect
     .poll(async () => {
@@ -187,9 +212,10 @@ test("read-only terminal attach does not imply input, resize, scroll, or upload"
         input: logs["host-b"].terminalInput,
         resize: logs["host-b"].terminalResize,
         scroll: logs["host-b"].terminalScroll,
+        uploads: logs["host-b"].uploads,
       };
     })
-    .toEqual({ connections: 1, input: [], resize: [], scroll: [] });
+    .toEqual({ connections: 1, input: [], resize: [], scroll: [], uploads: [] });
 });
 
 test("partial structural command declarations disable every unsupported entry point", async ({

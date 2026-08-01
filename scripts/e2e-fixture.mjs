@@ -152,6 +152,19 @@ async function startFixture(fixture) {
       json(response, 200, { ok: true });
       return;
     }
+    if (url.pathname === "/api/uploads" && request.method === "POST") {
+      const chunks = [];
+      for await (const chunk of request) {
+        chunks.push(chunk);
+      }
+      const name = url.searchParams.get("name") || "upload";
+      const size = Buffer.concat(chunks).length;
+      logs.get(fixture.id).uploads.push({ name, size });
+      json(response, 200, {
+        file: { name, path: `/fixture/uploads/${name}`, size },
+      });
+      return;
+    }
     if (fixture.serveStatic) {
       serveStaticFile(url.pathname, response);
       return;
@@ -232,6 +245,7 @@ function capabilities(fixture, state) {
         "terminal_resize",
         "terminal_scroll",
         "terminal_shared_fanout",
+        "uploads",
       ],
     commands: state.commands ?? [
       "workspace.create",
@@ -261,6 +275,7 @@ function emptyLog() {
     terminalInput: [],
     terminalResize: [],
     terminalScroll: [],
+    uploads: [],
     connections: 0,
     capabilityRequests: 0,
     snapshotRequests: 0,
