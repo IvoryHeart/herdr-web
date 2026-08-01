@@ -32,3 +32,12 @@ jobs:
         run: npm ci --prefix web
       - name: Run complete non-live checks
         run: npm run check
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser federation, responsive, and accessibility checks
+        run: npm run test:e2e
+      - name: Run independence audit
+        run: npm run test:independence
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Run dependency and secret security checks
+        run: npm run test:security

@@ -7,6 +7,9 @@
     "dev:web": "npm run dev --prefix web",
     "build:web": "npm run build --prefix web",
     "test:web": "npm run test --prefix web",
+    "test:e2e": "npm run build:web && playwright test",
+    "test:independence": "scripts/independence-audit.sh",
+    "test:security": "scripts/security-audit.sh",
     "lint:web": "npm run lint --prefix web",
     "vendor:check": "scripts/check-vendor.sh",
     "bridge:fmt": "cargo fmt --manifest-path bridge/Cargo.toml --check && cargo fmt --manifest-path vendor/herdr-compat/Cargo.toml --check",
@@ -19,12 +22,16 @@
     "build": "npm run build:web && npm run bridge:build",
     "test": "npm run test:web && npm run bridge:test",
     "lint": "npm run lint:web && npm run bridge:fmt",
-    "check": "npm run vendor:check && npm run lint && npm run test && npm run build"
+    "check": "npm run vendor:check && npm run lint && npm run test && npm run build",
+    "check:acceptance": "npm run check && npm run test:e2e && npm run test:security && npm run test:independence"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
-    "typescript": "^5.9.3"
+    "@playwright/test": "^1.55.0",
+    "typescript": "^5.9.3",
+    "ws": "^8.18.3"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
