@@ -1,7 +1,7 @@
 # Spec 010 acceptance evidence
 
 This evidence applies to the Herdr Web tree at implementation commit
-`518d4be476cfba900cab2921749cab9396f9ee24`, descended from the immutable upstream baseline
+`ad91ddcd23dc36d2c6189ae67bf80aa801c8be82`, descended from the immutable upstream baseline
 `67a4ace73fcd554af39586769dc86d4d9e82f09b`. The approved product contract is
 ai-observability Spec 010 at `ecde9e1`.
 
@@ -22,17 +22,24 @@ Result:
 
 - vendor layout and frontend ESLint: pass;
 - Rust format checks: pass;
-- frontend unit/component tests: 35 files, 256 passed;
+- frontend unit/component tests: 35 files, 262 passed;
 - vendored Herdr compatibility tests: 112 passed;
 - Rust bridge tests: 131 passed;
 - frontend production build and Rust bridge build: pass;
-- browser fixture tests: 6 passed, with the environment-gated live SSH smoke skipped in the
+- browser fixture tests: 10 passed, with the environment-gated live SSH smoke skipped in the
   non-live suite and run separately below;
 - root and frontend npm audit: zero vulnerabilities;
 - Rust audit: zero vulnerabilities, with warnings for unmaintained `bincode 2.0.1`
   (`RUSTSEC-2025-0141`) and `anyhow 1.0.102` soundness (`RUSTSEC-2026-0190`);
 - independence audit: pass;
 - `git diff --check`: pass.
+
+The final browser gate includes the review reproductions for malformed snapshot isolation,
+offline/stale row mutation suppression, per-host required-capability enforcement, and recovery
+through a fresh capability generation. Recovery against terminal protocol 16 remains incompatible
+and never restores controls. Unit tests additionally cover bounded snapshot collections and
+strings, topology references, missing capability feature lists, generation-safe caches, and
+terminal-session identity rotation.
 
 ## Live Herdr evidence
 
@@ -82,8 +89,9 @@ configurations, OpenSSH processes, bridges, and disposable Herdr sessions were r
 
 1. Provenance: `UPSTREAM.md`, preserved `LICENSE`, exact baseline, both remotes, and Git ancestry.
 2. Baseline/delivered checks: `UPSTREAM.md`, `.github/workflows/ci.yml`, and the automated gate above.
-3. Boundaries: `AppShell.tsx`, `hostRegistry.tsx`, `runtimeClient.ts`, `terminalSessions.ts`,
-   `CoreNavigation.tsx`, `surfaceRegistry.tsx`, and registry mount tests.
+3. Boundaries: `AppShell.tsx`, the production `HostRegistry` context, `RuntimeConnection`,
+   `RuntimeCache`, generation-scoped `terminalSessionDescriptor`, `CoreNavigation.tsx`, enforced
+   `SurfaceRegistry` admission, and boundary tests mounted through the actual application.
 4. Herdr authority: `live-authority-smoke.sh`, runtime-cache reconciliation tests, native snapshot
    adapter tests, and the live external mutation result above.
 5. Terminal fidelity: `live-bridge-smoke.mjs`, terminal protocol/renderer unit tests, and the live
@@ -91,12 +99,15 @@ configurations, OpenSSH processes, bridges, and disposable Herdr sessions were r
 6. Structural commands: the bridge's exact allowlist plus create/rename/split/move/launch/focus/
    close validation and rollback tests; dangerous or unknown commands are rejected.
 7. Two-host federation: `federation.spec.ts` uses colliding native IDs and proves All-host grouping,
-   exact Host B input/command routing, and zero Host A delivery.
+   exact Host B input/command routing, zero Host A delivery, and no bridge-local selection/focus
+   writes from retained stale Host B rows.
 8. Partial failure: the same browser fixture includes compatible, offline, protocol-incompatible,
-   malformed, and reachable hosts; failure and controls remain profile-local.
+   malformed capability, malformed snapshot, missing-feature, and reachable hosts; failure and
+   controls remain profile-local, and recovery requires a fresh capability handshake plus snapshot.
 9. Multi-client: bridge fanout/attach/cleanup unit tests and the live two-subscriber smoke above.
 10. Security: request-policy/CSP/CLI tests, `security-audit.sh`, non-loopback explicit Host/Origin
-    requirements, bounded errors, npm/Rust audits, and credential scans.
+    requirements, bounded errors and snapshot validation, npm/Rust audits, and credential/path scans
+    that include committed evidence.
 11. Prohibited subsystems: `independence-audit.sh` and source scans cover auth/RBAC/TLS/SSH-key/
     tunnel/VPN managers, privilege escalation, fleet gateways, second multiplexers, observability,
     and dynamic plugins.
