@@ -1282,6 +1282,7 @@ export function TerminalView({
         ref={fileInputRef}
         className="terminal-file-input"
         id={uploadInputId}
+        aria-label="Upload file"
         type="file"
         multiple
         disabled={uploadDisabled}

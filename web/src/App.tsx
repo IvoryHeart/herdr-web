@@ -1002,6 +1002,22 @@ export function App() {
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
   const [backendSettingsOpen, setBackendSettingsOpen] = useState(false);
+  const backendSettingsReturnFocusRef = useRef<HTMLElement | null>(null);
+  const openBackendSettings = useCallback(() => {
+    backendSettingsReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setBackendSettingsOpen(true);
+  }, []);
+  const closeBackendSettings = useCallback(() => {
+    setBackendSettingsOpen(false);
+    window.requestAnimationFrame(() => {
+      const target = backendSettingsReturnFocusRef.current;
+      backendSettingsReturnFocusRef.current = null;
+      if (target?.isConnected) {
+        target.focus();
+      }
+    });
+  }, []);
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
@@ -1173,7 +1189,7 @@ export function App() {
         return true;
       }
       if (backendSettingsOpen) {
-        setBackendSettingsOpen(false);
+        closeBackendSettings();
         return true;
       }
       if (notesPanelOpen) {
@@ -1184,6 +1200,7 @@ export function App() {
     });
   }, [
     backendSettingsOpen,
+    closeBackendSettings,
     deletingNote,
     dialog,
     launchTarget,
@@ -3061,7 +3078,7 @@ export function App() {
   const refreshNow = () => {
     const connectableRuntimes = bridge.enabledRuntimes.filter((runtime) => runtime.canConnect);
     if (connectableRuntimes.length === 0) {
-      setBackendSettingsOpen(true);
+      openBackendSettings();
       return;
     }
     for (const runtime of connectableRuntimes) {
@@ -3666,7 +3683,7 @@ export function App() {
               void refreshBridgeSnapshot(runtime, true);
             }
           }}
-          onBackendSettings={() => setBackendSettingsOpen(true)}
+          onBackendSettings={openBackendSettings}
           onCreateSpace={() =>
             selectedRuntime && selectedCommands
               ? void exec(selectedRuntime, () => selectedCommands.createWorkspace(), true)
@@ -4169,7 +4186,7 @@ export function App() {
           showMobileKeyboardHideRefit={showMobileKeyboardHideRefit}
           mobileKeyboardHideRefit={mobileKeyboardHideRefit}
           onMobileKeyboardHideRefit={setMobileKeyboardHideRefit}
-          onClose={() => setBackendSettingsOpen(false)}
+          onClose={closeBackendSettings}
         />
       ) : null}
 
