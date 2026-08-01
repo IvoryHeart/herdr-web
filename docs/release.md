@@ -94,7 +94,7 @@ For a public release, build a signed release APK instead and use the non-debug r
 dist-packages/herdr-web-vX.Y.Z-android.apk
 ```
 
-## Browser Smoke
+## Browser And Federation Smoke
 
 Start or attach a Herdr `v0.7.5` or newer session reporting terminal protocol `17`:
 
@@ -123,6 +123,15 @@ Open `http://127.0.0.1:8787` and verify:
 - Upload button, paste upload, and drop upload place shell-quoted file paths in the terminal.
 - Pane notes can be created, edited, reloaded, and recovered from the Notes view.
 - Binding to `HOST=0.0.0.0` is only used on a trusted network.
+
+Then follow the two-host procedure in [federation.md](federation.md) and verify direct browser
+connections to both bridges, collision-safe host-qualified navigation and command routing, isolated
+offline/incompatible host states, terminal input and resize, and serving-host reload behavior. Run
+the automated acceptance gate from a clean dependency install:
+
+```bash
+npm run check:acceptance
+```
 
 Repeat the startup, terminal attach, and launcher checks with an unpacked desktop tarball before
 uploading it. Confirm the bridge rejects protocol `16` and unreviewed protocols newer than `17`

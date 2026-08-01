@@ -101,10 +101,12 @@ Start or attach Herdr `v0.7.5` or newer with terminal protocol `17` separately b
 bridge.
 
 For Android, install the APK from the same release and add the bridge URL in the Bridge area of
-Settings. LAN bridges must allow Android's app origin:
+Settings. LAN bridges must admit the bridge hostname and Android's app origin explicitly:
 
 ```bash
-bin/herdr-web --host 0.0.0.0 --port 4000 --allow-origin http://localhost
+bin/herdr-web --host 0.0.0.0 --port 4000 \
+  --allow-host herdr-host.example \
+  --allow-origin http://localhost
 ```
 
 See [docs/packaging.md](docs/packaging.md) for release artifact layout and
@@ -269,10 +271,12 @@ Open:
 http://127.0.0.1:8787
 ```
 
-For LAN/mobile testing:
+For LAN/mobile testing, replace the example hostname with the exact hostname the client uses:
 
 ```bash
-HOST=0.0.0.0 PORT=4000 scripts/run-bridge.sh --allow-origin http://localhost
+HOST=0.0.0.0 PORT=4000 scripts/run-bridge.sh \
+  --allow-host herdr-host.example \
+  --allow-origin http://localhost
 ```
 
 Uploads are saved under `HERDR_WEB_UPLOAD_DIR`, `XDG_DATA_HOME/herdr-web/uploads`, or
@@ -298,11 +302,23 @@ For example, if the page is opened from `http://host-a:8787` and should connect 
 
 ```bash
 # host A, serving the web page
-HOST=0.0.0.0 scripts/run-bridge.sh --allow-host host-a --allow-connect-origin http://host-b:8787
+HOST=0.0.0.0 scripts/run-bridge.sh \
+  --bridge-label "Host A" \
+  --allow-host host-a \
+  --allow-origin http://host-a:8787 \
+  --allow-connect-origin http://host-b:8787
 
 # host B, serving the backend being called
-HOST=0.0.0.0 scripts/run-bridge.sh --allow-host host-b --allow-origin http://host-a:8787
+HOST=0.0.0.0 scripts/run-bridge.sh \
+  --bridge-label "Host B" \
+  --allow-host host-b \
+  --allow-origin http://host-a:8787
 ```
+
+There is no central gateway: the browser talks directly to each configured bridge, and each bridge
+talks only to its host-local Herdr runtime. See [docs/federation.md](docs/federation.md) for complete
+startup, SSH-forwarding, failure, and compatibility guidance, and
+[docs/architecture.md](docs/architecture.md) for the client boundaries.
 
 ## Keyboard Shortcuts
 
