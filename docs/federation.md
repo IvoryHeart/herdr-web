@@ -16,6 +16,9 @@ scripts/run-bridge.sh --bridge-label "Laptop"
 
 Open `http://127.0.0.1:8787`. Loopback Host and same-origin browser requests are admitted by default.
 The label is diagnostic; the browser profile label remains the user's navigation label.
+Loopback Host matching intentionally accepts loopback authorities on forwarded or development-proxy
+ports. This supports local proxies and operator-owned SSH forwards; it is not an access-control
+boundary.
 
 Use `--session NAME` to select a named Herdr runtime. The bridge then ignores
 `HERDR_SOCKET_PATH`. One bridge process still targets only that one runtime:
@@ -48,6 +51,11 @@ Add `http://host-b:8787` in Settings → Bridge in the browser. `--allow-origin`
 page origin to call B. `--allow-connect-origin` on A adds B's HTTP and WebSocket origins to the CSP
 of the page A serves. Neither option is authentication. Never expose this configuration to an
 untrusted network.
+
+The Origin check is a browser cross-site-request guard, not a client identity check. Browsers send
+Origin for the cross-origin requests this policy is designed to constrain, while non-browser clients
+may omit the header and are admitted. Require authentication at an operator-managed VPN or reverse
+proxy if non-browser access must be restricted.
 
 Non-loopback startup fails unless both an explicit `--allow-host` and `--allow-origin` are present.
 Add each exact hostname and origin that is required; avoid permissive DNS, wildcard proxy, or CSP
@@ -89,8 +97,8 @@ page-serving CSP for every bridge origin. The proxy must preserve WebSocket upgr
 Each profile is probed independently. Protocol `16`, any unreviewed terminal protocol newer than
 `17`, an incompatible bridge API, missing feature declarations, or malformed capability data blocks
 that host without blocking compatible hosts. A network failure marks only that profile offline.
-Stale topology may remain visible for orientation, but structural commands, terminal input, and
-resize stay unavailable until the same host connection is freshly compatible again.
+Stale topology may remain visible for orientation, but structural commands and terminal input,
+resize, and scroll stay unavailable until the same host connection is freshly compatible again.
 
 Workspace, pane, and terminal IDs may collide across Herdr hosts. The browser always qualifies them
 with the owning profile and never reroutes a failed command or terminal stream to another host.

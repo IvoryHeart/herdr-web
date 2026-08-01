@@ -30,7 +30,8 @@ browser. A bridge never discovers, proxies, routes to, or controls another bridg
   previously admitted snapshot stale, but never invents structural state or treats a mutation as
   authoritative.
 - `TerminalSessionDescriptor` qualifies terminal sessions by profile, connection generation, and
-  Herdr terminal ID. Input and resize are enabled only for a fresh compatible runtime.
+  Herdr terminal ID. Read-only attach, input, resize, scroll, and upload-and-insert are admitted
+  independently from that generation's advertised features.
 
 ## Compatibility and failure state
 
@@ -39,6 +40,10 @@ Herdr `0.7.5` or newer, and the required web compatibility/feature surface. Unsu
 capabilities are `incompatible`; network failure is `offline`; a lost host with an admitted snapshot
 may be displayed as stale/degraded. These states are local to that profile. There is no fallback to
 another host for a qualified action.
+
+Every structural dispatch is routed through its qualified host target and exact advertised command.
+Unsupported command entry points remain disabled or absent, and execution rechecks admission so a
+stale render cannot race a mutation.
 
 The browser owns display and navigation preferences. Herdr owns workspaces, tabs, panes, layouts,
 agent lifecycle, process state, and terminal byte streams. The bridge owns only transport concerns,
