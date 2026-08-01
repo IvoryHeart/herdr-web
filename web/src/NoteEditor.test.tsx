@@ -77,18 +77,9 @@ describe("RuntimeConnection sockets", () => {
 
   it("stops applying shared selection events without recreating event sockets", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
-    let sharedPaneId: string | null = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            ...emptySnapshot(),
-            selected_pane_id: sharedPaneId,
-          }),
-          { status: 200 },
-        ),
-      ),
+      vi.fn(async () => new Response(JSON.stringify(emptySnapshot()), { status: 200 })),
     );
     const connectionRefs = { current: {} } as MutableRefObject<Record<string, BridgeConnectionRef>>;
     const setConnectionStates = vi.fn() as unknown as Dispatch<
@@ -107,7 +98,6 @@ describe("RuntimeConnection sockets", () => {
     if (!uiEvents) {
       throw new Error("missing UI events socket");
     }
-    sharedPaneId = "pane-a";
     await act(async () => {
       uiEvents.dispatchEvent(
         new MessageEvent("message", {
@@ -119,7 +109,6 @@ describe("RuntimeConnection sockets", () => {
     expect(onPaneSelection).toHaveBeenCalledTimes(1);
 
     await render(vi.fn(), false);
-    sharedPaneId = "pane-b";
     await act(async () => {
       uiEvents.dispatchEvent(
         new MessageEvent("message", {

@@ -10,7 +10,10 @@ describe("terminal-session boundary", () => {
     const hostB = terminalSessionDescriptor(runtime("host-b"), pane, "ready");
 
     expect(hostA?.sessionKey).not.toBe(hostB?.sessionKey);
+    expect(hostA?.attachEnabled).toBe(true);
     expect(hostA?.inputEnabled).toBe(true);
+    expect(hostA?.resizeEnabled).toBe(true);
+    expect(hostA?.scrollEnabled).toBe(true);
   });
 
   it("disables terminal input while a host is stale or unavailable", () => {
@@ -31,6 +34,23 @@ describe("terminal-session boundary", () => {
       terminalSessionDescriptor(after, testPane("terminal-1"), "ready")?.sessionKey,
     );
   });
+
+  it("admits read-only attach while independently gating input, resize, scroll, and uploads", () => {
+    const readOnly = runtime("host-a");
+    readOnly.capabilities = {
+      ...readOnly.capabilities,
+      commands: readOnly.capabilities?.commands ?? [],
+      features: ["snapshot", "terminal_attach"],
+    };
+
+    expect(terminalSessionDescriptor(readOnly, testPane("terminal-1"), "ready")).toMatchObject({
+      attachEnabled: true,
+      inputEnabled: false,
+      resizeEnabled: false,
+      scrollEnabled: false,
+      uploadEnabled: false,
+    });
+  });
 });
 
 function runtime(id: string): BridgeRuntime {
@@ -44,7 +64,18 @@ function runtime(id: string): BridgeRuntime {
     capabilityGeneration: 0,
     generationKey: `configured:${id}:capability:0`,
     resumeToken: 0,
-    capabilities: { bridge_api_version: 1, commands: [] },
+    capabilities: {
+      bridge_api_version: 1,
+      commands: [],
+      features: [
+        "snapshot",
+        "terminal_attach",
+        "terminal_input",
+        "terminal_resize",
+        "terminal_scroll",
+        "uploads",
+      ],
+    },
     capabilityState: "ready",
     capabilityError: null,
     canConnect: true,

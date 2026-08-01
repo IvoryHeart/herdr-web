@@ -4,7 +4,9 @@ import {
   parseSnapshot,
   RuntimeCache,
   runtimeAdmissionReady,
+  runtimeCommandReady,
   runtimeControlsEnabled,
+  runtimeFeatureReady,
   SnapshotContractError,
 } from "./runtimeClient";
 import type { BridgeRuntime } from "./bridge";
@@ -78,6 +80,27 @@ describe("host connection state", () => {
         snapshot: {},
         loadState: "ready",
       }, ["snapshot"]),
+    ).toBe(false);
+    expect(
+      runtimeFeatureReady(
+        runtime,
+        { connectionKey: runtime.generationKey, snapshot: {}, loadState: "ready" },
+        "snapshot",
+      ),
+    ).toBe(true);
+    expect(
+      runtimeCommandReady(
+        { ...runtime, capabilities: { ...runtime.capabilities, commands: ["workspace.create"] } },
+        { connectionKey: runtime.generationKey, snapshot: {}, loadState: "ready" },
+        "workspace.create",
+      ),
+    ).toBe(true);
+    expect(
+      runtimeCommandReady(
+        runtime,
+        { connectionKey: runtime.generationKey, snapshot: {}, loadState: "error" },
+        "workspace.create",
+      ),
     ).toBe(false);
   });
 });

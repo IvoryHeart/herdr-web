@@ -135,6 +135,8 @@ import {
   hostConnectionState,
   RuntimeCache,
   runtimeAdmissionReady,
+  runtimeCommandReady,
+  runtimeFeatureReady,
 } from "./runtimeClient";
 import type { HostConnectionState } from "./runtimeClient";
 import {
@@ -204,6 +206,11 @@ type AgentSort = "attention" | "status" | "workspace" | "lastStatusChange";
 type AgentGroup = "none" | "host" | "workspace" | "hostWorkspace";
 type SpaceGroup = "none" | "host";
 type MenuKind = "space" | "tab" | "pane";
+type RuntimeCommandTarget = {
+  kind: "workspace" | "tab" | "pane";
+  id: string;
+  command: string;
+};
 type ScopedPaneRef = {
   bridgeId: BridgeId;
   paneId: string;
@@ -1318,11 +1325,27 @@ export function App() {
     navigationIsShared,
     preferSharedSnapshotSelection,
   );
-  const supportedCommands = selectedControlsEnabled
-    ? (selectedRuntime?.capabilities?.commands ?? [])
-    : [];
-  const splitSupported = supportedCommands.includes("pane.split");
-  const paneFocusSupported = supportedCommands.includes("pane.focus_direction");
+  const selectedCommandReady = (command: string) =>
+    runtimeCommandReady(
+      selectedRuntime,
+      selectedConnectionState,
+      command,
+      activeSurface.requiredCapabilities,
+    );
+  const splitSupported = selectedCommandReady("pane.split");
+  const paneFocusSupported = selectedCommandReady("pane.focus_direction");
+  const paneCloseSupported = selectedCommandReady("pane.close");
+  const tabCloseSupported = selectedCommandReady("tab.close");
+  const selectedLauncherReady =
+    runtimeFeatureReady(
+      selectedRuntime,
+      selectedConnectionState,
+      "launcher_presets",
+      activeSurface.requiredCapabilities,
+    ) && supportsLauncherPresets(selectedRuntime?.capabilities);
+  const createSpaceSupported = selectedCommandReady("workspace.create");
+  const createTabSupported = selectedLauncherReady && selectedCommandReady("tab.create");
+  const launcherSplitSupported = selectedLauncherReady && splitSupported;
   const selectedHttpUrl = useMemo(
     () => selectedRuntime?.httpUrl ?? disconnectedHttpUrl,
     [selectedRuntime?.connectionKey],
@@ -1330,10 +1353,6 @@ export function App() {
   const selectedWsUrl = useMemo(
     () => selectedRuntime?.wsUrl ?? disconnectedWsUrl,
     [selectedRuntime?.connectionKey],
-  );
-  const selectedCommands = useMemo(
-    () => (selectedRuntime ? createCommands(selectedHttpUrl) : null),
-    [selectedHttpUrl, selectedRuntime?.id],
   );
   const launchRuntime = launchTarget ? bridge.getRuntime(launchTarget.bridgeId) : null;
   const launchPresetState =
@@ -1427,7 +1446,28 @@ export function App() {
     activeSurface.requiredCapabilities,
   );
   const menuSupportedCommands = menuCommandsReady ? (menuRuntime?.capabilities?.commands ?? []) : [];
-  const menuPaneMoveSupported = menuSupportedCommands.includes("pane.move");
+  const menuActionSupport: MenuActionSupport = {
+    rename: menuSupportedCommands.includes(
+      menu?.kind === "space"
+        ? "workspace.rename"
+        : menu?.kind === "tab"
+          ? "tab.rename"
+          : "pane.rename",
+    ),
+    close: menuSupportedCommands.includes(
+      menu?.kind === "space"
+        ? "workspace.close"
+        : menu?.kind === "tab"
+          ? "tab.close"
+          : "pane.close",
+    ),
+    newTab:
+      menuCommandsReady &&
+      menuRuntime?.capabilities?.features?.includes("launcher_presets") === true &&
+      supportsLauncherPresets(menuRuntime?.capabilities) &&
+      menuSupportedCommands.includes("tab.create"),
+    move: menuSupportedCommands.includes("pane.move"),
+  };
   const menuAgentPinsSupported = Boolean(
     menu &&
       menu.kind === "pane" &&
@@ -1457,8 +1497,7 @@ export function App() {
   const activeMenuItems = menu
     ? menuItems(
         menu.kind,
-        menuPaneMoveSupported,
-        menuCommandsReady,
+        menuActionSupport,
         menuAgentPinsSupported,
         menuPanePinned,
         menuPinLabel,
@@ -2243,7 +2282,14 @@ export function App() {
   // the synchronized view. Independent navigation deliberately leaves Herdr's
   // global focus alone. `tab.focus` also activates the tab's workspace.
   const publishSharedPaneSelection = (runtime: BridgeRuntime, paneId: string) => {
-    if (!runtimeIsAdmitted(runtime.id)) {
+    if (
+      !runtimeFeatureReady(
+        runtime,
+        connectionStates[runtime.id],
+        "shared_selection",
+        activeSurface.requiredCapabilities,
+      )
+    ) {
       return;
     }
     clearPendingSharedPaneSelection(runtime.id);
@@ -2901,14 +2947,15 @@ export function App() {
           focusPane(selectedRuntime.id, nextPane);
           return;
         }
-        if (!selectedCommands) {
+        if (!paneFocusSupported) {
           return;
         }
         event.preventDefault();
         event.stopPropagation();
         void exec(
           selectedRuntime,
-          () => selectedCommands.focusPaneDirection(selectedPane.pane_id, paneFocusDirection),
+          { kind: "pane", id: selectedPane.pane_id, command: "pane.focus_direction" },
+          (commands) => commands.focusPaneDirection(selectedPane.pane_id, paneFocusDirection),
           true,
         ).then((ok) => ok && requestTerminalFocus());
         return;
@@ -2939,21 +2986,22 @@ export function App() {
       }
 
       if (splitDirection) {
-        if (!selectedPane || !selectedCommands) {
+        if (!selectedPane || !splitSupported) {
           return;
         }
         event.preventDefault();
         event.stopPropagation();
         void exec(
           selectedRuntime,
-          () => selectedCommands.splitPane(selectedPane.pane_id, splitDirection),
+          { kind: "pane", id: selectedPane.pane_id, command: "pane.split" },
+          (commands) => commands.splitPane(selectedPane.pane_id, splitDirection),
           true,
         ).then((ok) => ok && requestTerminalFocus());
         return;
       }
 
       if (newTabShortcut) {
-        if (!selectedRuntime) {
+        if (!selectedRuntime || !createTabSupported) {
           return;
         }
         if (!activeSpace) {
@@ -2979,10 +3027,14 @@ export function App() {
         if (!tab) {
           return;
         }
+        const tabPanes = sortPanesForTab(snapshot.panes, tab.tab_id);
+        const closesPane = tabPanes.length > 1 && selectedPane?.tab_id === tab.tab_id;
+        if (closesPane ? !paneCloseSupported : !tabCloseSupported) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
-        const tabPanes = sortPanesForTab(snapshot.panes, tab.tab_id);
-        if (tabPanes.length > 1 && selectedPane?.tab_id === tab.tab_id) {
+        if (closesPane) {
           setDialog({
             mode: "close",
             kind: "pane",
@@ -3130,14 +3182,16 @@ export function App() {
     multiHostSpaceSelection,
     navigationIsShared,
     paneFocusSupported,
+    paneCloseSupported,
     pinnedAgentKeys,
     scope,
     sidebarView,
     selectedPane,
     selectedRuntime,
-    selectedCommands,
+    createTabSupported,
     splitSupported,
     snapshot,
+    tabCloseSupported,
   ]);
 
   const refreshNow = () => {
@@ -3399,7 +3453,8 @@ export function App() {
 
   async function exec(
     runtime: BridgeRuntime | null,
-    action: () => Promise<{ [key: string]: unknown }>,
+    target: RuntimeCommandTarget,
+    action: (commands: ReturnType<typeof createCommands>) => Promise<{ [key: string]: unknown }>,
     selectCreated = false,
   ) {
     if (
@@ -3413,10 +3468,21 @@ export function App() {
       setError("Bridge is not ready");
       return false;
     }
+    let routed;
+    try {
+      routed = routeRuntimeTarget(runtime.id, target.kind, target.id, target.command);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Command is unavailable");
+      return false;
+    }
+    if (routed.generationKey !== runtime.generationKey) {
+      setError("Bridge is not ready");
+      return false;
+    }
     const requestConnectionKey = runtime.generationKey;
     setBusy(true);
     try {
-      const result = await action();
+      const result = await action(createCommands(routed.httpUrl));
       let ref = connectionRefs.current[runtime.id];
       let refreshGeneration = ref?.activityGeneration ?? 0;
       let next = await fetchRuntimeSnapshot(runtime.httpUrl);
@@ -3527,13 +3593,23 @@ export function App() {
         setError("Pane not found");
         return;
       }
-      void exec(runtime, () => commands.movePaneToNewTab(id, pane.workspace_id, label), true);
+      void exec(
+        runtime,
+        { kind: "pane", id, command: "pane.move" },
+        (routedCommands) => routedCommands.movePaneToNewTab(id, pane.workspace_id, label),
+        true,
+      );
     } else if (key === "move_new_space" && kind === "pane") {
       if (!commands) {
         setError("Bridge is not ready");
         return;
       }
-      void exec(runtime, () => commands.movePaneToNewWorkspace(id, label), true);
+      void exec(
+        runtime,
+        { kind: "pane", id, command: "pane.move" },
+        (routedCommands) => routedCommands.movePaneToNewWorkspace(id, label),
+        true,
+      );
     }
   };
 
@@ -3548,13 +3624,19 @@ export function App() {
       setError("Bridge is not ready");
       return;
     }
+    const command =
+      kind === "space" ? "workspace.rename" : kind === "tab" ? "tab.rename" : "pane.rename";
     const action =
       kind === "space"
-        ? () => commands.renameWorkspace(id, value)
+        ? (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.renameWorkspace(id, value)
         : kind === "tab"
-          ? () => commands.renameTab(id, value)
-          : () => commands.renamePane(id, value);
-    void exec(runtime, action).then((ok) => ok && setDialog(null));
+          ? (routedCommands: ReturnType<typeof createCommands>) => routedCommands.renameTab(id, value)
+          : (routedCommands: ReturnType<typeof createCommands>) =>
+              routedCommands.renamePane(id, value);
+    void exec(runtime, { kind: kind === "space" ? "workspace" : kind, id, command }, action).then(
+      (ok) => ok && setDialog(null),
+    );
   };
 
   const clearRename = () => {
@@ -3568,11 +3650,16 @@ export function App() {
       setError("Bridge is not ready");
       return;
     }
+    const command = kind === "space" ? "workspace.rename" : "tab.rename";
     const action =
       kind === "space"
-        ? () => commands.renameWorkspace(id, null)
-        : () => commands.renameTab(id, null);
-    void exec(runtime, action).then((ok) => ok && setDialog(null));
+        ? (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.renameWorkspace(id, null)
+        : (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.renameTab(id, null);
+    void exec(runtime, { kind: kind === "space" ? "workspace" : "tab", id, command }, action).then(
+      (ok) => ok && setDialog(null),
+    );
   };
 
   const confirmClose = () => {
@@ -3586,13 +3673,18 @@ export function App() {
       setError("Bridge is not ready");
       return;
     }
+    const command =
+      kind === "space" ? "workspace.close" : kind === "tab" ? "tab.close" : "pane.close";
     const action =
       kind === "space"
-        ? () => commands.closeWorkspace(id)
+        ? (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.closeWorkspace(id)
         : kind === "tab"
-          ? () => commands.closeTab(id)
-          : () => commands.closePane(id);
-    void exec(runtime, action).then((ok) => ok && setDialog(null));
+          ? (routedCommands: ReturnType<typeof createCommands>) => routedCommands.closeTab(id)
+          : (routedCommands: ReturnType<typeof createCommands>) => routedCommands.closePane(id);
+    void exec(runtime, { kind: kind === "space" ? "workspace" : kind, id, command }, action).then(
+      (ok) => ok && setDialog(null),
+    );
   };
 
   const submitLaunch = (spec: LaunchSpec) => {
@@ -3621,17 +3713,22 @@ export function App() {
       connectionRefs.current[launchTarget.bridgeId]?.snapshot ??
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
+    const target =
+      launchTarget.mode === "tab"
+        ? { kind: "workspace" as const, id: launchTarget.workspaceId, command: "tab.create" }
+        : { kind: "pane" as const, id: launchTarget.pane.pane_id, command: "pane.split" };
     const action =
       launchTarget.mode === "tab"
-        ? () => commands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
-        : () =>
-            commands.launchPresetSplit(
+        ? (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
+        : (routedCommands: ReturnType<typeof createCommands>) =>
+            routedCommands.launchPresetSplit(
               launchTarget.pane.pane_id,
               launchTarget.pane.tab_id,
               launchTarget.direction,
               resolvedSpec,
             );
-    void exec(runtime, action, true).then((ok) => ok && setLaunchTarget(null));
+    void exec(runtime, target, action, true).then((ok) => ok && setLaunchTarget(null));
   };
 
   const selectedTerminalSession = terminalSessionDescriptor(
@@ -3755,9 +3852,16 @@ export function App() {
             }
           }}
           onBackendSettings={openBackendSettings}
+          createSpaceEnabled={createSpaceSupported}
+          createTabEnabled={createTabSupported}
           onCreateSpace={() =>
-            selectedRuntime && selectedCommands
-              ? void exec(selectedRuntime, () => selectedCommands.createWorkspace(), true)
+            selectedRuntime && createSpaceSupported
+              ? void exec(
+                  selectedRuntime,
+                  { kind: "workspace", id: "new", command: "workspace.create" },
+                  (commands) => commands.createWorkspace(),
+                  true,
+                )
               : setError("Bridge is not ready")
           }
           onCreateTab={(bridgeId, workspaceId) =>
@@ -3838,7 +3942,10 @@ export function App() {
           snapshot={snapshot}
           activeSpace={activeSpace}
           selectedPane={selectedPane}
-          controlsEnabled={selectedControlsEnabled}
+          menuEnabled={
+            selectedCommandReady("tab.rename") || selectedCommandReady("tab.close")
+          }
+          createEnabled={createTabSupported}
           onSelectTab={(tabId) => selectedRuntime && selectTab(selectedRuntime.id, tabId)}
           onCreateTab={(workspaceId) =>
             selectedRuntime &&
@@ -3865,7 +3972,7 @@ export function App() {
               {stageBreadcrumb(snapshot, selectedPane, loadState, selectedRuntime?.canConnect ?? false)}
             </span>
           </div>
-          {splitSupported && selectedPane && !isCompactLayout ? (
+          {launcherSplitSupported && selectedPane && !isCompactLayout ? (
             <>
               <button
                 className="icon-btn"
@@ -3935,12 +4042,13 @@ export function App() {
               <Pin size={16} />
             </button>
           ) : null}
-          {selectedPane && selectedControlsEnabled ? (
+          {selectedPane && selectedTerminalSession?.attachEnabled ? (
             <button
               className="icon-btn"
               type="button"
               aria-label="Refit terminal"
               title="Refit terminal"
+              disabled={!selectedTerminalSession.resizeEnabled}
               onClick={() => setRefitToken((token) => token + 1)}
             >
               <RefreshCw size={18} />
@@ -3982,11 +4090,15 @@ export function App() {
           />
         ) : renderTerminal ? (
           <TerminalView
-            pane={selectedTerminalSession?.inputEnabled ? selectedPane : null}
+            pane={selectedTerminalSession?.attachEnabled ? selectedPane : null}
             connectionKey={selectedTerminalSession?.sessionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
+            inputEnabled={selectedTerminalSession?.inputEnabled ?? false}
+            resizeEnabled={selectedTerminalSession?.resizeEnabled ?? false}
+            scrollEnabled={selectedTerminalSession?.scrollEnabled ?? false}
+            uploadEnabled={selectedTerminalSession?.uploadEnabled ?? false}
             autoFocus={!isTouchInput}
             scrollSensitivity={isTouchInput ? 2 : 0.4}
             mobileControls={isTouchInput}
@@ -5425,11 +5537,15 @@ function SplitGrid({
             onPointerDown={() => onSelectPane(pane)}
           >
             <TerminalView
-              pane={pane}
+              pane={terminalSession?.attachEnabled ? pane : null}
               connectionKey={terminalSession?.sessionKey ?? "disconnected"}
               resumeToken={resumeToken}
               httpUrl={httpUrl}
               wsUrl={wsUrl}
+              inputEnabled={terminalSession?.inputEnabled ?? false}
+              resizeEnabled={terminalSession?.resizeEnabled ?? false}
+              scrollEnabled={terminalSession?.scrollEnabled ?? false}
+              uploadEnabled={terminalSession?.uploadEnabled ?? false}
               autoFocus={selected && !touchInput}
               scrollSensitivity={touchInput ? 2 : 0.4}
               mobileControls={selected && touchInput}
@@ -5457,7 +5573,8 @@ function TabBar({
   snapshot,
   activeSpace,
   selectedPane,
-  controlsEnabled,
+  menuEnabled,
+  createEnabled,
   onSelectTab,
   onCreateTab,
   onMenu,
@@ -5465,7 +5582,8 @@ function TabBar({
   snapshot: Snapshot | null;
   activeSpace: WorkspaceInfo | null;
   selectedPane: PaneInfo | null;
-  controlsEnabled: boolean;
+  menuEnabled: boolean;
+  createEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCreateTab: (workspaceId: string) => void;
   onMenu: (
@@ -5504,7 +5622,7 @@ function TabBar({
               onClick={() => onSelectTab(tab.tab_id)}
               onContextMenu={(event) => {
                 event.preventDefault();
-                if (!controlsEnabled) {
+                if (!menuEnabled) {
                   return;
                 }
                 onMenu("tab", tab.tab_id, label, event.clientX, event.clientY, canClearTabName(tab));
@@ -5521,7 +5639,7 @@ function TabBar({
         type="button"
         aria-label="New tab"
         title="New tab"
-        disabled={!controlsEnabled}
+        disabled={!createEnabled}
         onClick={() => onCreateTab(activeSpace.workspace_id)}
       >
         <Plus size={14} />
@@ -5580,6 +5698,8 @@ function Switcher({
   onRefresh,
   onRefreshBridge,
   onBackendSettings,
+  createSpaceEnabled,
+  createTabEnabled,
   onCreateSpace,
   onCreateTab,
   onScopedMenu,
@@ -5633,6 +5753,8 @@ function Switcher({
   onRefresh: () => void;
   onRefreshBridge: (bridgeId: BridgeId) => void;
   onBackendSettings: () => void;
+  createSpaceEnabled: boolean;
+  createTabEnabled: boolean;
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
   onScopedMenu: (
@@ -6589,6 +6711,7 @@ function Switcher({
                     type="button"
                     aria-label="New space"
                     title="New space"
+                    disabled={!createSpaceEnabled}
                     onClick={onCreateSpace}
                   >
                     <Plus size={14} />
@@ -6683,6 +6806,7 @@ function Switcher({
                     type="button"
                     aria-label="New tab"
                     title="New tab"
+                    disabled={!createTabEnabled}
                     onClick={() =>
                       selectedBridgeId && activeSpace
                         ? onCreateTab(selectedBridgeId, activeSpace.workspace_id)
@@ -8589,33 +8713,35 @@ function SplitGlyph() {
   );
 }
 
+export type MenuActionSupport = {
+  rename: boolean;
+  close: boolean;
+  newTab: boolean;
+  move: boolean;
+};
+
 export function menuItems(
   kind: MenuKind,
-  paneMoveSupported: boolean,
-  commandsReady: boolean,
+  actions: MenuActionSupport,
   agentPinsSupported = false,
   panePinned = false,
   pinLabel: "agent" | "pane" = "pane",
   notesSupported = false,
 ): MenuItem[] {
   if (kind === "space") {
-    if (!commandsReady) {
-      return [];
-    }
     return [
-      { key: "rename", label: "Rename" },
-      { key: "newtab", label: "New tab" },
-      { key: "close", label: "Close space", danger: true },
-    ];
+      ...(actions.rename ? [{ key: "rename", label: "Rename" }] : []),
+      ...(actions.newTab ? [{ key: "newtab", label: "New tab" }] : []),
+      ...(actions.close
+        ? [{ key: "close", label: "Close space", danger: true }]
+        : []),
+    ] as MenuItem[];
   }
   if (kind === "tab") {
-    if (!commandsReady) {
-      return [];
-    }
     return [
-      { key: "rename", label: "Rename" },
-      { key: "close", label: "Close tab", danger: true },
-    ];
+      ...(actions.rename ? [{ key: "rename", label: "Rename" }] : []),
+      ...(actions.close ? [{ key: "close", label: "Close tab", danger: true }] : []),
+    ] as MenuItem[];
   }
   const paneItems: MenuItem[] = [];
   if (agentPinsSupported) {
@@ -8628,17 +8754,18 @@ export function menuItems(
   if (notesSupported) {
     paneItems.push({ key: "add_note", label: "Add note" });
   }
-  if (!commandsReady) {
-    return paneItems;
+  if (actions.rename) {
+    paneItems.push({ key: "rename", label: "Rename" });
   }
-  paneItems.push({ key: "rename", label: "Rename" });
-  if (paneMoveSupported) {
+  if (actions.move) {
     paneItems.push(
       { key: "move_new_tab", label: "Move to new tab" },
       { key: "move_new_space", label: "Move to new space" },
     );
   }
-  paneItems.push({ key: "close", label: "Close pane", danger: true });
+  if (actions.close) {
+    paneItems.push({ key: "close", label: "Close pane", danger: true });
+  }
   return paneItems;
 }
 

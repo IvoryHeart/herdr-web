@@ -151,6 +151,30 @@ export function runtimeAdmissionReady(
   return requiredCapabilities.every((capability) => features.has(capability));
 }
 
+export function runtimeFeatureReady(
+  runtime: BridgeRuntime | null,
+  state: RuntimeAdmissionState | null | undefined,
+  feature: string,
+  requiredCapabilities: readonly string[] = [],
+) {
+  return (
+    runtimeAdmissionReady(runtime, state, requiredCapabilities) &&
+    runtime?.capabilities?.features?.includes(feature) === true
+  );
+}
+
+export function runtimeCommandReady(
+  runtime: BridgeRuntime | null,
+  state: RuntimeAdmissionState | null | undefined,
+  command: string,
+  requiredCapabilities: readonly string[] = [],
+) {
+  return (
+    runtimeAdmissionReady(runtime, state, requiredCapabilities) &&
+    runtime?.capabilities?.commands?.includes(command) === true
+  );
+}
+
 export async function fetchRuntimeSnapshot(
   httpUrl: (path: string, query?: URLSearchParams) => string,
 ): Promise<Snapshot> {

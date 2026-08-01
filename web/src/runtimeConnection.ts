@@ -416,7 +416,7 @@ function admitDerivedSnapshot(
   runtimeCache: RuntimeCache<Snapshot>,
   setConnectionStates: Dispatch<SetStateAction<Record<string, BridgeConnectionState>>>,
 ) {
-  if (!isRuntimeGenerationCurrent(ref, runtime.generationKey)) {
+  if (ref.recoveryRequired || !isRuntimeGenerationCurrent(ref, runtime.generationKey)) {
     return;
   }
   ref.snapshot = snapshot;

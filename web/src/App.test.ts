@@ -973,30 +973,45 @@ describe("App multi-bridge helpers", () => {
   });
 
   it("shows pin actions even when pane commands are not ready", () => {
-    expect(menuItems("pane", false, false, true, false)).toEqual([
+    const noActions = { rename: false, close: false, newTab: false, move: false };
+    expect(menuItems("pane", noActions, true, false)).toEqual([
       { key: "pin", label: "Pin pane" },
     ]);
-    expect(menuItems("pane", false, false, true, true)).toEqual([
+    expect(menuItems("pane", noActions, true, true)).toEqual([
       { key: "unpin", label: "Unpin pane" },
     ]);
-    expect(menuItems("pane", false, false, true, false, "agent")).toEqual([
+    expect(menuItems("pane", noActions, true, false, "agent")).toEqual([
       { key: "pin", label: "Pin agent" },
     ]);
-    expect(menuItems("pane", false, false, true, true, "agent")).toEqual([
+    expect(menuItems("pane", noActions, true, true, "agent")).toEqual([
       { key: "unpin", label: "Unpin agent" },
     ]);
   });
 
   it("shows add-note actions only for eligible pane menus", () => {
-    expect(menuItems("pane", false, false, false, false, "pane", true)).toEqual([
+    const noActions = { rename: false, close: false, newTab: false, move: false };
+    expect(menuItems("pane", noActions, false, false, "pane", true)).toEqual([
       { key: "add_note", label: "Add note" },
     ]);
-    expect(menuItems("pane", false, false, true, false, "agent", true)).toEqual([
+    expect(menuItems("pane", noActions, true, false, "agent", true)).toEqual([
       { key: "pin", label: "Pin agent" },
       { key: "add_note", label: "Add note" },
     ]);
-    expect(menuItems("space", false, false, false, false, "pane", true)).toEqual([]);
-    expect(menuItems("tab", false, false, false, false, "pane", true)).toEqual([]);
+    expect(menuItems("space", noActions, false, false, "pane", true)).toEqual([]);
+    expect(menuItems("tab", noActions, false, false, "pane", true)).toEqual([]);
+  });
+
+  it("exposes only individually advertised structural menu actions", () => {
+    expect(
+      menuItems("space", { rename: true, close: false, newTab: false, move: false }),
+    ).toEqual([{ key: "rename", label: "Rename" }]);
+    expect(
+      menuItems("pane", { rename: false, close: true, newTab: false, move: true }),
+    ).toEqual([
+      { key: "move_new_tab", label: "Move to new tab" },
+      { key: "move_new_space", label: "Move to new space" },
+      { key: "close", label: "Close pane", danger: true },
+    ]);
   });
 
   it("requires a current note-capable pane before showing add-note", () => {
