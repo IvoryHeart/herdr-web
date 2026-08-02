@@ -5,13 +5,16 @@ import { act, type Dispatch, type MutableRefObject, type SetStateAction } from "
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  BridgeConnectionController,
   NoteEditor,
   QuickPaneNoteDialog,
   noteDraftStorageKey,
 } from "./App";
-import type { BridgeConnectionRef, BridgeConnectionState, ScopedNoteEntry } from "./App";
+import type { ScopedNoteEntry } from "./App";
 import type { BridgeRuntime } from "./bridge";
+import { RuntimeCache } from "./runtimeClient";
+import { RuntimeConnection } from "./runtimeConnection";
+import type { BridgeConnectionRef, BridgeConnectionState } from "./runtimeConnection";
+import type { Snapshot } from "./types";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -40,7 +43,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("BridgeConnectionController sockets", () => {
+describe("RuntimeConnection sockets", () => {
   it("does not recreate event sockets when only the notes callback identity changes", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     vi.stubGlobal(
@@ -74,18 +77,9 @@ describe("BridgeConnectionController sockets", () => {
 
   it("stops applying shared selection events without recreating event sockets", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
-    let sharedPaneId: string | null = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            ...emptySnapshot(),
-            selected_pane_id: sharedPaneId,
-          }),
-          { status: 200 },
-        ),
-      ),
+      vi.fn(async () => new Response(JSON.stringify(emptySnapshot()), { status: 200 })),
     );
     const connectionRefs = { current: {} } as MutableRefObject<Record<string, BridgeConnectionRef>>;
     const setConnectionStates = vi.fn() as unknown as Dispatch<
@@ -104,7 +98,6 @@ describe("BridgeConnectionController sockets", () => {
     if (!uiEvents) {
       throw new Error("missing UI events socket");
     }
-    sharedPaneId = "pane-a";
     await act(async () => {
       uiEvents.dispatchEvent(
         new MessageEvent("message", {
@@ -116,7 +109,6 @@ describe("BridgeConnectionController sockets", () => {
     expect(onPaneSelection).toHaveBeenCalledTimes(1);
 
     await render(vi.fn(), false);
-    sharedPaneId = "pane-b";
     await act(async () => {
       uiEvents.dispatchEvent(
         new MessageEvent("message", {
@@ -666,6 +658,7 @@ function createConnectionHarness({
   document.body.appendChild(container);
   const root = createRoot(container);
   const onPaneSelection = vi.fn();
+  const runtimeCache = new RuntimeCache<Snapshot>();
   roots.push(root);
 
   const render = async (
@@ -674,11 +667,14 @@ function createConnectionHarness({
   ) => {
     await act(async () => {
       root.render(
-        <BridgeConnectionController
+        <RuntimeConnection
           runtime={runtime}
+          requiredCapabilities={["snapshot", "terminal_attach"]}
           followSharedSelection={followSharedSelection}
           connectionRefs={connectionRefs}
+          runtimeCache={runtimeCache}
           setConnectionStates={setConnectionStates}
+          onRecoveryDetected={() => undefined}
           onPaneSelection={onPaneSelection}
           onAgentActivityChanged={() => undefined}
           onAgentPinsChanged={() => undefined}
@@ -700,8 +696,14 @@ function bridgeRuntime(bridgeId: string): BridgeRuntime {
     color: "#89b4fa",
     backend: null,
     connectionKey: bridgeId,
+    capabilityGeneration: 0,
+    generationKey: `${bridgeId}:capability:0`,
     resumeToken: 0,
-    capabilities: { commands: [], notes: { version: 1 } },
+    capabilities: {
+      commands: [],
+      features: ["snapshot", "terminal_attach"],
+      notes: { version: 1 },
+    },
     capabilityState: "ready",
     capabilityError: null,
     canConnect: true,

@@ -283,25 +283,26 @@ describe("backend store parsing", () => {
 
 describe("capabilities", () => {
   it("maps capability probe outcomes to connection blocking state", () => {
-    expect(capabilityProbeSuccess({ commands: ["pane.split"], web_compat: 1 })).toEqual({
+    const capabilities = compatibleCapabilities({ commands: ["pane.split"] });
+    expect(capabilityProbeSuccess(capabilities)).toEqual({
       blocked: false,
       state: "ready",
-      capabilities: { commands: ["pane.split"], web_compat: 1 },
+      capabilities,
       error: null,
       retry: false,
     });
-    expect(capabilityProbeSuccess({ commands: [], web_compat: 0 })).toEqual({
+    expect(capabilityProbeSuccess(compatibleCapabilities({ web_compat: 0 }))).toEqual({
       blocked: true,
-      state: "error",
+      state: "incompatible",
       capabilities: null,
       error: "Bridge is not compatible with this web app",
       retry: false,
     });
     expect(capabilityProbeFailure(new Error("network down"))).toEqual({
-      blocked: false,
-      state: "error",
+      blocked: true,
+      state: "offline",
       capabilities: null,
-      error: "network down",
+      error: "Bridge unavailable",
       retry: true,
     });
   });
@@ -316,8 +317,13 @@ describe("capabilities", () => {
   it("parses optional compatibility fields", () => {
     expect(
       parseCapabilities({
+        bridge_api_version: 1,
         commands: ["pane.split", 42],
         bridge_version: "1.2.3",
+        herdr_version: "0.7.5",
+        terminal_protocol: 17,
+        configured_label: "Build host",
+        features: ["snapshot", "terminal_attach", 42],
         web_compat: 1,
         min_android_app_compat: 2,
         agent_activity: { version: 1 },
@@ -325,8 +331,13 @@ describe("capabilities", () => {
         notes: { version: 1 },
       }),
     ).toEqual({
+      bridge_api_version: 1,
       commands: ["pane.split"],
       bridge_version: "1.2.3",
+      herdr_version: "0.7.5",
+      terminal_protocol: 17,
+      configured_label: "Build host",
+      features: ["snapshot", "terminal_attach"],
       web_compat: 1,
       min_android_app_compat: 2,
       agent_activity: { version: 1 },
@@ -335,14 +346,21 @@ describe("capabilities", () => {
     });
   });
 
+  it("rejects capabilities that omit the feature contract", () => {
+    const missingFeatures = compatibleCapabilities();
+    Reflect.deleteProperty(missingFeatures, "features");
+    expect(() => parseCapabilities(missingFeatures)).toThrow(
+      "Bridge capability response is malformed",
+    );
+  });
+
   it("probes configured bridge capabilities", async () => {
+    const response = compatibleCapabilities({ commands: ["pane.move"] });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ commands: ["pane.move"] }), { status: 200 }),
+      new Response(JSON.stringify(response), { status: 200 }),
     );
 
-    await expect(probeBridgeBaseUrl("192.168.1.20:4000")).resolves.toEqual({
-      commands: ["pane.move"],
-    });
+    await expect(probeBridgeBaseUrl("192.168.1.20:4000")).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://192.168.1.20:4000/api/capabilities",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -353,11 +371,26 @@ describe("capabilities", () => {
 
   it("rejects incompatible configured bridge capabilities", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ commands: [], web_compat: 0 }), { status: 200 }),
+      new Response(JSON.stringify(compatibleCapabilities({ terminal_protocol: 16 })), {
+        status: 200,
+      }),
     );
 
-    await expect(probeBridgeBaseUrl("192.168.1.20:4000")).rejects.toThrow(/not compatible/iu);
+    await expect(probeBridgeBaseUrl("192.168.1.20:4000")).rejects.toThrow(/protocol 16/iu);
 
     fetchMock.mockRestore();
   });
 });
+
+function compatibleCapabilities(overrides: Record<string, unknown> = {}) {
+  return {
+    bridge_api_version: 1,
+    bridge_version: "0.1.0",
+    herdr_version: "0.7.5",
+    terminal_protocol: 17,
+    features: ["snapshot", "terminal_attach"],
+    commands: [],
+    web_compat: 1,
+    ...overrides,
+  };
+}

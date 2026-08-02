@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "feat/**"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Install repository check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install web dependencies
+        run: npm ci --prefix web
+      - name: Run complete non-live checks
+        run: npm run check
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser federation, responsive, and accessibility checks
+        run: npm run test:e2e
+      - name: Run independence audit
+        run: npm run test:independence
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Run dependency and secret security checks
+        run: npm run test:security

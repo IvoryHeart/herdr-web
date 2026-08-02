@@ -63,6 +63,9 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_STATIC_DIR: &str = "web/dist";
 const MIN_HERDR_VERSION: (u64, u64, u64) = (0, 7, 5);
 const MIN_HERDR_VERSION_LABEL: &str = "0.7.5";
+const BRIDGE_API_VERSION: u32 = 1;
+const WEB_COMPAT_VERSION: u32 = 1;
+const MAX_CONFIGURED_LABEL_CHARS: usize = 80;
 const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
 const MAX_NOTES_REQUEST_BYTES: usize = 512 * 1024;
 const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
@@ -94,6 +97,7 @@ struct BridgeOptions {
     allowed_hosts: Vec<String>,
     allowed_origins: Vec<String>,
     allowed_connect_sources: Vec<String>,
+    configured_label: Option<String>,
 }
 
 #[derive(Clone)]
@@ -110,6 +114,9 @@ struct BridgeState {
     ui_event_tx: tokio::sync::broadcast::Sender<String>,
     activity_tx: tokio::sync::broadcast::Sender<ActivityMessage>,
     upload_dir: PathBuf,
+    herdr_version: String,
+    terminal_protocol: u32,
+    configured_label: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,7 +153,14 @@ struct SnapshotTabInfo {
 
 #[derive(Debug, Serialize)]
 struct Capabilities {
+    bridge_api_version: u32,
+    bridge_version: &'static str,
+    herdr_version: String,
+    terminal_protocol: u32,
+    configured_label: Option<String>,
+    features: &'static [&'static str],
     commands: &'static [&'static str],
+    web_compat: u32,
     agent_activity: AgentActivityCapability,
     agent_pins: AgentPinsCapability,
     launcher_presets: LauncherPresetsCapability,
@@ -768,7 +782,7 @@ pub(crate) fn run_command(args: &[String]) -> io::Result<i32> {
         Err(message) => {
             eprintln!("{message}");
             eprintln!(
-                "usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--launcher-presets PATH] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]"
+                "usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--launcher-presets PATH] [--bridge-label LABEL] [--allow-origin ORIGIN] [--allow-host HOST] [--allow-connect-origin ORIGIN]"
             );
             return Ok(2);
         }
@@ -798,6 +812,7 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
     let mut allowed_hosts = Vec::new();
     let mut allowed_origins = Vec::new();
     let mut allowed_connect_sources = Vec::new();
+    let mut configured_label = None;
     let mut explicit_session = None;
     let mut index = 0;
 
@@ -873,12 +888,32 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
                 allowed_connect_sources.extend(connect_sources_for_origin(value)?);
                 index += 2;
             }
+            "--bridge-label" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --bridge-label".into());
+                };
+                configured_label = Some(normalize_configured_label(value)?);
+                index += 2;
+            }
             arg => return Err(format!("unknown herdr-web option: {arg}")),
         }
     }
 
     allowed_connect_sources.sort();
     allowed_connect_sources.dedup();
+
+    if !is_loopback_bind_host(&host) {
+        if allowed_hosts.is_empty() {
+            return Err(
+                "non-loopback binding requires at least one explicit --allow-host value".into(),
+            );
+        }
+        if allowed_origins.is_empty() {
+            return Err(
+                "non-loopback binding requires at least one explicit --allow-origin value".into(),
+            );
+        }
+    }
 
     if let Some(name) = explicit_session {
         crate::session::configure_explicit_session(&name)?;
@@ -893,6 +928,7 @@ fn parse_options(args: &[String]) -> Result<Option<BridgeOptions>, String> {
         allowed_hosts,
         allowed_origins,
         allowed_connect_sources,
+        configured_label,
     }))
 }
 
@@ -903,15 +939,17 @@ fn print_help() {
 fn help_text() -> &'static str {
     "herdr-web-bridge\n\
 \n\
-Usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--upload-dir DIR] [--launcher-presets PATH] [--allow-origin ORIGIN] [--allow-host HOSTNAME] [--allow-connect-origin ORIGIN]\n\
+Usage: herdr-web-bridge [--session NAME] [--host HOST] [--port PORT] [--static-dir DIR] [--upload-dir DIR] [--launcher-presets PATH] [--bridge-label LABEL] [--allow-origin ORIGIN] [--allow-host HOST] [--allow-connect-origin ORIGIN]\n\
 \n\
 Runs the local HTTP/WebSocket bridge for herdr-web.\n\
 Defaults to the active Herdr daemon sockets and 127.0.0.1:8787.\n\
 Use --session NAME to target a named Herdr session and ignore HERDR_SOCKET_PATH.\n\
-Use --host 0.0.0.0 to listen on non-loopback interfaces.\n\
+Non-loopback --host values require explicit --allow-host and --allow-origin values.\n\
+Every admitted browser has terminal-equivalent access; Host and Origin checks are not authentication.\n\
 Use --allow-origin http://localhost for bundled Android app access.\n\
 Use --allow-host HOSTNAME to accept that exact DNS hostname in Host headers.\n\
 Use --allow-connect-origin ORIGIN to let the served web app connect to another bridge origin.\n\
+Use --bridge-label LABEL for a bounded diagnostic label; browser host profiles remain authoritative.\n\
 Use --launcher-presets PATH or HERDR_WEB_LAUNCHER_PRESETS to load custom launch presets.\n\
 Uploads default to HERDR_WEB_UPLOAD_DIR, XDG_DATA_HOME/herdr-web/uploads, or ~/.local/share/herdr-web/uploads."
 }
@@ -921,7 +959,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         warn!(
             host = %options.host,
             port = options.port,
-            "herdr-web-bridge has no browser authentication yet; bind only on trusted networks"
+            "every admitted browser has terminal-equivalent access; Host/Origin guards are not authentication; bind only behind operator-managed SSH, VPN, or an authenticated reverse proxy"
         );
     }
     ensure_upload_dir(&options.upload_dir)?;
@@ -966,6 +1004,9 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         ui_event_tx: tokio::sync::broadcast::channel(256).0,
         activity_tx: tokio::sync::broadcast::channel(512).0,
         upload_dir: options.upload_dir.clone(),
+        herdr_version: daemon_version.to_string(),
+        terminal_protocol: daemon_protocol,
+        configured_label: options.configured_label.clone(),
     };
     spawn_agent_activity_watcher(state.clone());
     let agent_activity_routes = Router::new().route(
@@ -1292,6 +1333,22 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "pane.move",
 ];
 
+const CAPABILITY_FEATURES: &[&str] = &[
+    "snapshot",
+    "structural_events",
+    "shared_selection",
+    "agent_activity",
+    "agent_pins",
+    "launcher_presets",
+    "notes",
+    "uploads",
+    "terminal_attach",
+    "terminal_input",
+    "terminal_resize",
+    "terminal_scroll",
+    "terminal_shared_fanout",
+];
+
 fn ensure_allowed_request(headers: &HeaderMap, policy: &RequestPolicy) -> Result<(), BridgeError> {
     if request_allowed(headers, policy) {
         return Ok(());
@@ -1334,10 +1391,6 @@ fn host_authority_allowed(authority: &str, policy: &RequestPolicy) -> bool {
         return true;
     }
 
-    if is_unspecified_bind_host(&policy.bind_host) {
-        return host.parse::<IpAddr>().is_ok();
-    }
-
     host.eq_ignore_ascii_case(&policy.bind_host)
 }
 
@@ -1355,12 +1408,17 @@ fn request_origin_allowed(headers: &HeaderMap, policy: &RequestPolicy) -> bool {
         return false;
     };
 
+    let explicitly_allowed = policy
+        .allowed_origins
+        .iter()
+        .any(|allowed| allowed.eq_ignore_ascii_case(origin));
+    if !is_loopback_bind_host(&policy.bind_host) {
+        return explicitly_allowed;
+    }
+
     same_authority(origin_authority, host)
         || (is_loopback_authority(origin_authority) && is_loopback_authority(host))
-        || policy
-            .allowed_origins
-            .iter()
-            .any(|allowed| allowed.eq_ignore_ascii_case(origin))
+        || explicitly_allowed
 }
 
 fn origin_authority(origin: &str) -> Option<&str> {
@@ -1414,13 +1472,33 @@ fn normalize_allowed_host(host: &str) -> Result<String, String> {
     if host.is_empty() {
         return Err("allowed host must not be empty".into());
     }
-    if host.contains(':') || host.contains('/') || host.contains('\\') {
-        return Err("allowed host must be a hostname without scheme, port, or path".into());
+    if host.contains('/') || host.contains('\\') {
+        return Err(
+            "allowed host must be a hostname or IP literal without scheme, port, or path".into(),
+        );
     }
-    if !is_valid_dns_hostname(host) {
-        return Err("allowed host is not a valid hostname".into());
+    let ip_candidate = host.trim_start_matches('[').trim_end_matches(']');
+    if ip_candidate.parse::<IpAddr>().is_ok() {
+        return Ok(ip_candidate.to_ascii_lowercase());
+    }
+    if host.contains(':') || !is_valid_dns_hostname(host) {
+        return Err("allowed host is not a valid hostname or IP literal".into());
     }
     Ok(host.to_ascii_lowercase())
+}
+
+fn normalize_configured_label(label: &str) -> Result<String, String> {
+    let label = label.trim();
+    if label.is_empty() {
+        return Err("bridge label must not be empty".into());
+    }
+    if label.chars().count() > MAX_CONFIGURED_LABEL_CHARS || label.chars().any(|ch| ch.is_control())
+    {
+        return Err(format!(
+            "bridge label must be at most {MAX_CONFIGURED_LABEL_CHARS} display-safe characters"
+        ));
+    }
+    Ok(label.to_string())
 }
 
 fn is_valid_dns_hostname(host: &str) -> bool {
@@ -1449,10 +1527,6 @@ fn is_loopback_authority(authority: &str) -> bool {
 
 fn is_loopback_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
-}
-
-fn is_unspecified_bind_host(host: &str) -> bool {
-    matches!(host, "0.0.0.0" | "::" | "[::]")
 }
 
 fn authority_port_matches(authority: &str, expected_port: u16) -> bool {
@@ -2784,7 +2858,14 @@ async fn capabilities_handler(
 ) -> Result<Json<Capabilities>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
     Ok(Json(Capabilities {
+        bridge_api_version: BRIDGE_API_VERSION,
+        bridge_version: env!("CARGO_PKG_VERSION"),
+        herdr_version: state.herdr_version.clone(),
+        terminal_protocol: state.terminal_protocol,
+        configured_label: state.configured_label.clone(),
+        features: CAPABILITY_FEATURES,
         commands: ALLOWED_COMMANDS,
+        web_compat: WEB_COMPAT_VERSION,
         agent_activity: AgentActivityCapability { version: 1 },
         agent_pins: AgentPinsCapability { version: 1 },
         launcher_presets: LauncherPresetsCapability { version: 1 },
@@ -5286,7 +5367,13 @@ mod tests {
 
     #[test]
     fn request_gate_rejects_dns_rebinding_hosts() {
-        let policy = test_policy("0.0.0.0", 4000);
+        let policy = RequestPolicy {
+            bind_host: "0.0.0.0".to_string(),
+            bind_port: 4000,
+            allowed_hosts: vec!["192.168.1.10".to_string()],
+            allowed_origins: vec!["http://192.168.1.10:4000".to_string()],
+            allowed_connect_sources: Vec::new(),
+        };
         assert!(!request_allowed(
             &origin_headers("evil.example:4000", Some("http://evil.example:4000")),
             &policy
@@ -5323,7 +5410,7 @@ mod tests {
         let policy = RequestPolicy {
             bind_host: "0.0.0.0".to_string(),
             bind_port: 4000,
-            allowed_hosts: Vec::new(),
+            allowed_hosts: vec!["192.168.1.10".to_string()],
             allowed_origins: vec!["http://localhost".to_string()],
             allowed_connect_sources: Vec::new(),
         };
@@ -5378,7 +5465,13 @@ mod tests {
         assert!(host_authority_allowed("127.0.0.1:8787", &loopback));
         assert!(!host_authority_allowed("127.0.0.2:8787", &loopback));
 
-        let lan = test_policy("0.0.0.0", 4000);
+        let lan = RequestPolicy {
+            bind_host: "0.0.0.0".to_string(),
+            bind_port: 4000,
+            allowed_hosts: vec!["192.168.1.10".to_string()],
+            allowed_origins: vec!["http://192.168.1.10:4000".to_string()],
+            allowed_connect_sources: Vec::new(),
+        };
         assert!(host_authority_allowed("192.168.1.10:4000", &lan));
         assert!(host_authority_allowed("[::1]:5173", &lan));
         assert!(!host_authority_allowed("evil.example:4000", &lan));
@@ -5404,7 +5497,7 @@ mod tests {
         let policy = RequestPolicy {
             bind_host: "0.0.0.0".to_string(),
             bind_port: 4000,
-            allowed_hosts: Vec::new(),
+            allowed_hosts: vec!["192.168.1.10".to_string()],
             allowed_origins: vec!["http://localhost".to_string()],
             allowed_connect_sources: Vec::new(),
         };
@@ -6174,7 +6267,41 @@ mod tests {
         assert!(help.contains("herdr-web-bridge"));
         assert!(help.contains("Usage: herdr-web-bridge"));
         assert!(help.contains("--session NAME"));
+        assert!(help.contains("terminal-equivalent access"));
+        assert!(help.contains("not authentication"));
         assert!(!help.contains("herdr web-bridge"));
+    }
+
+    #[test]
+    fn non_loopback_options_require_explicit_host_and_origin() {
+        let host_only = vec!["--host".to_string(), "0.0.0.0".to_string()];
+        assert!(parse_options(&host_only)
+            .unwrap_err()
+            .contains("--allow-host"));
+
+        let without_origin = vec![
+            "--host".to_string(),
+            "0.0.0.0".to_string(),
+            "--allow-host".to_string(),
+            "192.168.1.10".to_string(),
+        ];
+        assert!(parse_options(&without_origin)
+            .unwrap_err()
+            .contains("--allow-origin"));
+
+        let explicit = vec![
+            "--host".to_string(),
+            "0.0.0.0".to_string(),
+            "--allow-host".to_string(),
+            "192.168.1.10".to_string(),
+            "--allow-origin".to_string(),
+            "http://192.168.1.10:4000".to_string(),
+            "--bridge-label".to_string(),
+            "Build host".to_string(),
+        ];
+        let options = parse_options(&explicit).unwrap().unwrap();
+        assert_eq!(options.allowed_hosts, vec!["192.168.1.10"]);
+        assert_eq!(options.configured_label.as_deref(), Some("Build host"));
     }
 
     #[test]

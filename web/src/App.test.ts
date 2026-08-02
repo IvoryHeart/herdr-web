@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   areAllVisibleSidebarGroupsCollapsed,
   agentSubtitle,
-  applySnapshotOverlays,
   buildCombinedTabWorkspaceGroups,
   buildScopedAgentGroups,
   buildVisibleAgentPaneEntries,
@@ -37,10 +36,9 @@ import {
   shouldShowLastStatusChangeSort,
   sidebarGroupCollapseKey,
   sortScopedAgentPanes,
-  stableBridgeRefreshOffsetMs,
   updateCollapsedSidebarGroups,
 } from "./App";
-import type { BridgeConnectionRef, BridgeConnectionView } from "./App";
+import type { BridgeConnectionView } from "./App";
 import type { BridgeRuntime } from "./bridge";
 import { agentActivityKey } from "./agentActivity";
 import {
@@ -48,6 +46,11 @@ import {
   isConnectionResultCurrent,
 } from "./connectionState";
 import type { AgentStatus, PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "./types";
+import {
+  applySnapshotOverlays,
+  stableBridgeRefreshOffsetMs,
+} from "./runtimeConnection";
+import type { BridgeConnectionRef } from "./runtimeConnection";
 import { notesForPane } from "./notes";
 import type { PaneNote } from "./notes";
 
@@ -68,6 +71,7 @@ describe("App connection guards", () => {
       ],
     );
     const ref: BridgeConnectionRef = {
+      profileConnectionKey: "bridge-a",
       connectionKey: "bridge-a",
       snapshot: data,
       activityGeneration: 1,
@@ -77,6 +81,8 @@ describe("App connection guards", () => {
         paneId: "pane-b",
         expiresAtMs: Date.now() + 2000,
       },
+      recoveryRequired: false,
+      awaitingCapabilityHandshake: false,
     };
 
     expect(
@@ -967,30 +973,45 @@ describe("App multi-bridge helpers", () => {
   });
 
   it("shows pin actions even when pane commands are not ready", () => {
-    expect(menuItems("pane", false, false, true, false)).toEqual([
+    const noActions = { rename: false, close: false, newTab: false, move: false };
+    expect(menuItems("pane", noActions, true, false)).toEqual([
       { key: "pin", label: "Pin pane" },
     ]);
-    expect(menuItems("pane", false, false, true, true)).toEqual([
+    expect(menuItems("pane", noActions, true, true)).toEqual([
       { key: "unpin", label: "Unpin pane" },
     ]);
-    expect(menuItems("pane", false, false, true, false, "agent")).toEqual([
+    expect(menuItems("pane", noActions, true, false, "agent")).toEqual([
       { key: "pin", label: "Pin agent" },
     ]);
-    expect(menuItems("pane", false, false, true, true, "agent")).toEqual([
+    expect(menuItems("pane", noActions, true, true, "agent")).toEqual([
       { key: "unpin", label: "Unpin agent" },
     ]);
   });
 
   it("shows add-note actions only for eligible pane menus", () => {
-    expect(menuItems("pane", false, false, false, false, "pane", true)).toEqual([
+    const noActions = { rename: false, close: false, newTab: false, move: false };
+    expect(menuItems("pane", noActions, false, false, "pane", true)).toEqual([
       { key: "add_note", label: "Add note" },
     ]);
-    expect(menuItems("pane", false, false, true, false, "agent", true)).toEqual([
+    expect(menuItems("pane", noActions, true, false, "agent", true)).toEqual([
       { key: "pin", label: "Pin agent" },
       { key: "add_note", label: "Add note" },
     ]);
-    expect(menuItems("space", false, false, false, false, "pane", true)).toEqual([]);
-    expect(menuItems("tab", false, false, false, false, "pane", true)).toEqual([]);
+    expect(menuItems("space", noActions, false, false, "pane", true)).toEqual([]);
+    expect(menuItems("tab", noActions, false, false, "pane", true)).toEqual([]);
+  });
+
+  it("exposes only individually advertised structural menu actions", () => {
+    expect(
+      menuItems("space", { rename: true, close: false, newTab: false, move: false }),
+    ).toEqual([{ key: "rename", label: "Rename" }]);
+    expect(
+      menuItems("pane", { rename: false, close: true, newTab: false, move: true }),
+    ).toEqual([
+      { key: "move_new_tab", label: "Move to new tab" },
+      { key: "move_new_space", label: "Move to new space" },
+      { key: "close", label: "Close pane", danger: true },
+    ]);
   });
 
   it("requires a current note-capable pane before showing add-note", () => {
@@ -1796,6 +1817,8 @@ function bridgeView(bridgeId: string, snapshot: Snapshot): BridgeConnectionView 
     runtime: bridgeRuntime(bridgeId),
     snapshot,
     loadState: "ready",
+    connectionState: "compatible",
+    surfaceError: null,
   };
 }
 
@@ -1841,6 +1864,8 @@ function bridgeRuntime(bridgeId: string): BridgeRuntime {
     color: "#89b4fa",
     backend: null,
     connectionKey: bridgeId,
+    capabilityGeneration: 0,
+    generationKey: `${bridgeId}:capability:0`,
     resumeToken: 0,
     capabilities: null,
     capabilityState: "ready",
@@ -1912,7 +1937,7 @@ function notesState(
 ) {
   return {
     [bridgeId]: {
-      connectionKey: bridgeId,
+      connectionKey: `${bridgeId}:capability:0`,
       response: {
         store_id: storeId,
         session_key: sessionKey,

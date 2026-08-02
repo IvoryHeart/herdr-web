@@ -57,6 +57,14 @@ type Props = {
   resumeToken: number;
   httpUrl: (path: string, query?: URLSearchParams) => string;
   wsUrl: (path: string, query?: URLSearchParams) => string;
+  /** Whether terminal input frames are admitted for this host generation. */
+  inputEnabled?: boolean;
+  /** Whether terminal resize frames are admitted for this host generation. */
+  resizeEnabled?: boolean;
+  /** Whether terminal scroll frames are admitted for this host generation. */
+  scrollEnabled?: boolean;
+  /** Whether upload-and-insert is admitted for this host generation. */
+  uploadEnabled?: boolean;
   /** Whether to grab keyboard focus on attach. Off on mobile to avoid popping the keyboard. */
   autoFocus?: boolean;
   /** Wheel scroll speed multiplier; slower on desktop, faster on mobile. */
@@ -133,6 +141,10 @@ export function TerminalView({
   resumeToken,
   httpUrl,
   wsUrl,
+  inputEnabled = true,
+  resizeEnabled = true,
+  scrollEnabled = true,
+  uploadEnabled = true,
   autoFocus = true,
   scrollSensitivity = 1,
   mobileControls = false,
@@ -201,7 +213,15 @@ export function TerminalView({
   );
   mobileTouchSelectionEndpointTimeoutMsRef.current = mobileTouchSelectionEndpointTimeoutMs;
   const terminalInputTransportRef = useRef(terminalInputTransport);
+  const inputEnabledRef = useRef(inputEnabled);
+  const resizeEnabledRef = useRef(resizeEnabled);
+  const scrollEnabledRef = useRef(scrollEnabled);
+  const uploadEnabledRef = useRef(uploadEnabled);
   terminalInputTransportRef.current = terminalInputTransport;
+  inputEnabledRef.current = inputEnabled;
+  resizeEnabledRef.current = resizeEnabled;
+  scrollEnabledRef.current = scrollEnabled;
+  uploadEnabledRef.current = uploadEnabled;
   const terminalInputBatchDelayMsRef = useRef(terminalInputBatchDelayMs);
   terminalInputBatchDelayMsRef.current = terminalInputBatchDelayMs;
   connectionKeyRef.current = connectionKey;
@@ -328,6 +348,9 @@ export function TerminalView({
 
   const sendTerminalInputFrame = useCallback(
     (socket: WebSocket, data: string) => {
+      if (!inputEnabledRef.current) {
+        return;
+      }
       if (terminalInputTransportRef.current === "binary") {
         const encoded = terminalInputEncoderRef.current.encode(data);
         socket.send(encoded);
@@ -362,7 +385,7 @@ export function TerminalView({
     const flush = () => {
       inputFlushTimerRef.current = null;
       const socket = socketRef.current;
-      if (socket?.readyState !== WebSocket.OPEN) {
+      if (!inputEnabledRef.current || socket?.readyState !== WebSocket.OPEN) {
         return;
       }
       const next = inputQueueRef.current.shift();
@@ -384,7 +407,7 @@ export function TerminalView({
       return;
     }
     const socket = socketRef.current;
-    if (socket?.readyState !== WebSocket.OPEN) {
+    if (!inputEnabledRef.current || socket?.readyState !== WebSocket.OPEN) {
       return;
     }
     const drained = drainTerminalInputBatch(pending);
@@ -402,6 +425,9 @@ export function TerminalView({
 
   const sendTerminalInputData = useCallback(
     (data: string) => {
+      if (!inputEnabledRef.current) {
+        return;
+      }
       const socket = socketRef.current;
       if (socket?.readyState !== WebSocket.OPEN) {
         return;
@@ -522,12 +548,18 @@ export function TerminalView({
           mobileTouchSelectionEndpointTimeoutMsRef.current,
         );
 
-        disposeInput = renderer.onInput((data) => {
-          sendTerminalInputData(data);
-        });
+        disposeInput = inputEnabledRef.current
+          ? renderer.onInput((data) => {
+              sendTerminalInputData(data);
+            })
+          : null;
         disposeScroll = renderer.onScroll((lines) => {
           const socket = socketRef.current;
-          if (socket?.readyState !== WebSocket.OPEN || lines === 0) {
+          if (
+            !scrollEnabledRef.current ||
+            socket?.readyState !== WebSocket.OPEN ||
+            lines === 0
+          ) {
             return;
           }
           socket.send(
@@ -660,7 +692,7 @@ export function TerminalView({
     };
 
     const sendResize = (size: TerminalSize) => {
-      if (socket?.readyState === WebSocket.OPEN) {
+      if (resizeEnabledRef.current && socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
       }
     };
@@ -1112,7 +1144,8 @@ export function TerminalView({
   const sendTerminalInput = (data: string) => {
     sendTerminalInputData(data);
   };
-  const uploadDisabled = !pane || uploading;
+  const uploadDisabled =
+    !pane || !uploadEnabledRef.current || !inputEnabledRef.current || uploading;
 
   const closeMobileSelectionActions = () => {
     setMobileSelectionAction(null);
@@ -1171,6 +1204,10 @@ export function TerminalView({
       }
       return;
     }
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     if (uploadInFlightRef.current) {
       showUploadStatus("Upload already in progress", 2500);
       return;
@@ -1179,6 +1216,11 @@ export function TerminalView({
     setUploading(true);
     const uploadConnectionKey = connectionKey;
     const uploadTerminalId = pane.terminal_id;
+    const uploadStillAdmitted = () =>
+      uploadEnabledRef.current &&
+      inputEnabledRef.current &&
+      connectionKeyRef.current === uploadConnectionKey &&
+      terminalIdRef.current === uploadTerminalId;
     const uploadFiles = files.slice(0, MAX_UPLOAD_FILES);
     const skippedCount = files.length - uploadFiles.length;
     showUploadStatus(
@@ -1189,7 +1231,14 @@ export function TerminalView({
     try {
       const uploaded: UploadedFile[] = [];
       for (const file of uploadFiles) {
-        uploaded.push(await uploadWithOverwritePrompt(httpUrl, file, confirmUploadReplace));
+        uploaded.push(
+          await uploadWithOverwritePrompt(
+            httpUrl,
+            file,
+            confirmUploadReplace,
+            uploadStillAdmitted,
+          ),
+        );
       }
       if (
         connectionKeyRef.current !== uploadConnectionKey ||
@@ -1226,6 +1275,10 @@ export function TerminalView({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     void uploadAndInsert(files);
   };
 
@@ -1236,6 +1289,10 @@ export function TerminalView({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!uploadEnabledRef.current || !inputEnabledRef.current) {
+      showUploadStatus("File upload is unavailable for this host", 3000);
+      return;
+    }
     void uploadAndInsert(files);
   };
 
@@ -1251,6 +1308,10 @@ export function TerminalView({
   };
 
   const enqueueTerminalInput = (parts: string[]) => {
+    if (!inputEnabledRef.current) {
+      showUploadStatus("Terminal input is unavailable for this host", 2500);
+      return false;
+    }
     if (terminalInputBlockedRef.current) {
       showUploadStatus("Terminal detached", 2500);
       return false;
@@ -1272,6 +1333,7 @@ export function TerminalView({
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
+          event.dataTransfer.dropEffect = uploadDisabled ? "none" : "copy";
         }
       }}
       onDropCapture={handleDrop}
@@ -1282,6 +1344,7 @@ export function TerminalView({
         ref={fileInputRef}
         className="terminal-file-input"
         id={uploadInputId}
+        aria-label="Upload file"
         type="file"
         multiple
         disabled={uploadDisabled}
@@ -1313,7 +1376,7 @@ export function TerminalView({
       {mobileControls ? (
         <MobileTerminalControls
           commandInputRef={mobileCommandInputRef}
-          disabled={!pane || connectionState !== "attached"}
+          disabled={!pane || !inputEnabled || connectionState !== "attached"}
           uploadDisabled={uploadDisabled}
           expandingInput={mobileCommandExpandingInput}
           enterNewline={mobileCommandEnterNewline}
@@ -1808,9 +1871,10 @@ async function uploadWithOverwritePrompt(
   httpUrl: (path: string, query?: URLSearchParams) => string,
   file: UploadCandidate,
   confirmReplace: (error: UploadConflictError) => Promise<boolean>,
+  isAdmitted: () => boolean,
 ): Promise<UploadedFile> {
   try {
-    return await uploadFile(httpUrl, file, false);
+    return await uploadFile(httpUrl, file, false, isAdmitted);
   } catch (error) {
     if (!(error instanceof UploadConflictError)) {
       throw error;
@@ -1819,7 +1883,7 @@ async function uploadWithOverwritePrompt(
     if (!replace) {
       throw new Error("Upload canceled");
     }
-    return uploadFile(httpUrl, file, true);
+    return uploadFile(httpUrl, file, true, isAdmitted);
   }
 }
 
@@ -1833,7 +1897,11 @@ async function uploadFile(
   httpUrl: (path: string, query?: URLSearchParams) => string,
   file: UploadCandidate,
   overwrite: boolean,
+  isAdmitted: () => boolean,
 ): Promise<UploadedFile> {
+  if (!isAdmitted()) {
+    throw new Error("File upload is unavailable for this host");
+  }
   const params = new URLSearchParams();
   if (file.name) {
     params.set("name", file.name);
