@@ -11,7 +11,7 @@ import {
   Server,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
@@ -175,6 +175,29 @@ function WorldSidebar({
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
 }) {
+  const pointerSequenceRef = useRef<{ key: string; at: number } | null>(null);
+  const inspectOrActivate = (
+    key: string,
+    detail: number,
+    activate?: (key: string) => void,
+  ) => {
+    if (detail === 0) {
+      pointerSequenceRef.current = null;
+      context.onSelect(key);
+      return;
+    }
+    const now = window.performance.now();
+    const prior = pointerSequenceRef.current;
+    const isSecondClick = prior?.key === key
+      && (detail === 2 || now - prior.at <= 500);
+    context.onSelect(key);
+    if (isSecondClick) {
+      pointerSequenceRef.current = null;
+      activate?.(key);
+      return;
+    }
+    pointerSequenceRef.current = { key, at: now };
+  };
   const selected = selectedEntity(context.projection, context.selectedKey);
   const semanticEntries = projection.roomRoster.flatMap((room) => [
     { kind: "room" as const, roomKey: room.key },
@@ -315,7 +338,7 @@ function WorldSidebar({
                 (entry) => entry.desk.roomKey === room.key && pageDeskKeys.has(entry.desk.key),
               )}
               selectedKey={context.selectedKey}
-              onSelect={context.onSelect}
+              onPointerGesture={inspectOrActivate}
               onActivateAgent={onActivateAgent}
               onActivateRoom={onActivateRoom}
             />
@@ -351,7 +374,7 @@ function WorldRoomGroup({
   desks,
   agents,
   selectedKey,
-  onSelect,
+  onPointerGesture,
   onActivateAgent,
   onActivateRoom,
 }: {
@@ -360,39 +383,14 @@ function WorldRoomGroup({
   desks: OfficeDeskRosterEntry[];
   agents: OfficeRosterEntry[];
   selectedKey: string | null;
-  onSelect: (key: string) => void;
-  onActivateAgent: (key: string) => void;
-  onActivateRoom: (key: string) => void;
-}) {
-  const pendingInspectionRef = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (pendingInspectionRef.current !== null) {
-      window.clearTimeout(pendingInspectionRef.current);
-    }
-  }, []);
-  const inspectOrActivate = (
+  onPointerGesture: (
     key: string,
     detail: number,
     activate?: (key: string) => void,
-  ) => {
-    if (pendingInspectionRef.current !== null) {
-      window.clearTimeout(pendingInspectionRef.current);
-      pendingInspectionRef.current = null;
-    }
-    if (detail === 2) {
-      onSelect(key);
-      activate?.(key);
-      return;
-    }
-    if (detail === 0) {
-      onSelect(key);
-      return;
-    }
-    pendingInspectionRef.current = window.setTimeout(() => {
-      pendingInspectionRef.current = null;
-      onSelect(key);
-    }, 220);
-  };
+  ) => void;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
+}) {
   return (
     <div className="world-roster-group" data-stale={room.stale ? "true" : "false"}>
       <button
@@ -400,7 +398,7 @@ function WorldRoomGroup({
         className="world-room-row"
         data-selected={selectedKey === room.key ? "true" : "false"}
         onClick={(event) => {
-          inspectOrActivate(room.key, event.detail, onActivateRoom);
+          onPointerGesture(room.key, event.detail, onActivateRoom);
         }}
         title="Double-click to open this space in Spaces"
         aria-label={`${room.displayLabel}, ${host?.displayLabel ?? room.hostLabel}, ${room.stale ? "stale" : "live"}`}
@@ -424,7 +422,7 @@ function WorldRoomGroup({
           type="button"
           className="world-desk-row"
           data-selected={selectedKey === desk.key ? "true" : "false"}
-          onClick={(event) => inspectOrActivate(desk.key, event.detail)}
+          onClick={(event) => onPointerGesture(desk.key, event.detail)}
           title="Select this tab desk"
         >
           <span className="world-desk-icon" aria-hidden="true">▰</span>
@@ -450,7 +448,7 @@ function WorldRoomGroup({
             data-stale={agent.stale ? "true" : "false"}
             data-selected={selectedKey === agent.key ? "true" : "false"}
             onClick={(event) => {
-              inspectOrActivate(agent.key, event.detail, onActivateAgent);
+              onPointerGesture(agent.key, event.detail, onActivateAgent);
             }}
             title="Double-click to open this agent in Spaces"
           >

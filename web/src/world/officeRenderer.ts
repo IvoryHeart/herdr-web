@@ -38,6 +38,27 @@ const CHARACTER_URLS = Array.from(
   (_, index) => `/world/characters/${index + 1}-D-1.png`,
 );
 
+const pointerSequences = new WeakMap<
+  (key: string) => void,
+  {
+    key: string;
+    at: number;
+    x: number;
+    y: number;
+    activate?: (key: string) => void;
+  }
+>();
+const canvasActivationCandidates = new WeakMap<
+  (key: string) => void,
+  {
+    key: string;
+    at: number;
+    x: number;
+    y: number;
+    activate: (key: string) => void;
+  }
+>();
+
 const THEMES = Object.freeze([
   { floorA: 0x0c1620, floorB: 0x0a121c, wall: 0x1e3050, accent: 0x4aa3d8 },
   { floorA: 0x120c20, floorB: 0x100a1e, wall: 0x34215a, accent: 0x9a6bd1 },
@@ -186,6 +207,24 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
+  const onCanvasDoubleClick = (event: MouseEvent) => {
+    const prior = canvasActivationCandidates.get(select);
+    if (!prior) {
+      return;
+    }
+    const closeToFirstClick = Math.hypot(
+      event.offsetX - prior.x,
+      event.offsetY - prior.y,
+    ) <= 12;
+    const current = window.performance.now() - prior.at <= 1_000;
+    pointerSequences.delete(select);
+    canvasActivationCandidates.delete(select);
+    if (closeToFirstClick && current) {
+      prior.activate(prior.key);
+    }
+  };
+  app.canvas.addEventListener("dblclick", onCanvasDoubleClick);
+  diagnostics.activeListeners += 1;
 
   const renderScene = (layout: OfficeLayout, force = false) => {
     if (disposed) {
@@ -368,6 +407,9 @@ export async function createOfficeRenderer(
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
+    app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
+    pointerSequences.delete(select);
+    canvasActivationCandidates.delete(select);
     app.ticker.remove(ticker);
     app.destroy(true, { children: true });
     destroyTextures(textures);
@@ -376,7 +418,7 @@ export async function createOfficeRenderer(
     diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
     diagnostics.activeListeners = Math.max(
       0,
-      diagnostics.activeListeners - (scrollElement ? 2 : 1),
+      diagnostics.activeListeners - (scrollElement ? 3 : 2),
     );
     throw error;
   }
@@ -398,6 +440,9 @@ export async function createOfficeRenderer(
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
+      app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
+      pointerSequences.delete(select);
+      canvasActivationCandidates.delete(select);
       app.ticker.remove(ticker);
       app.destroy(true, { children: true });
       destroyTextures(textures);
@@ -410,7 +455,7 @@ export async function createOfficeRenderer(
       diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
       diagnostics.activeListeners = Math.max(
         0,
-        diagnostics.activeListeners - (scrollElement ? 2 : 1),
+        diagnostics.activeListeners - (scrollElement ? 3 : 2),
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
@@ -1140,27 +1185,44 @@ function makeInteractive(
   onSelect: (key: string) => void,
   onActivate?: (key: string) => void,
 ) {
-  let pendingInspection: number | null = null;
   node.eventMode = "static";
   node.cursor = "pointer";
   node.on("pointertap", (event) => {
-    if (pendingInspection !== null) {
-      window.clearTimeout(pendingInspection);
-      pendingInspection = null;
-    }
-    if (event.detail === 2) {
+    event.stopPropagation();
+    if (event.detail === 0) {
+      pointerSequences.delete(onSelect);
+      canvasActivationCandidates.delete(onSelect);
       onSelect(key);
+      return;
+    }
+    const now = window.performance.now();
+    const prior = pointerSequences.get(onSelect);
+    const isSecondClick = prior?.key === key
+      && (event.detail === 2 || now - prior.at <= 500);
+    onSelect(key);
+    if (isSecondClick) {
+      pointerSequences.delete(onSelect);
+      canvasActivationCandidates.delete(onSelect);
       onActivate?.(key);
       return;
     }
-    if (event.detail === 0) {
-      onSelect(key);
-      return;
+    pointerSequences.set(onSelect, {
+      key,
+      at: now,
+      x: event.global.x,
+      y: event.global.y,
+      activate: onActivate,
+    });
+    const candidate = canvasActivationCandidates.get(onSelect);
+    if (onActivate && (!candidate || now - candidate.at > 1_000)) {
+      canvasActivationCandidates.set(onSelect, {
+        key,
+        at: now,
+        x: event.global.x,
+        y: event.global.y,
+        activate: onActivate,
+      });
     }
-    pendingInspection = window.setTimeout(() => {
-      pendingInspection = null;
-      onSelect(key);
-    }, 220);
   });
 }
 

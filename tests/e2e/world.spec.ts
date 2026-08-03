@@ -135,7 +135,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     activeApplications: 1,
     activeTickers: 1,
     activeObservers: 1,
-    activeListeners: 2,
+    activeListeners: 3,
     canvases: 1,
     ready: true,
   });
@@ -267,7 +267,12 @@ test("keeps single-click and empty-desk gestures read-only, then opens a canvas 
     }),
   ).toBeVisible();
 
-  await page.locator(".world-room-row").first().click();
+  const firstRoom = page.locator(".world-room-row").first();
+  await firstRoom.click();
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  }));
+  expect(await firstRoom.getAttribute("data-selected")).toBe("true");
   await expect(page.getByText("Herdr workspace room", { exact: true })).toBeVisible();
   await page.waitForTimeout(600);
   await page.locator(".world-desk-row").first().dblclick();
