@@ -9,6 +9,7 @@
 - Added exact double-click shortcuts for current Pixel Office rooms and agents across the canvas
   and semantic roster. Direct double-click works without prior selection and reuses the guarded
   Spaces handoff while retaining single-click inspection and accessible inspector controls.
+  [PR #3](https://github.com/IvoryHeart/herdr-web/pull/3)
 - Added an integrated Herdr World primary view with a deterministic Pixel Office projection of
   shared federated snapshots, live host coverage and filters, a qualified roster and inspector,
   bounded overflow and stale-host handling, responsive and accessible fallbacks, and exact
@@ -34,6 +35,7 @@
   conference tables; and `idle` and `done` agents move to the shared Agent Bar. The reception floor
   retains one uncrowned user/CEO, reserves unused width for future displays, and gives CEO,
   reception, occupied, and empty desks visible chairs.
+  [PR #3](https://github.com/IvoryHeart/herdr-web/pull/3)
 - Established one persistent Herdr client frame and federated runtime above the `Spaces | World`
   view boundary. `/world` is addressable browser state inside that frame, while Spaces retains its
   delivered sidebar, terminal, split, Notes, and operational behavior.
