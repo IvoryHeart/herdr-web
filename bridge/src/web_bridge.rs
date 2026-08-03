@@ -61,8 +61,8 @@ const DEFAULT_PORT: u16 = 8787;
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_STATIC_DIR: &str = "web/dist";
-const MIN_HERDR_VERSION: (u64, u64, u64) = (0, 7, 5);
-const MIN_HERDR_VERSION_LABEL: &str = "0.7.5";
+const MIN_HERDR_VERSION: (u64, u64, u64) = (0, 8, 0);
+const MIN_HERDR_VERSION_LABEL: &str = "0.8.0";
 const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
 const MAX_NOTES_REQUEST_BYTES: usize = 512 * 1024;
 const MAX_TERMINAL_INPUT_CHUNK_BYTES: usize = 768 * 1024;
@@ -3909,6 +3909,7 @@ fn structural_event_subscriptions() -> Vec<Subscription> {
         Subscription::WorkspaceUpdated {},
         Subscription::WorkspaceRenamed {},
         Subscription::WorkspaceMoved {},
+        Subscription::WorkspaceReordered {},
         Subscription::WorkspaceClosed {},
         Subscription::WorkspaceFocused {},
         Subscription::WorktreeCreated {},
@@ -4223,6 +4224,7 @@ fn open_terminal_attach(
                 | ServerMessage::WindowTitle { .. }
                 | ServerMessage::ReloadSoundConfig
                 | ServerMessage::MouseCapture { .. }
+                | ServerMessage::KittyKeyboardReportAll { .. }
                 | ServerMessage::PrefixInputSource { .. }
                 | ServerMessage::Frame(_)
                 | ServerMessage::Graphics { .. } => {}
@@ -4935,6 +4937,7 @@ mod tests {
         assert!(!ALLOWED_COMMANDS.contains(&"server.stop"));
         assert!(!ALLOWED_COMMANDS.contains(&"pane.send_keys"));
         assert!(!ALLOWED_COMMANDS.contains(&"pane.send_input"));
+        assert!(!ALLOWED_COMMANDS.contains(&"workspace.move_block"));
         // pane.split is intentionally allowed so the web client can create splits.
         assert!(ALLOWED_COMMANDS.contains(&"pane.split"));
         assert!(ALLOWED_COMMANDS.contains(&"pane.focus_direction"));
@@ -5065,6 +5068,9 @@ mod tests {
             .any(|subscription| matches!(subscription, Subscription::WorkspaceMoved {})));
         assert!(subscriptions
             .iter()
+            .any(|subscription| matches!(subscription, Subscription::WorkspaceReordered {})));
+        assert!(subscriptions
+            .iter()
             .any(|subscription| matches!(subscription, Subscription::TabMoved {})));
         assert!(!subscriptions.iter().any(|subscription| matches!(
             subscription,
@@ -5120,7 +5126,7 @@ mod tests {
 
     fn test_session_snapshot() -> SessionSnapshot {
         SessionSnapshot {
-            version: "0.7.5".to_string(),
+            version: "0.8.0".to_string(),
             protocol: PROTOCOL_VERSION,
             focused_workspace_id: Some("workspace-1".to_string()),
             focused_tab_id: Some("tab-1".to_string()),
@@ -5746,7 +5752,7 @@ mod tests {
     #[test]
     fn daemon_status_accepts_minimum_version_and_exact_protocol() {
         assert_eq!(
-            validated_daemon_protocol(runtime_status("0.7.5", PROTOCOL_VERSION)).unwrap(),
+            validated_daemon_protocol(runtime_status("0.8.0", PROTOCOL_VERSION)).unwrap(),
             PROTOCOL_VERSION
         );
         assert_eq!(
@@ -5774,11 +5780,11 @@ mod tests {
             .contains("invalid version"));
 
         for version in [
-            "0.7.5-preview",
-            "0.7.5.1",
-            "0.7.5+",
-            "0.7.5+bad_meta",
-            "0.07.5",
+            "0.8.0-preview",
+            "0.8.0.1",
+            "0.8.0+",
+            "0.8.0+bad_meta",
+            "0.08.0",
         ] {
             let error = validated_daemon_protocol(runtime_status(version, PROTOCOL_VERSION))
                 .unwrap_err()
@@ -5792,7 +5798,7 @@ mod tests {
 
     #[test]
     fn daemon_status_accepts_version_prefix_and_build_metadata() {
-        for version in ["v0.7.5", "0.7.5+linux-x86-64"] {
+        for version in ["v0.8.0", "0.8.0+linux-x86-64"] {
             assert_eq!(
                 validated_daemon_protocol(runtime_status(version, PROTOCOL_VERSION)).unwrap(),
                 PROTOCOL_VERSION
@@ -5801,8 +5807,8 @@ mod tests {
     }
 
     #[test]
-    fn daemon_status_rejects_version_before_0_7_5() {
-        let error = validated_daemon_protocol(runtime_status("0.7.4", PROTOCOL_VERSION))
+    fn daemon_status_rejects_version_before_0_8_0() {
+        let error = validated_daemon_protocol(runtime_status("0.7.5", PROTOCOL_VERSION))
             .unwrap_err()
             .to_string();
         assert!(error.contains("too old"));
@@ -5824,7 +5830,7 @@ mod tests {
 
     #[test]
     fn daemon_status_rejects_any_other_protocol() {
-        let older = validated_daemon_protocol(runtime_status("0.7.5", PROTOCOL_VERSION - 1))
+        let older = validated_daemon_protocol(runtime_status("0.8.0", PROTOCOL_VERSION - 1))
             .unwrap_err()
             .to_string();
         assert!(older.contains("incompatible"));

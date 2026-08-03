@@ -4,6 +4,10 @@
 
 ### Breaking Changes
 
+- Herdr `v0.8.0` or newer with terminal protocol exactly `19` is now required. The bridge rejects
+  the previous protocol `17` baseline and other unreviewed protocols instead of attempting a
+  backward-compatible wire fallback.
+
 ### Added
 
 - Added persistent expand/collapse controls to grouped Agents, Tabs, and Spaces headers, including
@@ -16,6 +20,10 @@
 
 ### Changed
 
+- Refreshed the minimal vendored Herdr compatibility sources to the `v0.8.0`/protocol `19`
+  baseline, including the current API schemas, terminal wire definitions, and input model shims.
+- Follow Herdr's canonical workspace order when atomic worktree groups are reordered. The browser
+  observes these changes but does not expose workspace reordering controls.
 - Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group
   headers and move host context into each detail row. Host + workspace grouping keeps its nested
   host and workspace headers. [PR #47](https://github.com/kcosr/herdr-web/pull/47)
