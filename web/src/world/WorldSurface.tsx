@@ -11,16 +11,21 @@ import {
   Server,
   Users,
 } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   HerdrOfficeProjection,
+  OfficeDeskRosterEntry,
   OfficeHost,
   OfficeRoomRosterEntry,
   OfficeRosterEntry,
 } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
+import {
+  officeAgentHandoffRequest,
+  officeRoomHandoffRequest,
+} from "./herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
 import { officeStateNotice } from "./worldState";
 
@@ -53,8 +58,10 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
     generatedAt: 0,
     hosts: [],
     rooms: [],
-    reviewAgents: [],
+    receptions: [],
+    barAgents: [],
     roomRoster: [],
+    deskRoster: [],
     roster: [],
     unresolved: [],
     coverage: {
@@ -66,21 +73,30 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
       incompatibleHosts: 0,
       disabledHosts: 0,
       observedWorkspaces: 0,
+      observedDesks: 0,
       observedAgents: 0,
       status: { working: 0, idle: 0, blocked: 0, done: 0, unknown: 0 },
       omittedRooms: 0,
-      omittedDeskAgents: 0,
-      omittedReceptionists: 0,
-      omittedReviewAgents: 0,
+      omittedDesks: 0,
+      omittedRoomAgents: 0,
+      omittedReceptionDesks: 0,
+      omittedWaitingAgents: 0,
+      omittedBarAgents: 0,
     },
     presentationBounds: {
       ...OFFICE_PRESENTATION_BOUNDS,
       totalRooms: 0,
       renderedRooms: 0,
-      totalReceptionists: 0,
-      renderedReceptionists: 0,
-      totalReviewAgents: 0,
-      renderedReviewAgents: 0,
+      totalDesks: 0,
+      renderedDesks: 0,
+      totalRoomAgents: 0,
+      renderedRoomAgents: 0,
+      totalReceptionDesks: 0,
+      renderedReceptionDesks: 0,
+      totalWaitingAgents: 0,
+      renderedWaitingAgents: 0,
+      totalBarAgents: 0,
+      renderedBarAgents: 0,
     },
   },
   availableHosts: [],
@@ -110,39 +126,80 @@ export default function WorldSurface({ slot, context }: SurfaceComponentProps) {
     ),
     [worldContext.projection, worldContext.statusFilter],
   );
+  const onActivateAgent = (key: string) => {
+    const agent = worldContext.projection.roster.find(
+      (entry) => entry.agent.key === key,
+    )?.agent;
+    if (!agent) {
+      return;
+    }
+    worldContext.onSelect(key);
+    worldContext.onOpenInSpaces(officeAgentHandoffRequest(agent));
+  };
+  const onActivateRoom = (key: string) => {
+    const room = worldContext.projection.roomRoster.find((entry) => entry.key === key);
+    if (!room) {
+      return;
+    }
+    worldContext.onSelect(key);
+    worldContext.onOpenInSpaces(officeRoomHandoffRequest(room));
+  };
   if (slot === "sidebar") {
-    return <WorldSidebar projection={projection} context={worldContext} />;
+    return (
+      <WorldSidebar
+        projection={projection}
+        context={worldContext}
+        onActivateAgent={onActivateAgent}
+        onActivateRoom={onActivateRoom}
+      />
+    );
   }
-  return <WorldStage projection={projection} context={worldContext} />;
+  return (
+    <WorldStage
+      projection={projection}
+      context={worldContext}
+      onActivateAgent={onActivateAgent}
+      onActivateRoom={onActivateRoom}
+    />
+  );
 }
 
 function WorldSidebar({
   projection,
   context,
+  onActivateAgent,
+  onActivateRoom,
 }: {
   projection: HerdrOfficeProjection;
   context: WorldSurfaceContext;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
 }) {
   const selected = selectedEntity(context.projection, context.selectedKey);
+  const semanticEntries = projection.roomRoster.flatMap((room) => [
+    { kind: "room" as const, roomKey: room.key },
+    ...projection.deskRoster
+      .filter(({ desk }) => desk.roomKey === room.key)
+      .map((entry) => ({ kind: "desk" as const, roomKey: room.key, entry })),
+    ...projection.roster
+      .filter((entry) => entry.roomKey === room.key)
+      .map((entry) => ({ kind: "agent" as const, roomKey: room.key, entry })),
+  ]);
   const pageCount = Math.max(
     1,
-    Math.ceil(projection.roster.length / OFFICE_PRESENTATION_BOUNDS.rosterPage),
+    Math.ceil(semanticEntries.length / OFFICE_PRESENTATION_BOUNDS.rosterPage),
   );
   const page = Math.min(context.rosterPage, pageCount - 1);
-  const pageAgentKeys = new Set(
-    projection.roster
-      .slice(
-        page * OFFICE_PRESENTATION_BOUNDS.rosterPage,
-        (page + 1) * OFFICE_PRESENTATION_BOUNDS.rosterPage,
-      )
-      .map(({ agent }) => agent.key),
+  const pageEntries = semanticEntries.slice(
+    page * OFFICE_PRESENTATION_BOUNDS.rosterPage,
+    (page + 1) * OFFICE_PRESENTATION_BOUNDS.rosterPage,
   );
-  const groupedRooms = projection.roomRoster.filter((room) => {
-    const hasAgents = projection.roster.some(
-      (entry) => entry.roomKey === room.key && pageAgentKeys.has(entry.agent.key),
-    );
-    return hasAgents || projection.roster.length <= OFFICE_PRESENTATION_BOUNDS.rosterPage;
-  });
+  const pageRoomKeys = new Set(pageEntries.map(({ roomKey }) => roomKey));
+  const pageDeskKeys = new Set(pageEntries.flatMap((entry) =>
+    entry.kind === "desk" ? [entry.entry.desk.key] : []));
+  const pageAgentKeys = new Set(pageEntries.flatMap((entry) =>
+    entry.kind === "agent" ? [entry.entry.agent.key] : []));
+  const groupedRooms = projection.roomRoster.filter(({ key }) => pageRoomKeys.has(key));
   const stateNotice = officeStateNotice(context.projection.coverage);
 
   return (
@@ -238,7 +295,7 @@ function WorldSidebar({
             <span className="world-kicker">complete semantic view</span>
             <h2 id="world-roster-heading">Roster</h2>
           </div>
-          <span className="world-count mono">{projection.roster.length}</span>
+          <span className="world-count mono">{semanticEntries.length}</span>
         </div>
         {groupedRooms.length === 0 ? (
           <div className="world-empty">
@@ -254,8 +311,13 @@ function WorldSidebar({
               agents={projection.roster.filter(
                 (entry) => entry.roomKey === room.key && pageAgentKeys.has(entry.agent.key),
               )}
+              desks={projection.deskRoster.filter(
+                (entry) => entry.desk.roomKey === room.key && pageDeskKeys.has(entry.desk.key),
+              )}
               selectedKey={context.selectedKey}
               onSelect={context.onSelect}
+              onActivateAgent={onActivateAgent}
+              onActivateRoom={onActivateRoom}
             />
           ))
         )}
@@ -286,23 +348,61 @@ function WorldSidebar({
 function WorldRoomGroup({
   room,
   host,
+  desks,
   agents,
   selectedKey,
   onSelect,
+  onActivateAgent,
+  onActivateRoom,
 }: {
   room: OfficeRoomRosterEntry;
   host: OfficeHost | null;
+  desks: OfficeDeskRosterEntry[];
   agents: OfficeRosterEntry[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
 }) {
+  const pendingInspectionRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (pendingInspectionRef.current !== null) {
+      window.clearTimeout(pendingInspectionRef.current);
+    }
+  }, []);
+  const inspectOrActivate = (
+    key: string,
+    detail: number,
+    activate?: (key: string) => void,
+  ) => {
+    if (pendingInspectionRef.current !== null) {
+      window.clearTimeout(pendingInspectionRef.current);
+      pendingInspectionRef.current = null;
+    }
+    if (detail === 2) {
+      onSelect(key);
+      activate?.(key);
+      return;
+    }
+    if (detail === 0) {
+      onSelect(key);
+      return;
+    }
+    pendingInspectionRef.current = window.setTimeout(() => {
+      pendingInspectionRef.current = null;
+      onSelect(key);
+    }, 220);
+  };
   return (
     <div className="world-roster-group" data-stale={room.stale ? "true" : "false"}>
       <button
         type="button"
         className="world-room-row"
         data-selected={selectedKey === room.key ? "true" : "false"}
-        onClick={() => onSelect(room.key)}
+        onClick={(event) => {
+          inspectOrActivate(room.key, event.detail, onActivateRoom);
+        }}
+        title="Double-click to open this space in Spaces"
         aria-label={`${room.displayLabel}, ${host?.displayLabel ?? room.hostLabel}, ${room.stale ? "stale" : "live"}`}
       >
         <span
@@ -316,12 +416,32 @@ function WorldRoomGroup({
             {host?.displayLabel ?? room.hostLabel} · {host?.deterministicSkin.badge ?? "HOST"}
           </small>
         </span>
-        <span className="mono">{agents.length}</span>
+        <span className="mono">{desks.length}d · {agents.length}a</span>
       </button>
-      {agents.length === 0 ? (
-        <div className="world-empty-room">No detected agents</div>
+      {desks.map(({ desk, presented }) => (
+        <button
+          key={desk.key}
+          type="button"
+          className="world-desk-row"
+          data-selected={selectedKey === desk.key ? "true" : "false"}
+          onClick={(event) => inspectOrActivate(desk.key, event.detail)}
+          title="Select this tab desk"
+        >
+          <span className="world-desk-icon" aria-hidden="true">▰</span>
+          <span>
+            <strong>{desk.displayLabel}</strong>
+            <small>
+              Tab {desk.order} · {desk.occupantAgentKey ? "occupied" : "empty"}
+              {!presented ? " · roster overflow" : ""}
+            </small>
+          </span>
+          <span className="world-placement" aria-hidden="true">desk</span>
+        </button>
+      ))}
+      {agents.length === 0 && desks.length === 0 ? (
+        <div className="world-empty-room">Continues on another roster page</div>
       ) : (
-        agents.map(({ agent, deskPresented, reviewPresented }) => (
+        agents.map(({ agent, destinationPresented }) => (
           <button
             key={agent.key}
             type="button"
@@ -329,18 +449,22 @@ function WorldRoomGroup({
             data-status={agent.semanticStatus}
             data-stale={agent.stale ? "true" : "false"}
             data-selected={selectedKey === agent.key ? "true" : "false"}
-            onClick={() => onSelect(agent.key)}
+            onClick={(event) => {
+              inspectOrActivate(agent.key, event.detail, onActivateAgent);
+            }}
+            title="Double-click to open this agent in Spaces"
           >
             <span className="world-status-dot" aria-hidden="true" />
             <span>
               <strong>{agent.displayLabel}</strong>
               <small>
                 {agent.stale ? "Stale · " : ""}{statusLabel(agent.semanticStatus)}
-                {!deskPresented && !reviewPresented ? " · roster overflow" : ""}
+                {` · ${placementLabel(agent.placement)}`}
+                {!destinationPresented ? " · roster overflow" : ""}
               </small>
             </span>
             <span className="world-placement" aria-hidden="true">
-              {agent.semanticStatus === "done" ? "review" : deskPresented ? "desk" : "+"}
+              {placementShortLabel(agent.placement)}
             </span>
           </button>
         ))
@@ -411,9 +535,13 @@ function WorldInspector({
 function WorldStage({
   projection,
   context,
+  onActivateAgent,
+  onActivateRoom,
 }: {
   projection: HerdrOfficeProjection;
   context: WorldSurfaceContext;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   return (
@@ -441,8 +569,8 @@ function WorldStage({
         <button
           className="icon-btn"
           type="button"
-          aria-label="Scroll to Done to Review"
-          title="Done to Review"
+          aria-label="Scroll to Agent Bar"
+          title="Agent Bar"
           onClick={() => scrollRef.current?.scrollTo({
             top: scrollRef.current.scrollHeight,
             behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -465,6 +593,7 @@ function WorldStage({
       <div className="world-stage-notice" role="status">
         <span><Server size={13} aria-hidden="true" /> {projection.coverage.observedHosts} observed hosts</span>
         <span><Users size={13} aria-hidden="true" /> {projection.coverage.observedAgents} detected agents</span>
+        <span>Double-click a room or agent to open it in Spaces, or use Inspector</span>
         {projection.coverage.staleHosts ? (
           <span className="world-notice-stale">
             <AlertTriangle size={13} aria-hidden="true" />
@@ -483,6 +612,8 @@ function WorldStage({
           projection={projection}
           selectedKey={context.selectedKey}
           onSelect={context.onSelect}
+          onActivateAgent={onActivateAgent}
+          onActivateRoom={onActivateRoom}
         />
       </div>
     </div>
@@ -507,7 +638,7 @@ function CoverageStat({
 }
 
 type SelectedEntity = {
-  kind: "office" | "host" | "room" | "agent";
+  kind: "office" | "host" | "room" | "desk" | "agent";
   typeLabel: string;
   label: string;
   description: string;
@@ -530,23 +661,50 @@ function selectedEntity(
       label: agent.displayLabel,
       description: agent.stale
         ? "Last-known Herdr state. Animation and handoff are suppressed."
-        : "Current semantic status from the admitted Herdr pane snapshot.",
+        : agent.placement === "seated"
+          ? "Seated at its qualified tab desk from the admitted Herdr pane snapshot."
+          : agent.placement === "standing"
+            ? "Present in its workspace room without a currently available rendered desk seat."
+            : agent.placement === "waiting"
+              ? "Waiting at its exact host-qualified reception desk."
+              : "Off the work floor at the shared Agent Bar.",
       facts: [
         ["Host", `${host?.displayLabel ?? agentEntry.hostLabel} · ${host?.deterministicSkin.badge ?? "HOST"}`],
         ["Workspace", agentEntry.roomLabel],
+        ["Tab", agent.currentTabRef.nativeTargetId],
         ["Status", statusLabel(agent.semanticStatus)],
+        ["Placement", placementLabel(agent.placement)],
         ["Freshness", agent.stale ? "stale / last known" : "live"],
         ["Spaces", agent.canOpenInSpaces ? "compatible target" : "handoff unavailable"],
       ],
-      handoff: {
-        kind: "agent",
-        key: agent.key,
-        profileId: agent.hostKey,
-        observedGeneration: agent.observedGeneration,
-        terminalRef: agent.currentTerminalRef,
-        currentPaneRef: agent.currentPaneRef,
-      },
+      handoff: officeAgentHandoffRequest(agent),
       handoffEnabled: agent.canOpenInSpaces,
+    };
+  }
+  const deskEntry = projection.deskRoster.find(({ desk }) => desk.key === selectedKey);
+  if (deskEntry) {
+    const desk = deskEntry.desk;
+    const host = projection.hosts.find((entry) => entry.key === desk.hostKey);
+    const occupant = desk.occupantAgentKey
+      ? projection.roster.find(({ agent }) => agent.key === desk.occupantAgentKey)?.agent
+      : null;
+    return {
+      kind: "desk",
+      typeLabel: "Qualified Herdr tab desk",
+      label: desk.displayLabel,
+      description: occupant
+        ? "One exact admitted tab with its current room-local occupant."
+        : "One exact admitted tab. No working or unknown agent occupies it.",
+      facts: [
+        ["Host", `${host?.displayLabel ?? deskEntry.hostLabel} · ${host?.deterministicSkin.badge ?? "HOST"}`],
+        ["Workspace", deskEntry.roomLabel],
+        ["Tab order", String(desk.order)],
+        ["Occupant", occupant?.displayLabel ?? "empty"],
+        ["Freshness", desk.stale ? "stale / last known" : "live"],
+        ["Scene", deskEntry.presented ? "rendered desk" : "roster overflow"],
+      ],
+      handoff: null,
+      handoffEnabled: false,
     };
   }
   const room = projection.roomRoster.find((entry) => entry.key === selectedKey);
@@ -566,13 +724,7 @@ function selectedEntity(
         ["Freshness", room.stale ? "stale / last known" : "live"],
         ["Scene", room.presented ? "rendered room" : "roster overflow"],
       ],
-      handoff: {
-        kind: "room",
-        key: room.key,
-        profileId: room.hostKey,
-        observedGeneration: room.observedGeneration,
-        workspaceRef: room.workspaceRef,
-      },
+      handoff: officeRoomHandoffRequest(room),
       handoffEnabled: room.canOpenInSpaces,
     };
   }
@@ -621,34 +773,62 @@ function filterProjection(
   const rooms = projection.rooms
     .map((room) => ({
       ...room,
-      visibleAgents: room.visibleAgents.filter((agent) => agentKeys.has(agent.key)),
-      overflowCount: Math.max(
-        0,
-        roster.filter(
-          ({ agent }) => agent.roomKey === room.key && agent.semanticStatus !== "done",
-        ).length - room.visibleAgents.filter((agent) => agentKeys.has(agent.key)).length,
-      ),
+      desks: room.desks.map((desk) => ({
+        ...desk,
+        occupantAgentKey: desk.occupantAgentKey && agentKeys.has(desk.occupantAgentKey)
+          ? desk.occupantAgentKey
+          : undefined,
+      })),
+      roomAgents: room.roomAgents.filter((agent) => agentKeys.has(agent.key)),
+      omittedAgentCount: roster.filter(
+        ({ agent, destinationPresented }) =>
+          agent.roomKey === room.key &&
+          agent.destination === "room" &&
+          !destinationPresented,
+      ).length,
     }));
-  const reviewAgents = projection.reviewAgents.filter((agent) => agentKeys.has(agent.key));
+  const receptions = projection.receptions.map((reception) => ({
+    ...reception,
+    waitingAgents: reception.waitingAgents.filter((agent) => agentKeys.has(agent.key)),
+    overflowCount: roster.filter(
+      ({ agent, destinationPresented }) =>
+        agent.hostKey === reception.hostKey &&
+        agent.destination === "reception" &&
+        !destinationPresented,
+    ).length,
+  }));
+  const barAgents = projection.barAgents.filter((agent) => agentKeys.has(agent.key));
   const status = { working: 0, idle: 0, blocked: 0, done: 0, unknown: 0 };
   for (const { agent } of roster) {
     status[agent.semanticStatus] += 1;
   }
-  const receptionHosts = projection.hosts.filter(
-    (host) => host.connectionState !== "disabled",
-  );
   const omittedRooms = projection.roomRoster.filter((room) => !room.presented).length;
-  const omittedReviewAgents = roster.filter(
-    ({ agent, reviewPresented }) => agent.semanticStatus === "done" && !reviewPresented,
+  const omittedRoomAgents = roster.filter(
+    ({ agent, destinationPresented }) =>
+      agent.destination === "room" && !destinationPresented,
   ).length;
-  const omittedDeskAgents = roster.filter(
-    ({ agent, deskPresented }) => agent.semanticStatus !== "done" && !deskPresented,
+  const omittedWaitingAgents = roster.filter(
+    ({ agent, destinationPresented }) =>
+      agent.destination === "reception" && !destinationPresented,
   ).length;
+  const omittedBarAgents = roster.filter(
+    ({ agent, destinationPresented }) =>
+      agent.destination === "bar" && !destinationPresented,
+  ).length;
+  const totalRoomAgents = roster.filter(({ agent }) => agent.destination === "room").length;
+  const totalWaitingAgents = roster.filter(({ agent }) => agent.destination === "reception").length;
+  const totalBarAgents = roster.filter(({ agent }) => agent.destination === "bar").length;
+  const renderedRoomAgents = rooms.reduce((count, room) => count + room.roomAgents.length, 0);
+  const renderedWaitingAgents = receptions.reduce(
+    (count, reception) => count + reception.waitingAgents.length,
+    0,
+  );
   return {
     ...projection,
     rooms,
     roster,
-    reviewAgents,
+    receptions,
+    barAgents,
     unresolved: omittedRooms ? [{ kind: "room-bound", count: omittedRooms }] : [],
     coverage: {
       configuredHosts: projection.hosts.length,
@@ -665,27 +845,30 @@ function filterProjection(
         (host) => host.connectionState === "disabled",
       ).length,
       observedWorkspaces: projection.roomRoster.length,
+      observedDesks: projection.deskRoster.length,
       observedAgents: roster.length,
       status,
       omittedRooms,
-      omittedDeskAgents,
-      omittedReceptionists: Math.max(
-        0,
-        receptionHosts.length - OFFICE_PRESENTATION_BOUNDS.hostReceptionists,
-      ),
-      omittedReviewAgents,
+      omittedDesks: projection.coverage.omittedDesks,
+      omittedRoomAgents,
+      omittedReceptionDesks: projection.coverage.omittedReceptionDesks,
+      omittedWaitingAgents,
+      omittedBarAgents,
     },
     presentationBounds: {
       ...projection.presentationBounds,
       totalRooms: projection.roomRoster.length,
       renderedRooms: rooms.length,
-      totalReceptionists: receptionHosts.length,
-      renderedReceptionists: Math.min(
-        receptionHosts.length,
-        OFFICE_PRESENTATION_BOUNDS.hostReceptionists,
-      ),
-      totalReviewAgents: roster.filter(({ agent }) => agent.semanticStatus === "done").length,
-      renderedReviewAgents: reviewAgents.length,
+      totalDesks: projection.deskRoster.length,
+      renderedDesks: rooms.reduce((count, room) => count + room.desks.length, 0),
+      totalRoomAgents,
+      renderedRoomAgents,
+      totalReceptionDesks: projection.presentationBounds.totalReceptionDesks,
+      renderedReceptionDesks: receptions.length,
+      totalWaitingAgents,
+      renderedWaitingAgents,
+      totalBarAgents,
+      renderedBarAgents: barAgents.length,
     },
   };
 }
@@ -695,9 +878,35 @@ function statusLabel(status: Exclude<WorldStatusFilter, "all">) {
     return "Needs input";
   }
   if (status === "done") {
-    return "At review";
+    return "Done";
   }
   return `${status.slice(0, 1).toUpperCase()}${status.slice(1)}`;
+}
+
+function placementLabel(placement: OfficeRosterEntry["agent"]["placement"]) {
+  if (placement === "seated") {
+    return "seated at tab desk";
+  }
+  if (placement === "standing") {
+    return "standing in workspace";
+  }
+  if (placement === "waiting") {
+    return "host reception";
+  }
+  return "Agent Bar";
+}
+
+function placementShortLabel(placement: OfficeRosterEntry["agent"]["placement"]) {
+  if (placement === "seated") {
+    return "desk";
+  }
+  if (placement === "standing") {
+    return "stand";
+  }
+  if (placement === "waiting") {
+    return "reception";
+  }
+  return "bar";
 }
 
 function normalizeStatusFilter(value: string): WorldStatusFilter {

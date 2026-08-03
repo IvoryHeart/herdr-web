@@ -7,16 +7,32 @@ export function PixelOfficeCanvas({
   projection,
   selectedKey,
   onSelect,
+  onActivateAgent,
+  onActivateRoom,
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
-  const latestRef = useRef({ projection, selectedKey, onSelect });
+  const latestRef = useRef({
+    projection,
+    selectedKey,
+    onSelect,
+    onActivateAgent,
+    onActivateRoom,
+  });
   const [failure, setFailure] = useState(false);
-  latestRef.current = { projection, selectedKey, onSelect };
+  latestRef.current = {
+    projection,
+    selectedKey,
+    onSelect,
+    onActivateAgent,
+    onActivateRoom,
+  };
 
   useEffect(() => {
     const element = hostRef.current;
@@ -29,6 +45,8 @@ export function PixelOfficeCanvas({
       latestRef.current.projection,
       latestRef.current.selectedKey,
       (key) => latestRef.current.onSelect(key),
+      (key) => latestRef.current.onActivateAgent(key),
+      (key) => latestRef.current.onActivateRoom(key),
     )
       .then((controller) => {
         if (disposed) {

@@ -46,12 +46,15 @@ function coverage(overrides: Partial<OfficeCoverage>): OfficeCoverage {
     incompatibleHosts: 0,
     disabledHosts: 0,
     observedWorkspaces: 0,
+    observedDesks: 0,
     observedAgents: 0,
     status: { working: 0, idle: 0, blocked: 0, done: 0, unknown: 0 },
     omittedRooms: 0,
-    omittedDeskAgents: 0,
-    omittedReceptionists: 0,
-    omittedReviewAgents: 0,
+    omittedDesks: 0,
+    omittedRoomAgents: 0,
+    omittedReceptionDesks: 0,
+    omittedWaitingAgents: 0,
+    omittedBarAgents: 0,
     ...overrides,
   };
 }

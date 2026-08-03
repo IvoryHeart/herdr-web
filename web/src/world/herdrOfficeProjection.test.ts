@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hostProfile } from "../hostProfile";
-import type { AgentStatus, PaneInfo, Snapshot, WorkspaceInfo } from "../types";
+import type { AgentStatus, PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "../types";
 import {
   OFFICE_PRESENTATION_BOUNDS,
   projectHerdrOffice,
@@ -8,35 +8,41 @@ import {
 import type { HerdrOfficeSourceHost } from "./herdrOfficeProjection";
 
 describe("Herdr Office projection", () => {
-  it("projects only detected Herdr panes with truthful semantic status and bounded labels", () => {
+  it("uses structured status for truthful destinations despite misleading labels", () => {
+    const workspaces = [workspace("workspace-a", 1, "Alpha")];
+    const tabs = ["working", "idle", "blocked", "done", "unknown", "shell"].map(
+      (id, index) => tab(`tab-${id}`, "workspace-a", index + 1, id),
+    );
     const source = liveHost("profile-a", 0, snapshot(
-      [workspace("workspace-a", 1, "Alpha")],
+      workspaces,
       [
-        pane("working", "terminal-working", "pane-working", "workspace-a", "working", {
+        pane("terminal-working", "pane-working", "workspace-a", "tab-working", "working", {
           display_agent: "Codex",
-          state_labels: { working: "Reviewing", idle: "Pretend working" },
+          state_labels: { working: "Reviewing", idle: "Pretend idle" },
         }),
-        pane("idle", "terminal-idle", "pane-idle", "workspace-a", "idle", {
+        pane("terminal-idle", "pane-idle", "workspace-a", "tab-idle", "idle", {
           agent: "claude",
-          state_labels: { working: "This must not change status" },
+          state_labels: { working: "This must not move the agent" },
         }),
-        pane("blocked", "terminal-blocked", "pane-blocked", "workspace-a", "blocked", {
+        pane("terminal-blocked", "pane-blocked", "workspace-a", "tab-blocked", "blocked", {
           agent: "pi",
         }),
-        pane("done", "terminal-done", "pane-done", "workspace-a", "done", {
+        pane("terminal-done", "pane-done", "workspace-a", "tab-done", "done", {
           agent: "grok",
         }),
-        pane("unknown", "terminal-unknown", "pane-unknown", "workspace-a", "unknown", {
+        pane("terminal-unknown", "pane-unknown", "workspace-a", "tab-unknown", "unknown", {
           title: "Agent process",
         }),
-        pane("shell", "terminal-shell", "pane-shell", "workspace-a", "unknown"),
+        pane("terminal-shell", "pane-shell", "workspace-a", "tab-shell", "unknown"),
       ],
+      tabs,
     ));
 
     const projection = projectHerdrOffice([source], 42);
 
     expect(projection.generatedAt).toBe(42);
     expect(projection.coverage.observedAgents).toBe(5);
+    expect(projection.coverage.observedDesks).toBe(6);
     expect(projection.coverage.status).toEqual({
       working: 1,
       idle: 1,
@@ -44,46 +50,109 @@ describe("Herdr Office projection", () => {
       done: 1,
       unknown: 1,
     });
+    expect(projection.rooms[0].roomAgents.map(({ semanticStatus }) => semanticStatus))
+      .toEqual(["working", "unknown"]);
+    expect(projection.receptions[0].waitingAgents.map(({ semanticStatus }) => semanticStatus))
+      .toEqual(["blocked"]);
+    expect(projection.barAgents.map(({ semanticStatus }) => semanticStatus))
+      .toEqual(["idle", "done"]);
     expect(projection.roster.find(({ agent }) => agent.displayLabel === "claude")?.agent)
-      .toMatchObject({ semanticStatus: "idle", stateLabels: { working: "This must not change status" } });
+      .toMatchObject({
+        destination: "bar",
+        semanticStatus: "idle",
+        stateLabels: { working: "This must not move the agent" },
+      });
     expect(projection.roster.find(({ agent }) => agent.semanticStatus === "unknown")?.agent.displayLabel)
       .toBe("Agent");
-    expect(projection.reviewAgents).toHaveLength(1);
-    expect(projection.rooms[0].visibleAgents.every((agent) => agent.semanticStatus !== "done"))
-      .toBe(true);
   });
 
-  it("keeps colliding native values distinct through profile-qualified tuple keys", () => {
+  it("projects one qualified deterministic desk per admitted tab including empty colliding labels", () => {
+    const workspaces = [workspace("workspace-a", 1, "Alpha")];
+    const tabs = Array.from({ length: 6 }, (_, index) =>
+      tab(`tab-${index}`, "workspace-a", 6 - index, index < 2 ? "Same" : `Tab ${index}`),
+    );
+    const projection = projectHerdrOffice([
+      liveHost("profile-a", 0, snapshot(workspaces, [], tabs)),
+    ], 1);
+
+    expect(projection.rooms[0].desks).toHaveLength(6);
+    expect(projection.rooms[0].desks.map(({ order }) => order)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(new Set(projection.rooms[0].desks.map(({ key }) => key)).size).toBe(6);
+    expect(projection.rooms[0].desks.every(({ occupantAgentKey }) => !occupantAgentKey)).toBe(true);
+    expect(projection.deskRoster).toHaveLength(6);
+    expect(projection.roster).toHaveLength(0);
+  });
+
+  it("seats working before focused unknown and stands remaining or out-of-bound desk agents", () => {
+    const workspaces = [workspace("workspace-a", 1, "Alpha")];
+    const tabs = Array.from({ length: 9 }, (_, index) =>
+      tab(`tab-${index}`, "workspace-a", index + 1, `Tab ${index + 1}`),
+    );
+    const projection = projectHerdrOffice([
+      liveHost("profile-a", 0, snapshot(
+        workspaces,
+        [
+          pane("terminal-unknown", "pane-unknown", "workspace-a", "tab-0", "unknown", {
+            agent: "unknown",
+            focused: true,
+          }),
+          pane("terminal-working", "pane-working", "workspace-a", "tab-0", "working", {
+            agent: "working",
+          }),
+          pane("terminal-outside", "pane-outside", "workspace-a", "tab-8", "working", {
+            agent: "outside",
+          }),
+        ],
+        tabs,
+      )),
+    ], 1);
+
+    const room = projection.rooms[0];
+    const working = room.roomAgents.find(({ displayLabel }) => displayLabel === "working");
+    const unknown = room.roomAgents.find(({ displayLabel }) => displayLabel === "unknown");
+    const outside = room.roomAgents.find(({ displayLabel }) => displayLabel === "outside");
+    expect(room.desks).toHaveLength(8);
+    expect(room.desks[0].occupantAgentKey).toBe(working?.key);
+    expect(working?.placement).toBe("seated");
+    expect(unknown?.placement).toBe("standing");
+    expect(outside).toMatchObject({ placement: "standing", destination: "room" });
+    expect(room.omittedDeskCount).toBe(1);
+    expect(projection.roster.find(({ agent }) => agent.key === outside?.key)?.deskPresented)
+      .toBe(false);
+  });
+
+  it("keeps colliding hosts, tabs, rooms, and agents distinct at qualified reception desks", () => {
     const sources = ["profile-a", "profile-b"].map((profileId, index) =>
       liveHost(profileId, index, snapshot(
         [workspace("same-workspace", 1, "main")],
-        [pane("same", "same-terminal", "same-pane", "same-workspace", "working", {
+        [pane("same-terminal", "same-pane", "same-workspace", "same-tab", "blocked", {
           display_agent: "Same agent",
         })],
+        [tab("same-tab", "same-workspace", 1, "Same tab")],
       ), "Duplicate host"),
     );
 
     const projection = projectHerdrOffice(sources, 1);
 
-    expect(new Set(projection.hosts.map((host) => host.key)).size).toBe(2);
-    expect(new Set(projection.rooms.map((room) => room.key)).size).toBe(2);
+    expect(new Set(projection.hosts.map(({ key }) => key)).size).toBe(2);
+    expect(new Set(projection.rooms.map(({ key }) => key)).size).toBe(2);
+    expect(new Set(projection.deskRoster.map(({ desk }) => desk.key)).size).toBe(2);
     expect(new Set(projection.roster.map(({ agent }) => agent.key)).size).toBe(2);
-    expect(new Set(projection.roster.map(({ agent }) => agent.currentPaneRef.profileId)).size).toBe(2);
+    expect(projection.receptions).toHaveLength(2);
+    expect(projection.receptions.map(({ waitingAgents }) => waitingAgents[0].hostKey))
+      .toEqual(["profile-a", "profile-b"]);
   });
 
   it("keeps stable terminal identity and character choice while current pane navigation moves", () => {
-    const first = projectHerdrOffice([
+    const project = (paneId: string) => projectHerdrOffice([
       liveHost("profile-a", 0, snapshot(
         [workspace("workspace-a", 1, "Alpha")],
-        [pane("agent", "terminal-stable", "pane-old", "workspace-a", "working", { agent: "codex" })],
+        [pane("terminal-stable", paneId, "workspace-a", "tab-a", "working", { agent: "codex" })],
+        [tab("tab-a", "workspace-a", 1, "Tab")],
       )),
     ], 1).roster[0].agent;
-    const moved = projectHerdrOffice([
-      liveHost("profile-a", 0, snapshot(
-        [workspace("workspace-a", 1, "Alpha")],
-        [pane("agent", "terminal-stable", "pane-new", "workspace-a", "working", { agent: "codex" })],
-      )),
-    ], 2).roster[0].agent;
+    const first = project("pane-old");
+    const moved = project("pane-new");
 
     expect(moved.key).toBe(first.key);
     expect(moved.characterIndex).toBe(first.characterIndex);
@@ -91,59 +160,28 @@ describe("Herdr Office projection", () => {
     expect(moved.currentPaneRef.nativeTargetId).not.toBe(first.currentPaneRef.nativeTargetId);
   });
 
-  it("orders hosts, rooms, and desk agents deterministically", () => {
-    const projection = projectHerdrOffice([
-      liveHost("profile-z", 0, snapshot(
-        [workspace("workspace-2", 2, "Later"), workspace("workspace-1", 1, "Earlier")],
-        [
-          pane("z", "terminal-z", "pane-z", "workspace-1", "idle", { agent: "z" }),
-          pane("a", "terminal-a", "pane-a", "workspace-1", "idle", { agent: "a" }),
-        ],
-      )),
-      liveHost("profile-a", 0, snapshot([workspace("workspace-a", 1, "Tie")], [])),
-    ], 1);
-
-    expect(projection.hosts.map((host) => host.key)).toEqual(["profile-a", "profile-z"]);
-    expect(projection.rooms.map((room) => room.displayLabel)).toEqual(["Tie", "Earlier", "Later"]);
-    expect(projection.rooms[1].visibleAgents.map((agent) => agent.currentTerminalRef.nativeTargetId))
-      .toEqual(["terminal-a", "terminal-z"]);
-  });
-
-  it("marks retained hosts stale and disables every exact handoff without changing status", () => {
+  it("marks retained hosts, desks, rooms, and agents stale without changing destinations", () => {
     const source = liveHost("profile-a", 0, snapshot(
       [workspace("workspace-a", 1, "Alpha")],
-      [pane("agent", "terminal-a", "pane-a", "workspace-a", "working", { agent: "codex" })],
+      [pane("terminal-a", "pane-a", "workspace-a", "tab-a", "working", { agent: "codex" })],
+      [tab("tab-a", "workspace-a", 1, "Tab")],
     ));
     source.connectionState = "offline";
 
     const projection = projectHerdrOffice([source], 1);
 
     expect(projection.hosts[0]).toMatchObject({ stale: true, connectionState: "offline" });
-    expect(projection.rooms[0].stale).toBe(true);
+    expect(projection.rooms[0]).toMatchObject({ stale: true, canOpenInSpaces: false });
+    expect(projection.rooms[0].desks[0]).toMatchObject({ stale: true, canOpenInSpaces: false });
     expect(projection.roster[0].agent).toMatchObject({
       stale: true,
       canOpenInSpaces: false,
       semanticStatus: "working",
+      destination: "room",
     });
   });
 
-  it("allows snapshot-only hosts in World while reporting Spaces handoff incompatibility", () => {
-    const source = liveHost("profile-a", 0, snapshot(
-      [workspace("workspace-a", 1, "Alpha")],
-      [pane("agent", "terminal-a", "pane-a", "workspace-a", "idle", { agent: "codex" })],
-    ));
-    source.features = ["snapshot"];
-
-    const projection = projectHerdrOffice([source], 1);
-
-    expect(projection.hosts[0]).toMatchObject({
-      compatibleWithWorld: true,
-      compatibleWithSpaces: false,
-    });
-    expect(projection.roster[0].agent.canOpenInSpaces).toBe(false);
-  });
-
-  it("enforces every presentation bound while retaining the complete deterministic roster", () => {
+  it("enforces every presentation bound while retaining complete semantic rosters", () => {
     const sources = Array.from({ length: 7 }, (_, hostIndex) => {
       const workspaces = Array.from(
         { length: hostIndex === 0 ? 123 : 1 },
@@ -153,30 +191,46 @@ describe("Herdr Office projection", () => {
           `Workspace ${hostIndex}-${workspaceIndex}`,
         ),
       );
+      const tabs = workspaces.map((entry) =>
+        tab(`tab-${entry.workspace_id}`, entry.workspace_id, 1, "Tab"),
+      );
       const panes: PaneInfo[] = [];
       if (hostIndex === 0) {
-        for (let index = 0; index < 6; index += 1) {
+        for (let index = 0; index < 10; index += 1) {
+          tabs.push(tab(`extra-tab-${index}`, "workspace-0-0", index + 2, `Extra ${index}`));
+        }
+        for (let index = 0; index < 18; index += 1) {
           panes.push(pane(
-            `desk-${index}`,
-            `terminal-desk-${index}`,
-            `pane-desk-${index}`,
+            `terminal-room-${index}`,
+            `pane-room-${index}`,
             "workspace-0-0",
-            "working",
-            { agent: `desk-${index}` },
+            index < 9 ? `extra-tab-${index}` : "tab-workspace-0-0",
+            index % 3 === 0 ? "unknown" : "working",
+            { agent: `room-${index}` },
           ));
         }
-        for (let index = 0; index < 10; index += 1) {
+        for (let index = 0; index < 6; index += 1) {
           panes.push(pane(
-            `done-${index}`,
-            `terminal-done-${index}`,
-            `pane-done-${index}`,
+            `terminal-blocked-${index}`,
+            `pane-blocked-${index}`,
             "workspace-0-0",
-            "done",
-            { agent: `done-${index}` },
+            "tab-workspace-0-0",
+            "blocked",
+            { agent: `blocked-${index}` },
+          ));
+        }
+        for (let index = 0; index < 20; index += 1) {
+          panes.push(pane(
+            `terminal-bar-${index}`,
+            `pane-bar-${index}`,
+            "workspace-0-0",
+            "tab-workspace-0-0",
+            index % 2 === 0 ? "idle" : "done",
+            { agent: `bar-${index}` },
           ));
         }
       }
-      return liveHost(`profile-${hostIndex}`, hostIndex, snapshot(workspaces, panes));
+      return liveHost(`profile-${hostIndex}`, hostIndex, snapshot(workspaces, panes, tabs));
     });
 
     const projection = projectHerdrOffice(sources, 1);
@@ -184,23 +238,30 @@ describe("Herdr Office projection", () => {
     expect(projection.presentationBounds).toMatchObject({
       renderedRooms: OFFICE_PRESENTATION_BOUNDS.rooms,
       totalRooms: 129,
-      renderedReceptionists: OFFICE_PRESENTATION_BOUNDS.hostReceptionists,
-      totalReceptionists: 7,
-      renderedReviewAgents: OFFICE_PRESENTATION_BOUNDS.reviewAgents,
-      totalReviewAgents: 10,
+      renderedReceptionDesks: OFFICE_PRESENTATION_BOUNDS.receptionDesks,
+      totalReceptionDesks: 7,
+      renderedRoomAgents: OFFICE_PRESENTATION_BOUNDS.roomAgentsPerRoom,
+      totalRoomAgents: 18,
+      renderedWaitingAgents: OFFICE_PRESENTATION_BOUNDS.waitingAgentsPerReception,
+      totalWaitingAgents: 6,
+      renderedBarAgents: OFFICE_PRESENTATION_BOUNDS.barAgents,
+      totalBarAgents: 20,
       rosterPage: 50,
     });
     expect(projection.rooms).toHaveLength(128);
     expect(projection.roomRoster).toHaveLength(129);
-    expect(projection.rooms[0].visibleAgents).toHaveLength(4);
-    expect(projection.rooms[0].overflowCount).toBe(2);
-    expect(projection.reviewAgents).toHaveLength(8);
-    expect(projection.roster).toHaveLength(16);
+    expect(projection.rooms[0].desks).toHaveLength(8);
+    expect(projection.rooms[0].roomAgents).toHaveLength(16);
+    expect(projection.receptions[0].waitingAgents).toHaveLength(4);
+    expect(projection.barAgents).toHaveLength(16);
+    expect(projection.roster).toHaveLength(44);
     expect(projection.coverage).toMatchObject({
       omittedRooms: 1,
-      omittedDeskAgents: 2,
-      omittedReceptionists: 1,
-      omittedReviewAgents: 2,
+      omittedDesks: 4,
+      omittedRoomAgents: 2,
+      omittedReceptionDesks: 1,
+      omittedWaitingAgents: 2,
+      omittedBarAgents: 4,
     });
   });
 
@@ -208,19 +269,23 @@ describe("Herdr Office projection", () => {
     const disabled = liveHost("disabled", 0, snapshot(
       [workspace("hidden", 1, "Hidden")],
       [],
+      [tab("hidden-tab", "hidden", 1, "Hidden tab")],
     ));
     disabled.profile = { ...disabled.profile, enabled: false };
     disabled.connectionState = "disabled";
     const live = liveHost("live", 1, snapshot(
       [workspace("empty", 1, "Empty workspace")],
       [],
+      [tab("empty-tab", "empty", 1, "Shell")],
     ));
 
     const projection = projectHerdrOffice([disabled, live], 1);
 
     expect(projection.hosts).toHaveLength(2);
-    expect(projection.rooms.map((room) => room.displayLabel)).toEqual(["Empty workspace"]);
-    expect(projection.rooms[0]).toMatchObject({ observedAgentCount: 0, overflowCount: 0 });
+    expect(projection.rooms.map(({ displayLabel }) => displayLabel)).toEqual(["Empty workspace"]);
+    expect(projection.rooms[0]).toMatchObject({ observedAgentCount: 0, observedDeskCount: 1 });
+    expect(projection.rooms[0].desks[0].occupantAgentKey).toBeUndefined();
+    expect(projection.receptions).toHaveLength(1);
     expect(projection.coverage.disabledHosts).toBe(1);
   });
 });
@@ -240,21 +305,13 @@ function liveHost(
   };
 }
 
-function snapshot(workspaces: WorkspaceInfo[], panes: PaneInfo[]): Snapshot {
-  return {
-    workspaces,
-    tabs: workspaces.map((value) => ({
-      tab_id: `tab-${value.workspace_id}`,
-      workspace_id: value.workspace_id,
-      number: 1,
-      label: "Tab",
-      focused: value.focused,
-      pane_count: panes.filter((paneValue) => paneValue.workspace_id === value.workspace_id).length,
-      agent_status: "unknown",
-    })),
-    panes,
-    layouts: [],
-  };
+function snapshot(
+  workspaces: WorkspaceInfo[],
+  panes: PaneInfo[],
+  tabs: TabInfo[] = workspaces.map((entry) =>
+    tab(`tab-${entry.workspace_id}`, entry.workspace_id, 1, "Tab", entry.focused)),
+): Snapshot {
+  return { workspaces, tabs, panes, layouts: [] };
 }
 
 function workspace(id: string, number: number, label: string): WorkspaceInfo {
@@ -270,11 +327,29 @@ function workspace(id: string, number: number, label: string): WorkspaceInfo {
   };
 }
 
+function tab(
+  id: string,
+  workspaceId: string,
+  number: number,
+  label: string,
+  focused = false,
+): TabInfo {
+  return {
+    tab_id: id,
+    workspace_id: workspaceId,
+    number,
+    label,
+    focused,
+    pane_count: 0,
+    agent_status: "unknown",
+  };
+}
+
 function pane(
-  _name: string,
   terminalId: string,
   paneId: string,
   workspaceId: string,
+  tabId: string,
   status: AgentStatus,
   overrides: Partial<PaneInfo> = {},
 ): PaneInfo {
@@ -282,7 +357,7 @@ function pane(
     pane_id: paneId,
     terminal_id: terminalId,
     workspace_id: workspaceId,
-    tab_id: `tab-${workspaceId}`,
+    tab_id: tabId,
     focused: false,
     agent_status: status,
     revision: 1,

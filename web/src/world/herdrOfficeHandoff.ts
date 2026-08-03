@@ -4,6 +4,7 @@ import { runtimeAdmissionReady } from "../runtimeClient";
 import type { BridgeConnectionState } from "../runtimeConnection";
 import type { QualifiedTarget } from "../runtimeIdentity";
 import type { PaneInfo, WorkspaceInfo } from "../types";
+import type { OfficeAgent, OfficeRoomRosterEntry } from "./herdrOfficeProjection";
 
 const SPACES_HANDOFF_CAPABILITIES = ["snapshot", "terminal_attach"] as const;
 
@@ -23,6 +24,31 @@ export type OfficeHandoffRequest =
       terminalRef: QualifiedTarget;
       currentPaneRef: QualifiedTarget;
     });
+
+export function officeAgentHandoffRequest(
+  agent: OfficeAgent,
+): Extract<OfficeHandoffRequest, { kind: "agent" }> {
+  return {
+    kind: "agent",
+    key: agent.key,
+    profileId: agent.hostKey,
+    observedGeneration: agent.observedGeneration,
+    terminalRef: agent.currentTerminalRef,
+    currentPaneRef: agent.currentPaneRef,
+  };
+}
+
+export function officeRoomHandoffRequest(
+  room: OfficeRoomRosterEntry,
+): Extract<OfficeHandoffRequest, { kind: "room" }> {
+  return {
+    kind: "room",
+    key: room.key,
+    profileId: room.hostKey,
+    observedGeneration: room.observedGeneration,
+    workspaceRef: room.workspaceRef,
+  };
+}
 
 export type OfficeHandoffResolution =
   | {

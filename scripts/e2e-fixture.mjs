@@ -387,7 +387,7 @@ function largeSnapshot(fixture) {
     label: `Workspace ${String(index + 1).padStart(3, "0")}`,
     focused: index === 0,
     pane_count: index === 0 && fixture.id === "host-a" ? 16 : 0,
-    tab_count: 1,
+    tab_count: index === 0 && fixture.id === "host-a" ? 10 : 1,
     active_tab_id: `tab-${index + 1}`,
     agent_status: "unknown",
   }));
@@ -400,26 +400,56 @@ function largeSnapshot(fixture) {
     pane_count: workspace.pane_count,
     agent_status: "unknown",
   }));
+  if (fixture.id === "host-a") {
+    for (let index = 2; index <= 10; index += 1) {
+      tabs.push({
+        tab_id: `workspace-1-tab-${index}`,
+        workspace_id: "workspace-1",
+        number: index,
+        label: index === 2 ? "Agents 1" : `Desk ${index}`,
+        focused: false,
+        pane_count: 1,
+        agent_status: "unknown",
+      });
+    }
+  }
   const panes = fixture.id === "host-a"
     ? [
-        ...Array.from({ length: 6 }, (_, index) => largePane(index, "working")),
-        ...Array.from({ length: 10 }, (_, index) => largePane(index + 6, "done")),
+        largePane(0, "working", "tab-1", true),
+        largePane(1, "unknown", "tab-1"),
+        ...Array.from({ length: 7 }, (_, index) =>
+          largePane(index + 2, "working", `workspace-1-tab-${index + 2}`)),
+        largePane(9, "working", "workspace-1-tab-9"),
+        largePane(10, "blocked", "tab-1"),
+        largePane(11, "blocked", "workspace-1-tab-2"),
+        largePane(12, "idle", "workspace-1-tab-3"),
+        largePane(13, "done", "workspace-1-tab-4"),
+        largePane(14, "idle", "workspace-1-tab-5"),
+        largePane(15, "done", "workspace-1-tab-6"),
       ]
     : [];
   return { workspaces, tabs, panes, layouts: [], selected_pane_id: panes[0]?.pane_id };
 }
 
-function largePane(index, status) {
+function largePane(index, status, tabId, focused = false) {
   return {
     pane_id: `large-pane-${index + 1}`,
     terminal_id: `large-terminal-${index + 1}`,
     workspace_id: "workspace-1",
-    tab_id: "tab-1",
-    focused: index === 0,
+    tab_id: tabId,
+    focused,
     agent: "codex",
     display_agent: `Agent ${String(index + 1).padStart(2, "0")}`,
     agent_status: status,
-    state_labels: { [status]: status === "done" ? "Ready for review" : "Running" },
+    state_labels: {
+      [status]: status === "done"
+        ? "Ready for review"
+        : status === "blocked"
+          ? "Needs input"
+          : status === "idle"
+            ? "Taking a break"
+            : "Running",
+    },
     revision: 1,
   };
 }

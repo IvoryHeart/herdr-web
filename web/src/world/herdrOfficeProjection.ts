@@ -3,13 +3,15 @@ import type { HostProfile } from "../hostProfile";
 import type { HostConnectionState } from "../runtimeClient";
 import { qualifiedRuntimeKey, qualifyRuntimeTarget } from "../runtimeIdentity";
 import type { QualifiedTarget } from "../runtimeIdentity";
-import type { AgentStatus, PaneInfo, Snapshot, WorkspaceInfo } from "../types";
+import type { AgentStatus, PaneInfo, Snapshot, TabInfo, WorkspaceInfo } from "../types";
 
 export const OFFICE_PRESENTATION_BOUNDS = Object.freeze({
   rooms: 128,
-  deskAgentsPerRoom: 4,
-  hostReceptionists: 6,
-  reviewAgents: 8,
+  desksPerRoom: 8,
+  roomAgentsPerRoom: 16,
+  receptionDesks: 6,
+  waitingAgentsPerReception: 4,
+  barAgents: 16,
   rosterPage: 50,
 });
 
@@ -43,6 +45,42 @@ export type OfficeHost = {
   deterministicSkin: OfficeHostSkin;
 };
 
+export type OfficeAgentDestination = "room" | "reception" | "bar";
+export type OfficeAgentPlacement = "seated" | "standing" | "waiting" | "bar";
+
+export type OfficeAgent = {
+  key: string;
+  currentPaneRef: QualifiedTarget;
+  currentTerminalRef: QualifiedTarget;
+  currentTabRef: QualifiedTarget;
+  deskKey: string | null;
+  observedGeneration: string;
+  roomKey: string;
+  hostKey: string;
+  displayLabel: string;
+  semanticStatus: AgentStatus;
+  stateLabels: Partial<Record<AgentStatus, string>>;
+  focused: boolean;
+  destination: OfficeAgentDestination;
+  placement: OfficeAgentPlacement;
+  stale: boolean;
+  canOpenInSpaces: boolean;
+  characterIndex: number;
+};
+
+export type OfficeDesk = {
+  key: string;
+  hostKey: string;
+  roomKey: string;
+  tabRef: QualifiedTarget;
+  observedGeneration: string;
+  displayLabel: string;
+  order: number;
+  stale: boolean;
+  canOpenInSpaces: boolean;
+  occupantAgentKey?: string;
+};
+
 export type OfficeRoom = {
   key: string;
   hostKey: string;
@@ -52,24 +90,22 @@ export type OfficeRoom = {
   order: number;
   stale: boolean;
   canOpenInSpaces: boolean;
-  visibleAgents: OfficeAgent[];
-  overflowCount: number;
+  desks: OfficeDesk[];
+  roomAgents: OfficeAgent[];
+  omittedDeskCount: number;
+  omittedAgentCount: number;
+  observedDeskCount: number;
   observedAgentCount: number;
 };
 
-export type OfficeAgent = {
+export type OfficeReception = {
   key: string;
-  currentPaneRef: QualifiedTarget;
-  currentTerminalRef: QualifiedTarget;
-  observedGeneration: string;
-  roomKey: string;
   hostKey: string;
-  displayLabel: string;
-  semanticStatus: AgentStatus;
-  stateLabels: Partial<Record<AgentStatus, string>>;
+  hostLabel: string;
   stale: boolean;
-  canOpenInSpaces: boolean;
-  characterIndex: number;
+  waitingAgents: OfficeAgent[];
+  observedWaitingAgentCount: number;
+  overflowCount: number;
 };
 
 export type OfficeRosterEntry = {
@@ -80,7 +116,14 @@ export type OfficeRosterEntry = {
   hostLabel: string;
   roomPresented: boolean;
   deskPresented: boolean;
-  reviewPresented: boolean;
+  destinationPresented: boolean;
+};
+
+export type OfficeDeskRosterEntry = {
+  desk: OfficeDesk;
+  roomLabel: string;
+  hostLabel: string;
+  presented: boolean;
 };
 
 export type OfficeRoomRosterEntry = {
@@ -105,21 +148,30 @@ export type OfficeCoverage = {
   incompatibleHosts: number;
   disabledHosts: number;
   observedWorkspaces: number;
+  observedDesks: number;
   observedAgents: number;
   status: Record<AgentStatus, number>;
   omittedRooms: number;
-  omittedDeskAgents: number;
-  omittedReceptionists: number;
-  omittedReviewAgents: number;
+  omittedDesks: number;
+  omittedRoomAgents: number;
+  omittedReceptionDesks: number;
+  omittedWaitingAgents: number;
+  omittedBarAgents: number;
 };
 
 export type OfficePresentationBounds = typeof OFFICE_PRESENTATION_BOUNDS & {
   totalRooms: number;
   renderedRooms: number;
-  totalReceptionists: number;
-  renderedReceptionists: number;
-  totalReviewAgents: number;
-  renderedReviewAgents: number;
+  totalDesks: number;
+  renderedDesks: number;
+  totalRoomAgents: number;
+  renderedRoomAgents: number;
+  totalReceptionDesks: number;
+  renderedReceptionDesks: number;
+  totalWaitingAgents: number;
+  renderedWaitingAgents: number;
+  totalBarAgents: number;
+  renderedBarAgents: number;
 };
 
 export type OfficeUnresolved = {
@@ -132,8 +184,10 @@ export type HerdrOfficeProjection = {
   generatedAt: number;
   hosts: OfficeHost[];
   rooms: OfficeRoom[];
-  reviewAgents: OfficeAgent[];
+  receptions: OfficeReception[];
+  barAgents: OfficeAgent[];
   roomRoster: OfficeRoomRosterEntry[];
+  deskRoster: OfficeDeskRosterEntry[];
   roster: OfficeRosterEntry[];
   unresolved: OfficeUnresolved[];
   coverage: OfficeCoverage;
@@ -149,7 +203,16 @@ type ProjectedRoom = {
   sourceHost: HerdrOfficeSourceHost;
   host: OfficeHost;
   workspace: WorkspaceInfo;
-  room: Omit<OfficeRoom, "visibleAgents" | "overflowCount" | "observedAgentCount">;
+  room: Omit<
+    OfficeRoom,
+    | "desks"
+    | "roomAgents"
+    | "omittedDeskCount"
+    | "omittedAgentCount"
+    | "observedDeskCount"
+    | "observedAgentCount"
+  >;
+  desks: OfficeDesk[];
   agents: OfficeAgent[];
 };
 
@@ -157,45 +220,73 @@ export function projectHerdrOffice(
   sources: readonly HerdrOfficeSourceHost[],
   generatedAt: number,
 ): HerdrOfficeProjection {
-  const projectedHosts = [...sources]
-    .sort(compareSourceHosts)
-    .map(projectHost);
+  const projectedHosts = [...sources].sort(compareSourceHosts).map(projectHost);
   const allRooms = projectedHosts.flatMap(projectRooms).sort(compareProjectedRooms);
   const presentedRoomKeys = new Set(
-    allRooms.slice(0, OFFICE_PRESENTATION_BOUNDS.rooms).map((entry) => entry.room.key),
+    allRooms.slice(0, OFFICE_PRESENTATION_BOUNDS.rooms).map(({ room }) => room.key),
   );
-  const allAgents = allRooms.flatMap((entry) => entry.agents);
-  const doneAgents = allRooms.flatMap((entry) =>
-    entry.agents
-      .filter((agent) => agent.semanticStatus === "done")
-      .map((agent) => ({ agent, room: entry })),
-  );
-  const presentedReviewKeys = new Set(
-    doneAgents
-      .slice(0, OFFICE_PRESENTATION_BOUNDS.reviewAgents)
-      .map(({ agent }) => agent.key),
-  );
+  const allAgents = allRooms.flatMap(({ agents }) => agents);
+  const allDesks = allRooms.flatMap(({ desks }) => desks);
 
-  const rooms = allRooms
-    .slice(0, OFFICE_PRESENTATION_BOUNDS.rooms)
-    .map((entry) => {
-      const deskAgents = entry.agents.filter((agent) => agent.semanticStatus !== "done");
+  const rooms = allRooms.slice(0, OFFICE_PRESENTATION_BOUNDS.rooms).map((entry) => {
+    const presentedDesks = entry.desks.slice(0, OFFICE_PRESENTATION_BOUNDS.desksPerRoom);
+    const occupantKeys = new Set(
+      presentedDesks.flatMap(({ occupantAgentKey }) => occupantAgentKey ? [occupantAgentKey] : []),
+    );
+    const roomLocalAgents = entry.agents
+      .filter(({ destination }) => destination === "room")
+      .map((agent) => ({
+        ...agent,
+        placement: occupantKeys.has(agent.key) ? "seated" as const : "standing" as const,
+      }))
+      .sort((left, right) => comparePresentedRoomAgents(left, right, presentedDesks));
+    return {
+      ...entry.room,
+      desks: presentedDesks,
+      roomAgents: roomLocalAgents.slice(0, OFFICE_PRESENTATION_BOUNDS.roomAgentsPerRoom),
+      omittedDeskCount: Math.max(0, entry.desks.length - OFFICE_PRESENTATION_BOUNDS.desksPerRoom),
+      omittedAgentCount: Math.max(
+        0,
+        roomLocalAgents.length - OFFICE_PRESENTATION_BOUNDS.roomAgentsPerRoom,
+      ),
+      observedDeskCount: entry.desks.length,
+      observedAgentCount: entry.agents.length,
+    };
+  });
+
+  const roomByKey = new Map(rooms.map((room) => [room.key, room]));
+  const visibleHosts = projectedHosts.filter(({ source }) => source.profile.enabled);
+  const receptions = visibleHosts
+    .slice(0, OFFICE_PRESENTATION_BOUNDS.receptionDesks)
+    .map(({ host }) => {
+      const waiting = allAgents
+        .filter(({ hostKey, destination }) => hostKey === host.key && destination === "reception")
+        .sort(compareOfficeAgents);
       return {
-        ...entry.room,
-        visibleAgents: deskAgents.slice(0, OFFICE_PRESENTATION_BOUNDS.deskAgentsPerRoom),
+        key: `reception:${host.key}`,
+        hostKey: host.key,
+        hostLabel: host.displayLabel,
+        stale: host.stale,
+        waitingAgents: waiting.slice(0, OFFICE_PRESENTATION_BOUNDS.waitingAgentsPerReception),
+        observedWaitingAgentCount: waiting.length,
         overflowCount: Math.max(
           0,
-          deskAgents.length - OFFICE_PRESENTATION_BOUNDS.deskAgentsPerRoom,
+          waiting.length - OFFICE_PRESENTATION_BOUNDS.waitingAgentsPerReception,
         ),
-        observedAgentCount: entry.agents.length,
       };
     });
-  const presentedDeskKeys = new Set(
-    rooms.flatMap((room) => room.visibleAgents.map((agent) => agent.key)),
+  const barCandidates = allAgents
+    .filter(({ destination }) => destination === "bar")
+    .sort(compareBarAgents);
+  const barAgents = barCandidates.slice(0, OFFICE_PRESENTATION_BOUNDS.barAgents);
+  const presentedBarKeys = new Set(barAgents.map(({ key }) => key));
+  const presentedWaitingKeys = new Set(
+    receptions.flatMap(({ waitingAgents }) => waitingAgents.map(({ key }) => key)),
   );
-  const reviewAgents = doneAgents
-    .slice(0, OFFICE_PRESENTATION_BOUNDS.reviewAgents)
-    .map(({ agent }) => agent);
+  const presentedRoomAgentKeys = new Set(
+    rooms.flatMap(({ roomAgents }) => roomAgents.map(({ key }) => key)),
+  );
+
   const roomRoster = allRooms.map((entry) => ({
     key: entry.room.key,
     hostKey: entry.host.key,
@@ -208,33 +299,53 @@ export function projectHerdrOffice(
     canOpenInSpaces: entry.room.canOpenInSpaces,
     presented: presentedRoomKeys.has(entry.room.key),
   }));
-  const roster = allRooms.flatMap((entry) =>
-    entry.agents.map((agent) => ({
-      agent,
-      roomKey: entry.room.key,
+  const deskRoster = allRooms.flatMap((entry) =>
+    entry.desks.map((desk) => ({
+      desk,
       roomLabel: entry.room.displayLabel,
-      hostKey: entry.host.key,
       hostLabel: entry.host.displayLabel,
-      roomPresented: presentedRoomKeys.has(entry.room.key),
-      deskPresented: presentedDeskKeys.has(agent.key),
-      reviewPresented: presentedReviewKeys.has(agent.key),
+      presented: Boolean(roomByKey.get(entry.room.key)?.desks.some(({ key }) => key === desk.key)),
     })),
   );
+  const roster = allRooms.flatMap((entry) =>
+    entry.agents.map((agent) => {
+      const presentedRoom = roomByKey.get(entry.room.key);
+      const projectedAgent = presentedRoom?.roomAgents.find(({ key }) => key === agent.key) ?? agent;
+      const destinationPresented = agent.destination === "room"
+        ? presentedRoomAgentKeys.has(agent.key)
+        : agent.destination === "reception"
+          ? presentedWaitingKeys.has(agent.key)
+          : presentedBarKeys.has(agent.key);
+      return {
+        agent: projectedAgent,
+        roomKey: entry.room.key,
+        roomLabel: entry.room.displayLabel,
+        hostKey: entry.host.key,
+        hostLabel: entry.host.displayLabel,
+        roomPresented: presentedRoomKeys.has(entry.room.key),
+        deskPresented: Boolean(
+          agent.deskKey && presentedRoom?.desks.some(({ key }) => key === agent.deskKey),
+        ),
+        destinationPresented,
+      };
+    }),
+  );
+
   const omittedRooms = Math.max(0, allRooms.length - OFFICE_PRESENTATION_BOUNDS.rooms);
-  const omittedDeskAgents = allRooms.reduce((count, entry) => {
+  const omittedDesks = allRooms.reduce((count, entry) => {
     if (!presentedRoomKeys.has(entry.room.key)) {
-      return count + entry.agents.filter((agent) => agent.semanticStatus !== "done").length;
+      return count + entry.desks.length;
     }
-    return (
-      count +
-      Math.max(
-        0,
-        entry.agents.filter((agent) => agent.semanticStatus !== "done").length -
-          OFFICE_PRESENTATION_BOUNDS.deskAgentsPerRoom,
-      )
-    );
+    return count + Math.max(0, entry.desks.length - OFFICE_PRESENTATION_BOUNDS.desksPerRoom);
   }, 0);
-  const enabledHosts = projectedHosts.filter(({ source }) => source.profile.enabled);
+  const roomCandidates = allAgents.filter(({ destination }) => destination === "room");
+  const waitingCandidates = allAgents.filter(({ destination }) => destination === "reception");
+  const renderedDesks = rooms.reduce((count, room) => count + room.desks.length, 0);
+  const renderedRoomAgents = rooms.reduce((count, room) => count + room.roomAgents.length, 0);
+  const renderedWaitingAgents = receptions.reduce(
+    (count, reception) => count + reception.waitingAgents.length,
+    0,
+  );
   const staleHosts = projectedHosts.filter(({ host }) => host.stale).length;
 
   return {
@@ -242,8 +353,10 @@ export function projectHerdrOffice(
     generatedAt,
     hosts: projectedHosts.map(({ host }) => host),
     rooms,
-    reviewAgents,
+    receptions,
+    barAgents,
     roomRoster,
+    deskRoster,
     roster,
     unresolved: omittedRooms ? [{ kind: "room-bound", count: omittedRooms }] : [],
     coverage: {
@@ -259,30 +372,33 @@ export function projectHerdrOffice(
       ).length,
       disabledHosts: projectedHosts.filter(({ source }) => !source.profile.enabled).length,
       observedWorkspaces: allRooms.length,
+      observedDesks: allDesks.length,
       observedAgents: allAgents.length,
       status: countStatuses(allAgents),
       omittedRooms,
-      omittedDeskAgents,
-      omittedReceptionists: Math.max(
+      omittedDesks,
+      omittedRoomAgents: Math.max(0, roomCandidates.length - renderedRoomAgents),
+      omittedReceptionDesks: Math.max(
         0,
-        enabledHosts.length - OFFICE_PRESENTATION_BOUNDS.hostReceptionists,
+        visibleHosts.length - OFFICE_PRESENTATION_BOUNDS.receptionDesks,
       ),
-      omittedReviewAgents: Math.max(
-        0,
-        doneAgents.length - OFFICE_PRESENTATION_BOUNDS.reviewAgents,
-      ),
+      omittedWaitingAgents: Math.max(0, waitingCandidates.length - renderedWaitingAgents),
+      omittedBarAgents: Math.max(0, barCandidates.length - barAgents.length),
     },
     presentationBounds: {
       ...OFFICE_PRESENTATION_BOUNDS,
       totalRooms: allRooms.length,
       renderedRooms: rooms.length,
-      totalReceptionists: enabledHosts.length,
-      renderedReceptionists: Math.min(
-        enabledHosts.length,
-        OFFICE_PRESENTATION_BOUNDS.hostReceptionists,
-      ),
-      totalReviewAgents: doneAgents.length,
-      renderedReviewAgents: reviewAgents.length,
+      totalDesks: allDesks.length,
+      renderedDesks,
+      totalRoomAgents: roomCandidates.length,
+      renderedRoomAgents,
+      totalReceptionDesks: visibleHosts.length,
+      renderedReceptionDesks: receptions.length,
+      totalWaitingAgents: waitingCandidates.length,
+      renderedWaitingAgents,
+      totalBarAgents: barCandidates.length,
+      renderedBarAgents: barAgents.length,
     },
   };
 }
@@ -292,11 +408,8 @@ function projectHost(source: HerdrOfficeSourceHost): ProjectedHost {
   const enabled = source.profile.enabled;
   const incompatible = source.connectionState === "incompatible";
   const compatibleWithWorld = enabled && !incompatible && featureSet.has("snapshot");
-  const compatibleWithSpaces =
-    compatibleWithWorld && featureSet.has("terminal_attach");
-  const stale =
-    source.snapshot !== null &&
-    source.connectionState !== "compatible";
+  const compatibleWithSpaces = compatibleWithWorld && featureSet.has("terminal_attach");
+  const stale = source.snapshot !== null && source.connectionState !== "compatible";
   const seed = stableNumber(source.profile.profileId);
   return {
     source,
@@ -322,10 +435,16 @@ function projectRooms({ source, host }: ProjectedHost): ProjectedRoom[] {
     return [];
   }
   const panesByWorkspace = new Map<string, PaneInfo[]>();
+  const tabsByWorkspace = new Map<string, TabInfo[]>();
   for (const pane of source.snapshot.panes) {
     const panes = panesByWorkspace.get(pane.workspace_id) ?? [];
     panes.push(pane);
     panesByWorkspace.set(pane.workspace_id, panes);
+  }
+  for (const tab of source.snapshot.tabs) {
+    const tabs = tabsByWorkspace.get(tab.workspace_id) ?? [];
+    tabs.push(tab);
+    tabsByWorkspace.set(tab.workspace_id, tabs);
   }
   return source.snapshot.workspaces.map((workspace) => {
     const workspaceRef = qualifyRuntimeTarget(
@@ -339,10 +458,29 @@ function projectRooms({ source, host }: ProjectedHost): ProjectedRoom[] {
       !host.stale &&
       source.connectionState === "compatible" &&
       Boolean(source.generationKey);
+    const desks = (tabsByWorkspace.get(workspace.workspace_id) ?? [])
+      .map((tab) => projectDesk(source, host, roomKey, tab, canOpenInSpaces))
+      .sort(compareOfficeDesks);
+    const deskKeys = new Set(desks.map(({ key }) => key));
     const agents = (panesByWorkspace.get(workspace.workspace_id) ?? [])
       .filter(isAgentPane)
-      .map((pane) => projectAgent(source, host, roomKey, pane, canOpenInSpaces))
+      .map((pane) => projectAgent(source, host, roomKey, pane, canOpenInSpaces, deskKeys))
       .sort(compareOfficeAgents);
+    const roomLocalByDesk = new Map<string, OfficeAgent[]>();
+    for (const agent of agents) {
+      if (agent.destination !== "room" || !agent.deskKey) {
+        continue;
+      }
+      const candidates = roomLocalByDesk.get(agent.deskKey) ?? [];
+      candidates.push(agent);
+      roomLocalByDesk.set(agent.deskKey, candidates);
+    }
+    for (const desk of desks) {
+      const occupant = (roomLocalByDesk.get(desk.key) ?? []).sort(compareDeskCandidates)[0];
+      if (occupant) {
+        desk.occupantAgentKey = occupant.key;
+      }
+    }
     return {
       sourceHost: source,
       host,
@@ -357,9 +495,31 @@ function projectRooms({ source, host }: ProjectedHost): ProjectedRoom[] {
         stale: host.stale,
         canOpenInSpaces,
       },
+      desks,
       agents,
     };
   });
+}
+
+function projectDesk(
+  source: HerdrOfficeSourceHost,
+  host: OfficeHost,
+  roomKey: string,
+  tab: TabInfo,
+  canOpenInSpaces: boolean,
+): OfficeDesk {
+  const tabRef = qualifyRuntimeTarget(source.profile.profileId, "tab", tab.tab_id);
+  return {
+    key: qualifiedRuntimeKey(tabRef),
+    hostKey: host.key,
+    roomKey,
+    tabRef,
+    observedGeneration: source.generationKey ?? "",
+    displayLabel: boundedLabel(tab.label, `Tab ${tab.number}`),
+    order: tab.number,
+    stale: host.stale,
+    canOpenInSpaces,
+  };
 }
 
 function projectAgent(
@@ -368,27 +528,39 @@ function projectAgent(
   roomKey: string,
   pane: PaneInfo,
   canOpenInSpaces: boolean,
+  deskKeys: ReadonlySet<string>,
 ): OfficeAgent {
-  const terminalRef = qualifyRuntimeTarget(
-    source.profile.profileId,
-    "terminal",
-    pane.terminal_id,
-  );
+  const terminalRef = qualifyRuntimeTarget(source.profile.profileId, "terminal", pane.terminal_id);
+  const tabRef = qualifyRuntimeTarget(source.profile.profileId, "tab", pane.tab_id);
   const key = qualifiedRuntimeKey(terminalRef);
+  const deskKey = qualifiedRuntimeKey(tabRef);
+  const destination = statusDestination(pane.agent_status);
   return {
     key,
     currentPaneRef: qualifyRuntimeTarget(source.profile.profileId, "pane", pane.pane_id),
     currentTerminalRef: terminalRef,
+    currentTabRef: tabRef,
+    deskKey: deskKeys.has(deskKey) ? deskKey : null,
     observedGeneration: source.generationKey ?? "",
     roomKey,
     hostKey: host.key,
     displayLabel: boundedLabel(pane.display_agent || pane.agent, "Agent"),
     semanticStatus: pane.agent_status,
     stateLabels: boundedStateLabels(pane.state_labels),
+    focused: pane.focused,
+    destination,
+    placement: destination === "room" ? "standing" : destination === "reception" ? "waiting" : "bar",
     stale: host.stale,
     canOpenInSpaces,
     characterIndex: stableNumber(key) % CHARACTER_COUNT,
   };
+}
+
+function statusDestination(status: AgentStatus): OfficeAgentDestination {
+  if (status === "working" || status === "unknown") {
+    return "room";
+  }
+  return status === "blocked" ? "reception" : "bar";
 }
 
 function compareSourceHosts(left: HerdrOfficeSourceHost, right: HerdrOfficeSourceHost) {
@@ -407,8 +579,47 @@ function compareProjectedRooms(left: ProjectedRoom, right: ProjectedRoom) {
   );
 }
 
+function compareOfficeDesks(left: OfficeDesk, right: OfficeDesk) {
+  return left.order - right.order || left.key.localeCompare(right.key);
+}
+
+function compareDeskCandidates(left: OfficeAgent, right: OfficeAgent) {
+  return (
+    roomStatusOrder(left.semanticStatus) - roomStatusOrder(right.semanticStatus) ||
+    Number(right.focused) - Number(left.focused) ||
+    left.key.localeCompare(right.key)
+  );
+}
+
+function comparePresentedRoomAgents(
+  left: OfficeAgent,
+  right: OfficeAgent,
+  desks: readonly OfficeDesk[],
+) {
+  const deskOrder = new Map(desks.map((desk, index) => [desk.key, index]));
+  return (
+    Number(left.placement !== "seated") - Number(right.placement !== "seated") ||
+    (deskOrder.get(left.deskKey ?? "") ?? Number.MAX_SAFE_INTEGER) -
+      (deskOrder.get(right.deskKey ?? "") ?? Number.MAX_SAFE_INTEGER) ||
+    compareDeskCandidates(left, right)
+  );
+}
+
 function compareOfficeAgents(left: OfficeAgent, right: OfficeAgent) {
   return left.key.localeCompare(right.key);
+}
+
+function compareBarAgents(left: OfficeAgent, right: OfficeAgent) {
+  return barStatusOrder(left.semanticStatus) - barStatusOrder(right.semanticStatus) ||
+    left.key.localeCompare(right.key);
+}
+
+function roomStatusOrder(status: AgentStatus) {
+  return status === "working" ? 0 : status === "unknown" ? 1 : 2;
+}
+
+function barStatusOrder(status: AgentStatus) {
+  return status === "idle" ? 0 : status === "done" ? 1 : 2;
 }
 
 function countStatuses(agents: readonly OfficeAgent[]): Record<AgentStatus, number> {
@@ -430,9 +641,9 @@ function boundedStateLabels(
 ): Partial<Record<AgentStatus, string>> {
   const result: Partial<Record<AgentStatus, string>> = {};
   for (const status of ["working", "idle", "blocked", "done", "unknown"] as const) {
-    const label = labels?.[status];
-    if (label) {
-      result[status] = boundedLabel(label, status, MAX_STATE_LABEL);
+    const value = labels?.[status];
+    if (value) {
+      result[status] = boundedLabel(value, status, MAX_STATE_LABEL);
     }
   }
   return result;
