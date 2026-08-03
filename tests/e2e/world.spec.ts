@@ -95,6 +95,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
   expect(terminalSocketUrls(sockets)).toEqual([]);
   const initialCoreSockets = coreSocketUrls(sockets).length;
   const initialLog = await fixtureLog(request);
+  const lifecycleStartedAt = Date.now();
 
   const frame = page.locator(".app");
   await frame.evaluate((element) => element.setAttribute("data-lifecycle-frame", "stable"));
@@ -114,7 +115,10 @@ test("disposes the renderer across ten switches without reconnecting core observ
   await page.waitForTimeout(350);
   expect(terminalSocketUrls(sockets)).toHaveLength(terminalBeforeWorldIdle);
   const currentLog = await fixtureLog(request);
-  expect(currentLog.snapshotRequests - initialLog.snapshotRequests).toBeLessThanOrEqual(3);
+  const periodicRefreshBound =
+    Math.ceil((Date.now() - lifecycleStartedAt) / CORE_SNAPSHOT_REFRESH_INTERVAL_MS) + 1;
+  expect(currentLog.snapshotRequests - initialLog.snapshotRequests)
+    .toBeLessThanOrEqual(periodicRefreshBound);
   expect(currentLog.capabilityRequests).toBe(initialLog.capabilityRequests);
 
   const diagnostics = await page.evaluate(() => window.__HERDR_WORLD_RENDERER__);
@@ -347,3 +351,5 @@ async function fixtureLog(request: import("@playwright/test").APIRequestContext)
   >;
   return all["host-a"];
 }
+
+const CORE_SNAPSHOT_REFRESH_INTERVAL_MS = 10_000;
