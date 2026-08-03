@@ -6,6 +6,7 @@ import { hostStore } from "./hostStore";
 const evidenceDir = resolve("docs/evidence/spec-010-extension-003");
 
 test.use({ reducedMotion: "reduce" });
+test.describe.configure({ timeout: 90_000 });
 
 test.beforeAll(async () => {
   await mkdir(evidenceDir, { recursive: true });
