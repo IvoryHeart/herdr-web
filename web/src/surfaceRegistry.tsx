@@ -3,6 +3,13 @@ import type { ComponentType, LazyExoticComponent } from "react";
 
 export type SurfaceHostScope = "single-host" | "multi-host";
 
+export type SurfaceSlot = "sidebar" | "stage";
+
+export type SurfaceComponentProps = {
+  slot?: SurfaceSlot;
+  context?: unknown;
+};
+
 export type SurfaceDefinition = {
   id: string;
   label: string;
@@ -10,7 +17,7 @@ export type SurfaceDefinition = {
   semanticIcon: string;
   hostScope: SurfaceHostScope;
   requiredCapabilities: readonly string[];
-  load: () => Promise<{ default: ComponentType }>;
+  load: () => Promise<{ default: ComponentType<SurfaceComponentProps> }>;
 };
 
 type SurfaceCapabilities = {
@@ -19,7 +26,10 @@ type SurfaceCapabilities = {
 
 export class SurfaceRegistry {
   readonly #definitions = new Map<string, SurfaceDefinition>();
-  readonly #components = new Map<string, LazyExoticComponent<ComponentType>>();
+  readonly #components = new Map<
+    string,
+    LazyExoticComponent<ComponentType<SurfaceComponentProps>>
+  >();
 
   constructor(definitions: readonly SurfaceDefinition[]) {
     for (const definition of definitions) {
@@ -83,6 +93,15 @@ export const coreSurfaceRegistry = new SurfaceRegistry([
     semanticIcon: "terminal-workspaces",
     hostScope: "multi-host",
     requiredCapabilities: ["snapshot", "terminal_attach"],
-    load: () => import("./App").then((module) => ({ default: module.App })),
+    load: () => import("./SpacesSurface"),
+  },
+  {
+    id: "world",
+    label: "World",
+    route: "/world",
+    semanticIcon: "pixel-office",
+    hostScope: "multi-host",
+    requiredCapabilities: ["snapshot"],
+    load: () => import("./world/WorldSurface"),
   },
 ]);

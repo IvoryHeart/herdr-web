@@ -6,6 +6,11 @@
 
 ### Added
 
+- Added an integrated Herdr World primary view with a deterministic Pixel Office projection of
+  shared federated snapshots, live host coverage and filters, a qualified roster and inspector,
+  bounded overflow and stale-host handling, responsive and accessible fallbacks, and exact
+  revalidated `Open in Spaces` handoff without reload or reconnection.
+  [PR #2](https://github.com/IvoryHeart/herdr-web/pull/2)
 - Added the Spec 010 federated-client foundation: explicit app-shell and internal-surface seams,
   persistent host profiles, host-qualified runtime and terminal identities, direct multi-bridge
   browser federation, isolated compatibility/failure states, strict non-loopback admission policy,
@@ -21,6 +26,10 @@
 
 ### Changed
 
+- Established one persistent Herdr client frame and federated runtime above the `Spaces | World`
+  view boundary. `/world` is addressable browser state inside that frame, while Spaces retains its
+  delivered sidebar, terminal, split, Notes, and operational behavior.
+  [PR #2](https://github.com/IvoryHeart/herdr-web/pull/2)
 - Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group
   headers and move host context into each detail row. Host + workspace grouping keeps its nested
   host and workspace headers. [PR #47](https://github.com/kcosr/herdr-web/pull/47)

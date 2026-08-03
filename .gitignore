@@ -9,6 +9,7 @@
 /dist-packages/
 .specs/
 .scratch/
+.worktrees/
 *.log
 *.swp
 .DS_Store

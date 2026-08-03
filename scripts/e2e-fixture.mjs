@@ -116,7 +116,7 @@ async function startFixture(fixture) {
         json(response, 200, {});
         return;
       }
-      json(response, 200, snapshot(fixture));
+      json(response, 200, snapshot(fixture, state.snapshotVariant));
       return;
     }
     if (url.pathname === "/api/launcher-presets" && request.method === "GET") {
@@ -285,6 +285,7 @@ function emptyLog() {
 function defaultFixtureState() {
   return {
     snapshotMode: "ready",
+    snapshotVariant: "default",
     terminalProtocol: null,
     features: null,
     commands: null,
@@ -297,11 +298,13 @@ function setFixtureState(hostId, value) {
     return false;
   }
   const snapshotMode = value.snapshotMode ?? current.snapshotMode;
+  const snapshotVariant = value.snapshotVariant ?? current.snapshotVariant;
   const terminalProtocol = value.terminalProtocol ?? current.terminalProtocol;
   const features = value.features ?? current.features;
   const commands = value.commands ?? current.commands;
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
+    !["default", "empty", "large"].includes(snapshotVariant) ||
     (terminalProtocol !== null && terminalProtocol !== 16 && terminalProtocol !== 17) ||
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
@@ -310,11 +313,23 @@ function setFixtureState(hostId, value) {
   ) {
     return false;
   }
-  fixtureStates.set(hostId, { snapshotMode, terminalProtocol, features, commands });
+  fixtureStates.set(hostId, {
+    snapshotMode,
+    snapshotVariant,
+    terminalProtocol,
+    features,
+    commands,
+  });
   return true;
 }
 
-function snapshot(fixture) {
+function snapshot(fixture, variant = "default") {
+  if (variant === "empty") {
+    return { workspaces: [], tabs: [], panes: [], layouts: [] };
+  }
+  if (variant === "large") {
+    return largeSnapshot(fixture);
+  }
   const suffix = fixture.id.at(-1).toUpperCase();
   return {
     workspaces: [
@@ -361,6 +376,51 @@ function snapshot(fixture) {
     ],
     layouts: [],
     selected_pane_id: "p1",
+  };
+}
+
+function largeSnapshot(fixture) {
+  const workspaceCount = fixture.id === "host-a" ? 128 : 1;
+  const workspaces = Array.from({ length: workspaceCount }, (_, index) => ({
+    workspace_id: `workspace-${index + 1}`,
+    number: index + 1,
+    label: `Workspace ${String(index + 1).padStart(3, "0")}`,
+    focused: index === 0,
+    pane_count: index === 0 && fixture.id === "host-a" ? 16 : 0,
+    tab_count: 1,
+    active_tab_id: `tab-${index + 1}`,
+    agent_status: "unknown",
+  }));
+  const tabs = workspaces.map((workspace, index) => ({
+    tab_id: workspace.active_tab_id,
+    workspace_id: workspace.workspace_id,
+    number: 1,
+    label: `Agents ${index + 1}`,
+    focused: index === 0,
+    pane_count: workspace.pane_count,
+    agent_status: "unknown",
+  }));
+  const panes = fixture.id === "host-a"
+    ? [
+        ...Array.from({ length: 6 }, (_, index) => largePane(index, "working")),
+        ...Array.from({ length: 10 }, (_, index) => largePane(index + 6, "done")),
+      ]
+    : [];
+  return { workspaces, tabs, panes, layouts: [], selected_pane_id: panes[0]?.pane_id };
+}
+
+function largePane(index, status) {
+  return {
+    pane_id: `large-pane-${index + 1}`,
+    terminal_id: `large-terminal-${index + 1}`,
+    workspace_id: "workspace-1",
+    tab_id: "tab-1",
+    focused: index === 0,
+    agent: "codex",
+    display_agent: `Agent ${String(index + 1).padStart(2, "0")}`,
+    agent_status: status,
+    state_labels: { [status]: status === "done" ? "Ready for review" : "Running" },
+    revision: 1,
   };
 }
 
