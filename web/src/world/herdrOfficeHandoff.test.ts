@@ -3,10 +3,68 @@ import type { BridgeRuntime } from "../bridge";
 import type { BridgeConnectionState } from "../runtimeConnection";
 import { qualifyRuntimeTarget } from "../runtimeIdentity";
 import type { PaneInfo, Snapshot } from "../types";
-import { resolveOfficeHandoff } from "./herdrOfficeHandoff";
+import type { OfficeAgent } from "./herdrOfficeProjection";
+import {
+  officeAgentHandoffRequest,
+  officeRoomHandoffRequest,
+  resolveOfficeHandoff,
+} from "./herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
 
 describe("Herdr Office exact Spaces handoff", () => {
+  it("builds the double-click shortcut request from qualified terminal identity", () => {
+    const agent: OfficeAgent = {
+      key: "host-a:terminal:stable-terminal",
+      currentPaneRef: qualifyRuntimeTarget("host-a", "pane", "pane-a"),
+      currentTerminalRef: qualifyRuntimeTarget("host-a", "terminal", "stable-terminal"),
+      currentTabRef: qualifyRuntimeTarget("host-a", "tab", "tab-a"),
+      deskKey: "host-a:tab:tab-a",
+      observedGeneration: "host-a:connection:capability:1",
+      roomKey: "host-a:workspace:workspace-a",
+      hostKey: "host-a",
+      displayLabel: "Codex",
+      semanticStatus: "working",
+      stateLabels: {},
+      focused: true,
+      destination: "room",
+      placement: "seated",
+      stale: false,
+      canOpenInSpaces: true,
+      characterIndex: 0,
+    };
+
+    expect(officeAgentHandoffRequest(agent)).toEqual({
+      kind: "agent",
+      key: agent.key,
+      profileId: "host-a",
+      observedGeneration: agent.observedGeneration,
+      terminalRef: agent.currentTerminalRef,
+      currentPaneRef: agent.currentPaneRef,
+    });
+  });
+
+  it("builds the room double-click shortcut from qualified workspace identity", () => {
+    const workspaceRef = qualifyRuntimeTarget("host-a", "workspace", "workspace-a");
+    expect(officeRoomHandoffRequest({
+      key: "host-a:workspace:workspace-a",
+      hostKey: "host-a",
+      hostLabel: "Host A",
+      workspaceRef,
+      observedGeneration: "generation-a",
+      displayLabel: "Space A",
+      order: 1,
+      stale: false,
+      canOpenInSpaces: true,
+      presented: true,
+    })).toEqual({
+      kind: "room",
+      key: "host-a:workspace:workspace-a",
+      profileId: "host-a",
+      observedGeneration: "generation-a",
+      workspaceRef,
+    });
+  });
+
   it("re-resolves stable terminal identity to its current pane", () => {
     const runtime = liveRuntime();
     const request = agentRequest(runtime.generationKey, "old-pane");

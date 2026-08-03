@@ -56,7 +56,9 @@ test("sustains the bounded 129-room fixture within the frame and memory budgets"
     expect((await response.json()).sent).toBeGreaterThan(0);
   }
 
-  await expect(page.locator(".world-room-row")).toHaveCount(129);
+  await expect(page.locator(".world-coverage-grid > div").nth(1)).toContainText("129");
+  await expect(page.locator(".world-coverage-grid > div").nth(1)).toContainText("spaces");
+  await expect(page.locator(".world-count")).toHaveText("283");
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.layout?.rooms ?? 0))
     .toBe(128);
