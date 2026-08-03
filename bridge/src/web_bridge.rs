@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info, warn};
 
 use herdr_compat::api::client::{ApiClient, ApiClientError};
@@ -1067,6 +1067,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
             "/api/launcher-presets/launch",
             post(launcher_preset_launch_handler).options(preflight_handler),
         );
+    let world_entry = options.static_dir.join("index.html");
     let app = Router::new()
         .merge(agent_activity_routes)
         .merge(agent_pins_routes)
@@ -1096,6 +1097,8 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         .route("/ws/activity", get(activity_ws_handler))
         .route("/ws/ui-events", get(ui_events_ws_handler))
         .route("/ws/terminal", get(terminal_ws_handler))
+        .route_service("/world", ServeFile::new(world_entry.clone()))
+        .route_service("/world/", ServeFile::new(world_entry))
         .fallback_service(
             ServiceBuilder::new()
                 .layer(CompressionLayer::new())

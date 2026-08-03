@@ -13,6 +13,19 @@ export default defineConfig({
     colorScheme: "dark",
     reducedMotion: "reduce",
     trace: "retain-on-failure",
+    launchOptions:
+      process.env.HERDR_WEB_HARDWARE_GPU === "1"
+        ? {
+            args: [
+              "--use-angle=vulkan",
+              "--enable-features=Vulkan",
+              "--disable-vulkan-surface",
+              "--disable-background-timer-throttling",
+              "--disable-renderer-backgrounding",
+              "--disable-backgrounding-occluded-windows",
+            ],
+          }
+        : undefined,
   },
   webServer: {
     command: "node scripts/e2e-fixture.mjs",

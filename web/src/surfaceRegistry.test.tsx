@@ -20,7 +20,14 @@ describe("internal surface registry", () => {
       hostScope: "multi-host",
       requiredCapabilities: ["snapshot", "terminal_attach"],
     });
-    expect(coreSurfaceRegistry.get("world")).toBeNull();
+    expect(coreSurfaceRegistry.get("world")).toMatchObject({
+      id: "world",
+      label: "World",
+      route: "/world",
+      semanticIcon: "pixel-office",
+      hostScope: "multi-host",
+      requiredCapabilities: ["snapshot"],
+    });
     expect(
       coreSurfaceRegistry.supports("spaces", {
         features: ["snapshot", "terminal_attach"],
@@ -29,6 +36,9 @@ describe("internal surface registry", () => {
     expect(
       coreSurfaceRegistry.missingCapabilities("spaces", { features: ["snapshot"] }),
     ).toEqual(["terminal_attach"]);
+    expect(
+      coreSurfaceRegistry.supports("world", { features: ["snapshot"] }),
+    ).toBe(true);
   });
 
   it("mounts a core surface lazily through navigation and the registry", async () => {

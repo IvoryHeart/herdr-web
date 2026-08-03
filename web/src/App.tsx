@@ -1,6 +1,7 @@
 import {
   Activity,
   Archive,
+  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -44,6 +45,7 @@ import type {
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import { AgentIcon, agentIconKind } from "./AgentIcon";
+import { isAgentPane } from "./agentDetection";
 import {
   agentActivityKey,
   agentActivityTimestamps,
@@ -78,6 +80,11 @@ import {
   parseMultiHostSpaceSelection,
 } from "./displayPrefs";
 import { LaunchDialog } from "./LaunchDialog";
+import {
+  HerdrClientFrame,
+  HerdrClientSidebar,
+  HerdrMainStage,
+} from "./HerdrClientFrame";
 import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
 import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
@@ -129,11 +136,11 @@ import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
 import type { MenuItem } from "./overlays";
 import { useCoreNavigation } from "./CoreNavigation";
+import { useFederatedRuntime } from "./federatedRuntime";
 import { useHostRegistry } from "./hostRegistry";
 import {
   fetchRuntimeSnapshot,
   hostConnectionState,
-  RuntimeCache,
   runtimeAdmissionReady,
   runtimeCommandReady,
   runtimeFeatureReady,
@@ -143,14 +150,18 @@ import {
   admitRuntimeSnapshot,
   ensureBridgeConnectionRef,
   isRuntimeGenerationCurrent,
-  markRuntimeUnavailable,
-  RuntimeConnection,
 } from "./runtimeConnection";
-import type { BridgeConnectionRef, BridgeConnectionState } from "./runtimeConnection";
+import type { BridgeConnectionState } from "./runtimeConnection";
 import { qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import { coreSurfaceRegistry } from "./surfaceRegistry";
+import { SurfaceSlotBoundary } from "./SurfaceSlotBoundary";
+import type { WorldSurfaceContext } from "./world/WorldSurface";
+import { resolveOfficeHandoff } from "./world/herdrOfficeHandoff";
+import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
+import { projectHerdrOffice } from "./world/herdrOfficeProjection";
+import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
   DEFAULT_TERMINAL_INPUT_TRANSPORT,
@@ -903,14 +914,21 @@ function usePointerDragResize(
 
 export function App() {
   const bridge = useHostRegistry();
-  const { activeSurface } = useCoreNavigation();
-  const runtimeCache = useMemo(() => new RuntimeCache<Snapshot>(), []);
+  const { activeSurface, navigate: navigatePrimaryView } = useCoreNavigation();
+  const {
+    connectionStates,
+    setConnectionStates,
+    connectionRefs,
+    runtimeCache,
+    refreshSnapshot: refreshBridgeSnapshot,
+    setObservers: setFederatedRuntimeObservers,
+    setFollowSharedSelection: setFederatedRuntimeFollowSharedSelection,
+  } = useFederatedRuntime();
   const initialPrefs = useMemo(readDisplayPrefs, []);
   const initialSharedNavigationPrefs = useMemo(readSharedNavigationPrefs, []);
   const initialNavigationSyncMode = useMemo(readNavigationSyncMode, []);
   const legacySelectionPrefs = useMemo(readLegacyDisplaySelectionPrefs, []);
   const [displayPrefsLoaded, setDisplayPrefsLoaded] = useState(() => !isNativeApp());
-  const [connectionStates, setConnectionStates] = useState<Record<string, BridgeConnectionState>>({});
   const [agentActivityStates, setAgentActivityStates] =
     useState<Record<string, BridgeAgentActivityState>>({});
   const [agentPinsStates, setAgentPinsStates] = useState<Record<string, BridgeAgentPinsState>>({});
@@ -1001,7 +1019,14 @@ export function App() {
   const [resizingNotesPanel, setResizingNotesPanel] = useState(false);
   const [resizingNotesListPane, setResizingNotesListPane] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(initialPrefs.sidebarOpen);
-  const [showDetail, setShowDetail] = useState(false);
+  const [showDetail, setShowDetail] = useState(
+    () => globalThis.location?.pathname === "/world",
+  );
+  const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
+  const [worldHostFilter, setWorldHostFilter] = useState("all");
+  const [worldStatusFilter, setWorldStatusFilter] = useState("all");
+  const [worldRosterPage, setWorldRosterPage] = useState(0);
+  const [worldHandoffStatus, setWorldHandoffStatus] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
@@ -1069,7 +1094,9 @@ export function App() {
   const isCompactLayout = useIsCompactLayout();
   const isTouchInput = useIsTouchInput();
   const showMobileKeyboardHideRefit = isNativeAndroid();
-  const connectionRefs = useRef<Record<string, BridgeConnectionRef>>({});
+  const spacesSnapshotCacheRef = useRef<
+    Record<string, { profileConnectionKey: string; snapshot: Snapshot }>
+  >({});
   const isCompactLayoutRef = useRef(isCompactLayout);
   const showDetailRef = useRef(showDetail);
   const selectedBridgeIdRef = useRef(selectedBridgeId);
@@ -1214,6 +1241,32 @@ export function App() {
     notesPanelOpen,
   ]);
 
+  useEffect(() => {
+    const enabledProfileIds = new Set(bridge.enabledRuntimes.map((runtime) => runtime.id));
+    for (const profileId of Object.keys(spacesSnapshotCacheRef.current)) {
+      if (!enabledProfileIds.has(profileId)) {
+        delete spacesSnapshotCacheRef.current[profileId];
+      }
+    }
+    for (const runtime of bridge.enabledRuntimes) {
+      const cached = spacesSnapshotCacheRef.current[runtime.id];
+      if (cached && cached.profileConnectionKey !== runtime.connectionKey) {
+        delete spacesSnapshotCacheRef.current[runtime.id];
+      }
+      const state = connectionStates[runtime.id];
+      if (
+        coreSurfaceRegistry.supports("spaces", runtime.capabilities) &&
+        state?.connectionKey === runtime.generationKey &&
+        state.snapshot
+      ) {
+        spacesSnapshotCacheRef.current[runtime.id] = {
+          profileConnectionKey: runtime.connectionKey,
+          snapshot: state.snapshot,
+        };
+      }
+    }
+  }, [bridge.enabledRuntimes, connectionStates]);
+
   const bridgeViews = useMemo<BridgeConnectionView[]>(
     () =>
       bridge.enabledRuntimes.map((runtime) => {
@@ -1225,10 +1278,17 @@ export function App() {
           activeSurface.id,
           runtime.capabilities,
         );
+        const retainedSpacesSnapshot = spacesSnapshotCacheRef.current[runtime.id];
+        const surfaceSnapshot = surfaceSupported
+          ? snapshot
+          : activeSurface.id === "spaces" &&
+              retainedSpacesSnapshot?.profileConnectionKey === runtime.connectionKey
+            ? retainedSpacesSnapshot.snapshot
+            : null;
         return {
           runtime,
-          snapshot,
-          loadState,
+          snapshot: surfaceSnapshot,
+          loadState: surfaceSupported ? loadState : "error",
           connectionState: hostConnectionState(
             runtime.capabilityState,
             loadState,
@@ -1243,6 +1303,33 @@ export function App() {
         };
       }),
     [activeSurface.id, bridge.enabledRuntimes, connectionStates],
+  );
+  const worldSources = useMemo(
+    () =>
+      herdrOfficeSourcesFromRuntime(
+        bridge.profiles,
+        bridge.availableRuntimes,
+        connectionStates,
+      ),
+    [bridge.availableRuntimes, bridge.profiles, connectionStates],
+  );
+  const worldAllHostsProjection = useMemo(
+    () => projectHerdrOffice(worldSources, Date.now()),
+    [worldSources],
+  );
+  const effectiveWorldHostFilter =
+    hostScope === "selected" ? (selectedBridgeId ?? "all") : worldHostFilter;
+  const worldProjection = useMemo(
+    () =>
+      projectHerdrOffice(
+        effectiveWorldHostFilter === "all"
+          ? worldSources
+          : worldSources.filter(
+              (source) => source.profile.profileId === effectiveWorldHostFilter,
+            ),
+        Date.now(),
+      ),
+    [effectiveWorldHostFilter, worldSources],
   );
   const runtimeIsAdmitted = useCallback(
     (profileId: string) => {
@@ -1291,11 +1378,19 @@ export function App() {
   const selectedBridgeView = selectedRuntime
     ? (bridgeViews.find((view) => view.runtime.id === selectedRuntime.id) ?? null)
     : null;
-  const selectedConnectionState =
+  const sharedSelectedConnectionState =
     selectedRuntime &&
     connectionStates[selectedRuntime.id]?.connectionKey === selectedRuntime.generationKey
       ? connectionStates[selectedRuntime.id]
       : null;
+  const selectedConnectionState =
+    sharedSelectedConnectionState && selectedBridgeView?.surfaceError
+      ? {
+          ...sharedSelectedConnectionState,
+          snapshot: selectedBridgeView.snapshot,
+          loadState: "error" as const,
+        }
+      : sharedSelectedConnectionState;
   const snapshot = selectedConnectionState?.snapshot ?? null;
   const loadState: LoadState = selectedConnectionState?.loadState ?? (selectedRuntime ? "loading" : "ready");
   const selectedControlsEnabled = runtimeAdmissionReady(
@@ -1984,24 +2079,6 @@ export function App() {
       }
     }
 
-    for (const bridgeId of Object.keys(connectionRefs.current)) {
-      if (!activeBridgeIds.has(bridgeId)) {
-        delete connectionRefs.current[bridgeId];
-        runtimeCache.remove(bridgeId);
-      }
-    }
-    setConnectionStates((current) => {
-      let changed = false;
-      const next: Record<string, BridgeConnectionState> = {};
-      for (const [bridgeId, state] of Object.entries(current)) {
-        if (activeBridgeIds.has(bridgeId)) {
-          next[bridgeId] = state;
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : current;
-    });
     setAgentActivityStates((current) => {
       let changed = false;
       const next: Record<string, BridgeAgentActivityState> = {};
@@ -2038,7 +2115,7 @@ export function App() {
       }
       return changed ? next : current;
     });
-  }, [bridge.enabledRuntimes, bridge.profiles, clearPendingSharedPaneSelection, runtimeCache]);
+  }, [bridge.enabledRuntimes, bridge.profiles, clearPendingSharedPaneSelection]);
 
   useEffect(() => {
     if (!error) {
@@ -2456,6 +2533,59 @@ export function App() {
 
   const focusPane = (bridgeId: BridgeId, pane: PaneInfo) => {
     openPane(bridgeId, pane);
+    requestTerminalFocus();
+  };
+
+  const openWorldTargetInSpaces = (request: OfficeHandoffRequest) => {
+    const runtime = bridge.getRuntime(request.profileId);
+    const resolution = resolveOfficeHandoff(
+      request,
+      runtime,
+      runtime ? connectionStates[runtime.id] : null,
+    );
+    if (!resolution.ok) {
+      setWorldHandoffStatus(resolution.message);
+      if (resolution.reason === "missing" || resolution.reason === "reconnected") {
+        setWorldSelectedKey(
+          worldProjection.hosts.some((host) => host.key === request.profileId)
+            ? request.profileId
+            : null,
+        );
+      }
+      return;
+    }
+
+    const currentTarget =
+      resolution.kind === "agent"
+        ? qualifyRuntimeTarget(resolution.runtime.id, "pane", resolution.pane.pane_id)
+        : qualifyRuntimeTarget(
+            resolution.runtime.id,
+            "workspace",
+            resolution.workspace.workspace_id,
+          );
+    try {
+      bridge.routeTarget(currentTarget, undefined, (profileId) => {
+        const currentRuntime = bridge.getRuntime(profileId);
+        return runtimeAdmissionReady(
+          currentRuntime,
+          currentRuntime ? connectionStates[currentRuntime.id] : null,
+          ["snapshot", "terminal_attach"],
+        );
+      });
+    } catch {
+      setWorldHandoffStatus(
+        "The exact Spaces target became unavailable. World remains open.",
+      );
+      return;
+    }
+
+    setWorldHandoffStatus(null);
+    navigatePrimaryView("spaces");
+    if (resolution.kind === "agent") {
+      openPane(resolution.runtime.id, resolution.pane);
+    } else {
+      selectSpace(resolution.runtime.id, resolution.workspace.workspace_id);
+    }
     requestTerminalFocus();
   };
 
@@ -3205,47 +3335,6 @@ export function App() {
     }
   };
 
-  async function refreshBridgeSnapshot(runtime: BridgeRuntime, setLoading: boolean) {
-    const ref = ensureBridgeConnectionRef(connectionRefs, runtime, runtimeCache);
-    const requestConnectionKey = runtime.generationKey;
-    const refreshGeneration = ref.activityGeneration;
-    if (setLoading) {
-      setConnectionStates((current) => ({
-        ...current,
-        [runtime.id]: {
-          connectionKey: requestConnectionKey,
-          snapshot: ref.snapshot,
-          loadState: "loading",
-        },
-      }));
-    }
-    try {
-      const next = await fetchRuntimeSnapshot(runtime.httpUrl);
-      const currentRef = connectionRefs.current[runtime.id];
-      if (!isRuntimeGenerationCurrent(currentRef, requestConnectionKey)) {
-        return null;
-      }
-      if (currentRef.resyncBarrierGeneration > refreshGeneration) {
-        return refreshBridgeSnapshot(runtime, false);
-      }
-      return admitRuntimeSnapshot({
-        runtime,
-        snapshot: next,
-        ref: currentRef,
-        refreshGeneration,
-        runtimeCache,
-        setConnectionStates,
-        onRecoveryDetected: bridge.retryBridgeProbe,
-      });
-    } catch {
-      const currentRef = connectionRefs.current[runtime.id];
-      if (isRuntimeGenerationCurrent(currentRef, requestConnectionKey)) {
-        markRuntimeUnavailable(runtime, currentRef, runtimeCache, setConnectionStates);
-      }
-      return null;
-    }
-  }
-
   async function refreshBridgeResource<Resource>(options: {
     runtime: BridgeRuntime;
     setLoading: boolean;
@@ -3421,6 +3510,21 @@ export function App() {
       void refreshBridgeNotes(runtime, false);
     }
   };
+
+  useLayoutEffect(() => {
+    setFederatedRuntimeObservers({
+      onPaneSelection: applySharedPaneSelection,
+      onAgentActivityChanged: refreshAgentActivityForBridge,
+      onAgentPinsChanged: refreshAgentPinsForBridge,
+      onNotesChanged: refreshNotesForBridge,
+    });
+    return () => setFederatedRuntimeObservers(null);
+  });
+
+  useEffect(() => {
+    setFederatedRuntimeFollowSharedSelection(navigationIsShared);
+    return () => setFederatedRuntimeFollowSharedSelection(false);
+  }, [navigationIsShared, setFederatedRuntimeFollowSharedSelection]);
 
   useEffect(() => {
     if (!notesEnabled) {
@@ -3742,6 +3846,58 @@ export function App() {
     activeSurface.requiredCapabilities,
   );
   const renderTerminal = !isCompactLayout || showDetail;
+  const WorldSurface =
+    activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
+  const worldSurfaceContext: WorldSurfaceContext = {
+    projection: worldProjection,
+    availableHosts: worldAllHostsProjection.hosts,
+    selectedKey: worldSelectedKey,
+    onSelect: (key) => {
+      setWorldSelectedKey(key);
+      setWorldHandoffStatus(null);
+    },
+    hostFilter: effectiveWorldHostFilter,
+    hostFilterLocked: hostScope === "selected",
+    onHostFilter: (value) => {
+      setWorldHostFilter(value);
+      setWorldRosterPage(0);
+      setWorldHandoffStatus(null);
+    },
+    statusFilter: worldStatusFilter,
+    onStatusFilter: (value) => {
+      setWorldStatusFilter(value);
+      setWorldRosterPage(0);
+      setWorldHandoffStatus(null);
+    },
+    rosterPage: worldRosterPage,
+    onRosterPage: setWorldRosterPage,
+    compact: isCompactLayout,
+    onBackToSidebar: closeMobileDetail,
+    onViewOffice: openMobileDetail,
+    onToggleSidebar: () => setSidebarOpen((open) => !open),
+    onOpenInSpaces: openWorldTargetInSpaces,
+    handoffStatus: worldHandoffStatus,
+  };
+  const worldSidebar = WorldSurface ? (
+    <SurfaceSlotBoundary label="World sidebar" resetKey={activeSurface.id}>
+      <Suspense fallback={<div className="surface-loading" role="status">Loading World…</div>}>
+        <WorldSurface slot="sidebar" context={worldSurfaceContext} />
+      </Suspense>
+    </SurfaceSlotBoundary>
+  ) : null;
+  const worldStage = WorldSurface ? (
+    <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>
+      <Suspense
+        fallback={
+          <div className="surface-loading surface-loading-stage" role="status">
+            Loading Pixel Office…
+          </div>
+        }
+      >
+        <WorldSurface slot="stage" context={worldSurfaceContext} />
+      </Suspense>
+    </SurfaceSlotBoundary>
+  ) : null;
   const appStyle = {
     "--sidebar-w": `${sidebarWidth}px`,
     "--notes-w": `${notesPanelWidth}px`,
@@ -3761,37 +3917,29 @@ export function App() {
     >;
 
   return (
-    <div
-      className="app"
+    <HerdrClientFrame
       style={appStyle}
-      data-sidebar={sidebarOpen ? "open" : "closed"}
-      data-notes={notesPanelOpen && notesEnabled ? "open" : "closed"}
-      data-resizing-sidebar={resizingSidebar ? "true" : "false"}
-      data-resizing-notes={resizingNotesPanel ? "true" : "false"}
-      data-resizing-notes-list={resizingNotesListPane ? "true" : "false"}
-      data-compact={isCompactLayout ? "true" : "false"}
-      data-touch={isTouchInput ? "true" : "false"}
-      data-detail={isCompactLayout && showDetail ? "true" : "false"}
+      sidebarOpen={sidebarOpen}
+      notesOpen={activeSurface.id === "spaces" && notesPanelOpen && notesEnabled}
+      resizingSidebar={resizingSidebar}
+      resizingNotes={resizingNotesPanel}
+      resizingNotesList={resizingNotesListPane}
+      compact={isCompactLayout}
+      touch={isTouchInput}
+      detail={showDetail}
+      primaryView={activeSurface.id}
     >
-      {bridge.enabledRuntimes.map((runtime) => (
-        <RuntimeConnection
-          key={runtime.id}
-          runtime={runtime}
-          requiredCapabilities={activeSurface.requiredCapabilities}
-          followSharedSelection={navigationIsShared}
-          connectionRefs={connectionRefs}
-          runtimeCache={runtimeCache}
-          setConnectionStates={setConnectionStates}
-          onRecoveryDetected={bridge.retryBridgeProbe}
-          onPaneSelection={applySharedPaneSelection}
-          onAgentActivityChanged={refreshAgentActivityForBridge}
-          onAgentPinsChanged={refreshAgentPinsForBridge}
-          onNotesChanged={refreshNotesForBridge}
-        />
-      ))}
-      <aside className="sidebar" aria-label="Switcher">
+      <HerdrClientSidebar>
         <Switcher
           bridgeViews={bridgeViews}
+          primaryView={activeSurface.id}
+          onPrimaryView={(surfaceId) => {
+            navigatePrimaryView(surfaceId);
+            if (surfaceId === "world" && isCompactLayout) {
+              openMobileDetail();
+            }
+          }}
+          worldSidebar={worldSidebar}
           selectedBridgeId={selectedRuntime?.id ?? null}
           hostScope={hostScope}
           snapshot={snapshot}
@@ -3935,9 +4083,11 @@ export function App() {
             }
           }}
         />
-      </aside>
+      </HerdrClientSidebar>
 
-      <section className="stage" aria-label="Terminal">
+      <HerdrMainStage label={activeSurface.id === "world" ? "Pixel Office" : "Terminal"}>
+        {activeSurface.id === "world" ? worldStage : (
+          <>
         <TabBar
           snapshot={snapshot}
           activeSpace={activeSpace}
@@ -4118,9 +4268,11 @@ export function App() {
         ) : (
           <div className="terminal-stage" aria-hidden="true" />
         )}
-      </section>
+          </>
+        )}
+      </HerdrMainStage>
 
-      {notesPanelOpen && notesEnabled ? (
+      {activeSurface.id === "spaces" && notesPanelOpen && notesEnabled ? (
         <NotesSurface
           compact={isCompactLayout}
           mobileScreen={mobileNotesScreen}
@@ -4371,7 +4523,7 @@ export function App() {
           {error}
         </div>
       ) : null}
-    </div>
+    </HerdrClientFrame>
   );
 }
 
@@ -5650,6 +5802,9 @@ function TabBar({
 
 function Switcher({
   bridgeViews,
+  primaryView,
+  onPrimaryView,
+  worldSidebar,
   selectedBridgeId,
   hostScope,
   snapshot,
@@ -5705,6 +5860,9 @@ function Switcher({
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
+  primaryView: string;
+  onPrimaryView: (surfaceId: string) => void;
+  worldSidebar: ReactNode;
   selectedBridgeId: BridgeId | null;
   hostScope: HostScope;
   snapshot: Snapshot | null;
@@ -6588,6 +6746,27 @@ function Switcher({
         </button>
       </header>
 
+      <div className="primary-view-switch" role="group" aria-label="Spaces | World">
+        <button
+          type="button"
+          data-on={primaryView === "spaces"}
+          aria-pressed={primaryView === "spaces"}
+          onClick={() => onPrimaryView("spaces")}
+        >
+          <SquareTerminal size={14} aria-hidden="true" />
+          Spaces
+        </button>
+        <button
+          type="button"
+          data-on={primaryView === "world"}
+          aria-pressed={primaryView === "world"}
+          onClick={() => onPrimaryView("world")}
+        >
+          <Building2 size={14} aria-hidden="true" />
+          World
+        </button>
+      </div>
+
       <div className="sidebar-scope host-scope" role="group" aria-label="Host">
         {bridgeViews.map((view) => (
           <button
@@ -6622,6 +6801,8 @@ function Switcher({
         ) : null}
       </div>
 
+      {primaryView === "world" ? worldSidebar : (
+        <>
       <div className="sidebar-mode" role="group" aria-label="Sidebar view">
         <button
           type="button"
@@ -6966,6 +7147,8 @@ function Switcher({
           onClose={() => setSpaceOptionsMenu(null)}
         />
       ) : null}
+        </>
+      )}
     </>
   );
 }
@@ -8404,16 +8587,6 @@ function StatusBadge({ status }: { status: AgentStatus }) {
 
 export function shouldRenderAgentRowInTabs(pane: PaneInfo, enabled: boolean) {
   return enabled && isAgentPane(pane);
-}
-
-function isAgentPane(pane: PaneInfo) {
-  return Boolean(
-    pane.agent ||
-      pane.display_agent ||
-      pane.title ||
-      Object.keys(pane.state_labels ?? {}).length > 0 ||
-      pane.agent_status !== "unknown",
-  );
 }
 
 export function isActiveAgentStatus(status: AgentStatus) {
