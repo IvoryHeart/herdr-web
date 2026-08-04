@@ -503,6 +503,7 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 02" }).click();
+  await page.getByRole("button", { name: "Close agent conversation" }).click();
   await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
   const officeWidth = await page.evaluate(
     () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
@@ -641,6 +642,7 @@ test("revalidates a colliding live agent and opens its exact host in Spaces", as
   await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await page.getByRole("button", { name: "Close agent conversation" }).click();
   await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
   const officeWidth = await page.evaluate(
     () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
