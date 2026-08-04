@@ -290,6 +290,95 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(bubble).toHaveCount(0);
 });
 
+test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
+  page,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await waitForLiveOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  const bubble = page.locator("[data-world-conversation='open']");
+  const slot = page.locator(".world-conversation-slot");
+  await expect(bubble).toBeVisible();
+  await expect(page.locator(".world-conversation-resize")).toBeVisible();
+  await expect(bubble.locator(".terminal-stage")).toHaveAttribute("data-terminal-translucent", "true");
+  const accessibility = await new AxeBuilder({ page }).include(".world-stage-shell").analyze();
+  expect(
+    accessibility.violations.filter((violation) =>
+      ["serious", "critical"].includes(violation.impact ?? ""),
+    ),
+  ).toEqual([]);
+
+  const beforeMove = await slot.boundingBox();
+  const beforeWorkbenchPath = await page.locator("path[data-anchor='workbench']").getAttribute("d");
+  const header = page.locator(".world-conversation-header");
+  const headerBox = await header.boundingBox();
+  expect(beforeMove).not.toBeNull();
+  expect(headerBox).not.toBeNull();
+  await page.mouse.move((headerBox?.x ?? 0) + 32, (headerBox?.y ?? 0) + 24);
+  await page.mouse.down();
+  await page.mouse.move((headerBox?.x ?? 0) + 112, (headerBox?.y ?? 0) - 16);
+  await page.mouse.up();
+
+  await expect.poll(async () => (await slot.boundingBox())?.x ?? 0).toBeCloseTo(
+    (beforeMove?.x ?? 0) + 80,
+    0,
+  );
+  const afterMove = await slot.boundingBox();
+  expect(afterMove).not.toBeNull();
+  expect(Math.abs((afterMove?.y ?? 0) - ((beforeMove?.y ?? 0) - 40))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterMove?.width ?? 0) - (beforeMove?.width ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterMove?.height ?? 0) - (beforeMove?.height ?? 0))).toBeLessThanOrEqual(1);
+  await expect.poll(() => page.locator("path[data-anchor='workbench']").getAttribute("d")).not.toBe(
+    beforeWorkbenchPath,
+  );
+
+  const beforeResize = await slot.boundingBox();
+  const resizeHandle = page.locator(".world-conversation-resize");
+  const resizeBox = await resizeHandle.boundingBox();
+  expect(beforeResize).not.toBeNull();
+  expect(resizeBox).not.toBeNull();
+  await page.mouse.move((resizeBox?.x ?? 0) + 12, (resizeBox?.y ?? 0) + 12);
+  await page.mouse.down();
+  await page.mouse.move((resizeBox?.x ?? 0) + 52, (resizeBox?.y ?? 0) + 20);
+  await page.mouse.up();
+
+  await expect.poll(async () => (await slot.boundingBox())?.width ?? 0).toBeGreaterThan(
+    beforeResize?.width ?? 0,
+  );
+  const afterResize = await slot.boundingBox();
+  expect(afterResize).not.toBeNull();
+  expect(afterResize?.height ?? 0).toBeGreaterThanOrEqual(beforeResize?.height ?? 0);
+  await expect(slot).toHaveAttribute("data-positioned", "true");
+
+  await page.locator(".agent-row").filter({ hasText: "Codex B" }).click();
+  await expect(bubble).toContainText("Codex B");
+  const afterTargetSwitch = await slot.boundingBox();
+  expect(afterTargetSwitch).not.toBeNull();
+  expect(Math.abs((afterTargetSwitch?.x ?? 0) - (afterResize?.x ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterTargetSwitch?.y ?? 0) - (afterResize?.y ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterTargetSwitch?.width ?? 0) - (afterResize?.width ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterTargetSwitch?.height ?? 0) - (afterResize?.height ?? 0))).toBeLessThanOrEqual(1);
+});
+
+test("uses the fixed mobile conversation layout without exposing desktop resize controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
+  await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  await expect(page.locator(".world-conversation-resize")).toHaveCount(0);
+  await expect(page.locator(".world-conversation-slot")).toHaveAttribute("data-positioned", "false");
+});
+
 test("opens the conversation target in the full Spaces terminal", async ({ page }) => {
   await page.goto("/world");
   await waitForOffice(page);
@@ -359,6 +448,8 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
   await expect(bubble).toContainText("Agent 09");
+  const beforeMovement = await page.locator(".world-conversation-slot").boundingBox();
+  expect(beforeMovement).not.toBeNull();
 
   const eventResponse = await request.post("http://127.0.0.1:4173/__fixture/ws-event", {
     data: {
@@ -380,6 +471,12 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
 
   await expect(bubble).toBeVisible();
   await expect(page.locator(".agent-row").filter({ hasText: "Agent 09" }).first()).toContainText("Running");
+  const afterMovement = await page.locator(".world-conversation-slot").boundingBox();
+  expect(afterMovement).not.toBeNull();
+  expect(Math.abs((afterMovement?.x ?? 0) - (beforeMovement?.x ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterMovement?.y ?? 0) - (beforeMovement?.y ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterMovement?.width ?? 0) - (beforeMovement?.width ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((afterMovement?.height ?? 0) - (beforeMovement?.height ?? 0))).toBeLessThanOrEqual(1);
 });
 
 test("shows perceptible working animation when motion is allowed", async ({ page }) => {

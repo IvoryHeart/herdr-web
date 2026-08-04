@@ -91,6 +91,8 @@ type Props = {
   terminalInputBatchDelayMs?: number;
   /** Delay for coalescing terminal output frames. Zero disables output batching. */
   terminalOutputCoalesceMs?: number;
+  /** Render the terminal background translucently for the Office conversation bubble. */
+  transparentBackground?: boolean;
   /** Incrementing token from the parent that requests an immediate fit+resize. */
   refitToken?: number;
   /** Incrementing token from the parent that requests focus on the preferred terminal input. */
@@ -158,6 +160,7 @@ export function TerminalView({
   terminalInputTransport = "json",
   terminalInputBatchDelayMs = 0,
   terminalOutputCoalesceMs = DEFAULT_TERMINAL_OUTPUT_COALESCE_MS,
+  transparentBackground = false,
   refitToken = 0,
   focusToken = 0,
 }: Props) {
@@ -506,7 +509,10 @@ export function TerminalView({
     let resizeObserver: ResizeObserver | null = null;
     const generation = rendererGenerationRef.current + 1;
     rendererGenerationRef.current = generation;
-    const renderer: TerminalRenderer = new GhosttyRenderer(terminalFontSizePxRef.current);
+    const renderer: TerminalRenderer = new GhosttyRenderer(
+      terminalFontSizePxRef.current,
+      transparentBackground,
+    );
     rendererRef.current = renderer;
     setConnectionState("connecting");
 
@@ -1033,6 +1039,7 @@ export function TerminalView({
     flushQueuedTerminalInput,
     pane?.terminal_id,
     rendererReady,
+    transparentBackground,
     terminalOutputCoalesceMs,
     wsUrl,
   ]);
@@ -1329,6 +1336,7 @@ export function TerminalView({
     <section
       ref={stageRef}
       className="terminal-stage"
+      data-terminal-translucent={transparentBackground ? "true" : undefined}
       aria-label="Selected pane terminal"
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("Files")) {

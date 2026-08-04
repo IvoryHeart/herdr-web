@@ -1,0 +1,106 @@
+export type ConversationGeometry = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export const CONVERSATION_STAGE_MARGIN = 12;
+export const CONVERSATION_MIN_WIDTH = 560;
+export const CONVERSATION_MIN_HEIGHT = 340;
+export const CONVERSATION_MAX_WIDTH = 960;
+export const CONVERSATION_MAX_HEIGHT = 560;
+
+export function defaultConversationGeometry(
+  viewportWidth: number,
+  viewportHeight: number,
+): ConversationGeometry {
+  const width = boundedDimension(
+    viewportWidth * 0.72,
+    CONVERSATION_MIN_WIDTH,
+    CONVERSATION_MAX_WIDTH,
+    viewportWidth,
+  );
+  const height = boundedDimension(
+    viewportHeight * 0.6,
+    CONVERSATION_MIN_HEIGHT,
+    CONVERSATION_MAX_HEIGHT,
+    viewportHeight,
+  );
+  return clampConversationGeometry({
+    left: (viewportWidth - width) / 2,
+    top: (viewportHeight - height) / 2,
+    width,
+    height,
+  }, viewportWidth, viewportHeight);
+}
+
+export function clampConversationGeometry(
+  geometry: ConversationGeometry,
+  viewportWidth: number,
+  viewportHeight: number,
+): ConversationGeometry {
+  const maxWidth = Math.max(0, viewportWidth - CONVERSATION_STAGE_MARGIN * 2);
+  const maxHeight = Math.max(0, viewportHeight - CONVERSATION_STAGE_MARGIN * 2);
+  const minWidth = Math.min(CONVERSATION_MIN_WIDTH, maxWidth);
+  const minHeight = Math.min(CONVERSATION_MIN_HEIGHT, maxHeight);
+  const width = clamp(
+    finiteOr(geometry.width, minWidth),
+    minWidth,
+    Math.min(CONVERSATION_MAX_WIDTH, maxWidth),
+  );
+  const height = clamp(
+    finiteOr(geometry.height, minHeight),
+    minHeight,
+    Math.min(CONVERSATION_MAX_HEIGHT, maxHeight),
+  );
+  const maxLeft = Math.max(CONVERSATION_STAGE_MARGIN, viewportWidth - CONVERSATION_STAGE_MARGIN - width);
+  const maxTop = Math.max(CONVERSATION_STAGE_MARGIN, viewportHeight - CONVERSATION_STAGE_MARGIN - height);
+  return {
+    left: clamp(finiteOr(geometry.left, CONVERSATION_STAGE_MARGIN), CONVERSATION_STAGE_MARGIN, maxLeft),
+    top: clamp(finiteOr(geometry.top, CONVERSATION_STAGE_MARGIN), CONVERSATION_STAGE_MARGIN, maxTop),
+    width,
+    height,
+  };
+}
+
+export function moveConversationGeometry(
+  geometry: ConversationGeometry,
+  deltaX: number,
+  deltaY: number,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  return clampConversationGeometry({
+    ...geometry,
+    left: geometry.left + deltaX,
+    top: geometry.top + deltaY,
+  }, viewportWidth, viewportHeight);
+}
+
+export function resizeConversationGeometry(
+  geometry: ConversationGeometry,
+  deltaWidth: number,
+  deltaHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  return clampConversationGeometry({
+    ...geometry,
+    width: geometry.width + deltaWidth,
+    height: geometry.height + deltaHeight,
+  }, viewportWidth, viewportHeight);
+}
+
+function boundedDimension(value: number, minimum: number, maximum: number, viewport: number) {
+  const available = Math.max(0, viewport - CONVERSATION_STAGE_MARGIN * 2);
+  return clamp(value, Math.min(minimum, available), Math.min(maximum, available));
+}
+
+function finiteOr(value: number, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}

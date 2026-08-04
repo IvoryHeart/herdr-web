@@ -93,6 +93,20 @@ test("captures the stable Office conversation bubble", async ({ page }) => {
     path: resolve(conversationEvidenceDir, "office-conversation-1440x900.png"),
     animations: "disabled",
   });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
+  await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
+  await page.locator(".agent-row").filter({ hasText: "Agent 11" }).click();
+  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await waitForOffice(page);
+  await expect(page.locator("[data-world-conversation='open']")).toBeVisible();
+  await page.screenshot({
+    path: resolve(conversationEvidenceDir, "office-conversation-390x844.png"),
+    animations: "disabled",
+  });
 });
 
 async function waitForOffice(page: import("@playwright/test").Page) {

@@ -135,3 +135,35 @@
   and RuntimeConnection tests passed; production web build passed.
 - **Follow-up:** Movable/resizable bubble geometry and connector tracking are
   intentionally deferred to a separately approved extension.
+
+### 2026-08-04 — Movable, resizable, and translucent Office conversation bubble
+
+- **Implemented:** Added ephemeral desktop geometry for the Office bubble with
+  pointer-captured header dragging, bounded resizing, keyboard arrow movement/
+  resizing, visible focus states, and a labelled resize affordance. Geometry
+  resets when the bubble closes and is never persisted or sent to Herdr.
+- **Implemented:** Kept the terminal at its configured font size and refit the
+  existing renderer against the bubble's real CSS dimensions after resizing.
+  The full Spaces terminal remains opaque and unchanged.
+- **Implemented:** Added controlled Office-only translucency using Ghostty's
+  transparency support and a restrained backdrop blur; terminal text, cursor,
+  selection, controls, and connection state are not given blanket opacity.
+- **Implemented:** Continued tracking both workbench and live-agent SVG
+  connectors after bubble movement, resizing, scrolling, viewport changes, and
+  agent destination changes. Bubble geometry remains stable across target
+  replacement and idle-to-working movement.
+- **Implemented:** Preserved the existing compact/mobile fixed presentation;
+  desktop drag and resize controls are hidden there.
+- **Evidence:** `npm run check` passed: 301 web tests, 112 compatibility tests,
+  131 bridge tests, formatting, builds, and vendor validation. The complete
+  `npm run test:e2e` run passed with 33 tests and 2 expected skips. Added
+  browser coverage for drag, resize, connector updates, target/movement
+  continuity, mobile fallback, transparency, and serious/critical Axe results.
+- **Visual evidence:**
+  [`office-conversation-1440x900.png`](../evidence/spec-001-office-agent-conversation-bubble/office-conversation-1440x900.png)
+  and
+  [`office-conversation-390x844.png`](../evidence/spec-001-office-agent-conversation-bubble/office-conversation-390x844.png).
+- **Drift from approved spec:** None. Keyboard movement and resizing are
+  included as an accessibility enhancement; mobile drag/resize and geometry
+  persistence remain deferred.
+- **Follow-up extension:** None.

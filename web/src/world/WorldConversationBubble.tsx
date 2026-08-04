@@ -95,7 +95,12 @@ export function WorldConversationBubble({
       data-world-conversation="open"
       data-agent-key={agent?.key ?? targetLabel}
     >
-      <header className="world-conversation-header">
+      <header
+        className="world-conversation-header"
+        tabIndex={0}
+        role="group"
+        aria-label="Move agent conversation"
+      >
         <div className="world-conversation-heading">
           <MessageCircle size={17} aria-hidden="true" />
           <div>
@@ -148,6 +153,7 @@ export function WorldConversationBubble({
           terminalInputTransport={terminalInputTransport}
           terminalInputBatchDelayMs={terminalInputBatchDelayMs}
           terminalOutputCoalesceMs={terminalOutputCoalesceMs}
+          transparentBackground
         />
       </div>
     </section>

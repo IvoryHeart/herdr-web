@@ -31,6 +31,8 @@ import { DEFAULT_TERMINAL_FONT_SIZE_PX } from "./terminalPrefs";
 const TERMINAL_FONT_FAMILY =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace';
 const TERMINAL_TEXT_INPUT_TAP_GRACE_MS = 4000;
+const TERMINAL_BACKGROUND = "#11111b";
+const TERMINAL_TRANSLUCENT_BACKGROUND = "rgba(17, 17, 27, 0.88)";
 const TOUCH_SELECTION_LONG_PRESS_MS = 600;
 const TOUCH_SELECTION_TOLERANCE_PX = 10;
 const TOUCH_SELECTION_SCROLL_INTENT_PX = 5;
@@ -141,10 +143,15 @@ export class GhosttyRenderer implements TerminalRenderer {
     DEFAULT_MOBILE_TOUCH_SELECTION_ENDPOINT_TIMEOUT_MS;
   #textInputTapGraceUntil = 0;
   #fontSizePx: number;
+  #transparentBackground = false;
   #disposed = false;
 
-  constructor(fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX) {
+  constructor(
+    fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX,
+    transparentBackground = false,
+  ) {
     this.#fontSizePx = fontSizePx;
+    this.#transparentBackground = transparentBackground;
   }
 
   async mount(container: HTMLElement) {
@@ -154,6 +161,9 @@ export class GhosttyRenderer implements TerminalRenderer {
     }
 
     this.#container = container;
+    const background = this.#transparentBackground
+      ? TERMINAL_TRANSLUCENT_BACKGROUND
+      : TERMINAL_BACKGROUND;
     const terminal = new Terminal({
       convertEol: false,
       cursorBlink: true,
@@ -162,7 +172,7 @@ export class GhosttyRenderer implements TerminalRenderer {
       scrollback: 8000,
       smoothScrollDuration: 0,
       theme: {
-        background: "#11111b",
+        background,
         foreground: "#cdd6f4",
         cursor: "#f5e0dc",
         selectionBackground: "#45475a",
@@ -183,6 +193,7 @@ export class GhosttyRenderer implements TerminalRenderer {
         brightCyan: "#94e2d5",
         brightWhite: "#a6adc8",
       },
+      allowTransparency: this.#transparentBackground,
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -202,7 +213,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     terminal.textarea?.blur();
     container.blur();
     container.removeAttribute("contenteditable");
-    terminal.renderer?.getCanvas().style.setProperty("background-color", "#11111b");
+    terminal.renderer?.getCanvas().style.setProperty("background-color", background);
     terminal.renderer?.getCanvas().style.setProperty("image-rendering", "auto");
     this.#terminal = terminal;
     this.#fitAddon = fitAddon;
