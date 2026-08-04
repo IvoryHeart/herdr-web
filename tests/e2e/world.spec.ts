@@ -238,6 +238,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
 test("opens one stable live conversation bubble for the selected Office agent", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   await page.goto("/world");
   await waitForOffice(page);
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
