@@ -321,10 +321,10 @@ describe("capabilities", () => {
   });
 
   it("backs off capability retry delays", () => {
-    expect(capabilityRetryDelayMs(0)).toBe(5000);
-    expect(capabilityRetryDelayMs(1)).toBe(10000);
-    expect(capabilityRetryDelayMs(3)).toBe(40000);
-    expect(capabilityRetryDelayMs(10)).toBe(60000);
+    expect(capabilityRetryDelayMs(0)).toBe(1000);
+    expect(capabilityRetryDelayMs(1)).toBe(2000);
+    expect(capabilityRetryDelayMs(3)).toBe(8000);
+    expect(capabilityRetryDelayMs(10)).toBe(10000);
   });
 
   it("parses optional compatibility fields", () => {

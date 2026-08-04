@@ -3,7 +3,7 @@
 - **Parent spec:** [`001-office-agent-conversation-bubble-spec.md`](001-office-agent-conversation-bubble-spec.md)
 - **Implemented at:** 2026-08-04
 - **Implementation status:** Complete
-- **Delivery state:** Working tree only; no commit, push, or PR created per request
+- **Delivery state:** Merged to `main`
 
 > The approved parent specification remains unchanged. The desktop footprint
 > extension is recorded in [`001-office-agent-conversation-bubble-spec-extension-001.md`](001-office-agent-conversation-bubble-spec-extension-001.md).
@@ -116,3 +116,22 @@
 - **Drift from approved spec:** Full Spaces handoff is recorded under extension
   006; earlier specifications remain unchanged.
 - **Follow-up extension:** None.
+
+### 2026-08-04 — Startup selection and event-burst resilience
+
+- **Implemented:** Preserved Office pane selections made while the initial
+  projection is still being admitted, then resolved them when the matching
+  roster entry becomes available.
+- **Implemented:** Coalesced refreshes caused by bursts on `/ws/events` so a
+  stream of Herdr events cannot trigger an unbounded sequence of full snapshot
+  refreshes and delay first interaction.
+- **Implemented:** Shortened early capability-probe retry delays for bridges
+  recovering during page startup.
+- **Implemented:** Added opt-in Office diagnostics via `?officeDebug=1` or
+  `localStorage.setItem("herdrWeb.debug.office", "1")`; diagnostics are silent
+  unless explicitly enabled.
+- **Evidence:** `npm run lint:web`, `npm run test:web` — 296 passed;
+  `npx playwright test tests/e2e/world.spec.ts` — 15 passed; targeted bridge
+  and RuntimeConnection tests passed; production web build passed.
+- **Follow-up:** Movable/resizable bubble geometry and connector tracking are
+  intentionally deferred to a separately approved extension.

@@ -9,6 +9,7 @@ import type {
   MobileTerminalTapTarget,
   MobileTouchSelectionEndpointTimeoutMs,
 } from "../mobileTerminalPrefs";
+import { officeDebug } from "../officeDebug";
 import type { TerminalInputTransport } from "../terminalInputTransport";
 import type { OfficeAgent } from "./herdrOfficeProjection";
 
@@ -55,6 +56,21 @@ export function WorldConversationBubble({
 }) {
   const bubbleRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+
+  useEffect(() => {
+    officeDebug("conversation-bubble:mount", {
+      agentKey: agent?.key ?? null,
+      targetLabel,
+      paneId: pane.pane_id,
+      terminalId: pane.terminal_id ?? null,
+      bridgeId: runtime.id,
+      sessionKey: session.sessionKey,
+    });
+    return () => officeDebug("conversation-bubble:unmount", {
+      agentKey: agent?.key ?? null,
+      paneId: pane.pane_id,
+    });
+  }, [agent?.key, pane.pane_id, pane.terminal_id, runtime.id, session.sessionKey, targetLabel]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

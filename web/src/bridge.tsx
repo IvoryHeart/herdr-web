@@ -13,6 +13,7 @@ import { Preferences } from "@capacitor/preferences";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import { normalizeHostProfileId, normalizeHostProfileLabel } from "./hostProfile";
 import { addNativeResumeHandler } from "./native";
+import { officeDebug } from "./officeDebug";
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
 
@@ -497,6 +498,12 @@ function BridgeCapabilityProbe({
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | null = null;
+    officeDebug("capability-probe:start", {
+      bridgeId: runtime.id,
+      connectionKey: runtime.connectionKey,
+      capabilityGeneration: runtime.capabilityGeneration,
+      retry: capabilityRetry,
+    });
     onStateRef.current({
       connectionKey: runtime.connectionKey,
       capabilityGeneration: runtime.capabilityGeneration,
@@ -511,6 +518,12 @@ function BridgeCapabilityProbe({
           return;
         }
         const outcome = capabilityProbeSuccess(next);
+        officeDebug("capability-probe:success", {
+          bridgeId: runtime.id,
+          capabilityState: outcome.state,
+          retry: capabilityRetry,
+          featureCount: next.features?.length ?? 0,
+        });
         if (outcome.state === "ready") {
           onReach(runtime.id);
         }
@@ -528,6 +541,13 @@ function BridgeCapabilityProbe({
           return;
         }
         const outcome = capabilityProbeFailure(error);
+        officeDebug("capability-probe:failure", {
+          bridgeId: runtime.id,
+          capabilityState: outcome.state,
+          retry: capabilityRetry,
+          willRetry: outcome.retry,
+          error: outcome.error,
+        });
         onStateRef.current({
           connectionKey: runtime.connectionKey,
           capabilityGeneration: runtime.capabilityGeneration,
@@ -538,6 +558,11 @@ function BridgeCapabilityProbe({
         });
         if (outcome.retry) {
           const retryDelay = capabilityRetryDelayMs(capabilityRetry);
+          officeDebug("capability-probe:retry-scheduled", {
+            bridgeId: runtime.id,
+            retry: capabilityRetry + 1,
+            delayMs: retryDelay,
+          });
           retryTimer = window.setTimeout(() => {
             setCapabilityRetry((current) => current + 1);
           }, retryDelay);
@@ -1129,7 +1154,10 @@ export function capabilityProbeFailure(error: unknown): CapabilityProbeOutcome {
 }
 
 export function capabilityRetryDelayMs(attempt: number) {
-  return Math.min(5000 * 2 ** Math.max(0, attempt), 60000);
+  // A bridge can be reachable a moment after the page starts (for example
+  // while Herdr is restarting). Keep the first few probes responsive so the
+  // Office does not look inert for the full long-tail backoff window.
+  return Math.min(1000 * 2 ** Math.max(0, attempt), 10000);
 }
 
 export function parseCapabilities(value: unknown): BridgeCapabilities {

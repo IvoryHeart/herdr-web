@@ -138,6 +138,7 @@ import type { MenuItem } from "./overlays";
 import { useCoreNavigation } from "./CoreNavigation";
 import { useFederatedRuntime } from "./federatedRuntime";
 import { useHostRegistry } from "./hostRegistry";
+import { officeDebug } from "./officeDebug";
 import {
   fetchRuntimeSnapshot,
   hostConnectionState,
@@ -232,6 +233,11 @@ type WorldConversationTarget = {
   paneId: string;
   generationKey: string;
 };
+type PendingWorldPaneSelection = {
+  bridgeId: BridgeId;
+  paneId: string;
+  tabId: string;
+};
 type WorldConversationView = {
   agent: OfficeAgent | null;
   targetLabel: string;
@@ -241,6 +247,23 @@ type WorldConversationView = {
   session: TerminalSessionDescriptor;
   targetKey: string;
 };
+
+function worldConversationAdmissionPending(
+  runtime: BridgeRuntime | null,
+  state: BridgeConnectionState | null | undefined,
+  generationKey: string,
+) {
+  return Boolean(
+    runtime &&
+      runtime.generationKey === generationKey &&
+      (runtime.capabilityState === "idle" ||
+        runtime.capabilityState === "probing" ||
+        !state ||
+        state.connectionKey !== generationKey ||
+        state.loadState === "loading" ||
+        (state.snapshot === null && state.loadState !== "error")),
+  );
+}
 type RuntimeCommandTarget = {
   kind: "workspace" | "tab" | "pane";
   id: string;
@@ -1052,6 +1075,7 @@ export function App() {
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
   const [worldConversationTarget, setWorldConversationTarget] =
     useState<WorldConversationTarget | null>(null);
+  const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
   const worldConversationCacheRef = useRef<WorldConversationView | null>(null);
   const worldCanvasSelectionTimerRef = useRef<number | null>(null);
   const worldSelectionSeedPendingRef = useRef(false);
@@ -1357,6 +1381,16 @@ export function App() {
     () => projectHerdrOffice(worldSourcesInScope, Date.now()),
     [worldSourcesInScope],
   );
+  useEffect(() => {
+    officeDebug("world:projection", {
+      hosts: worldProjection.hosts.length,
+      observedHosts: worldProjection.coverage.observedHosts,
+      rooms: worldProjection.rooms.length,
+      agents: worldProjection.roster.length,
+      desks: worldProjection.deskRoster.length,
+      unresolved: worldProjection.unresolved.length,
+    });
+  }, [worldProjection]);
   const cancelWorldCanvasSelection = () => {
     if (worldCanvasSelectionTimerRef.current !== null) {
       window.clearTimeout(worldCanvasSelectionTimerRef.current);
@@ -1365,6 +1399,19 @@ export function App() {
   };
   const selectWorldAgent = (agent: WorldConversationTarget | null) => {
     cancelWorldCanvasSelection();
+    pendingWorldPaneSelectionRef.current = null;
+    officeDebug("selection:target-set", {
+      target: agent
+        ? {
+            kind: agent.kind,
+            targetKey: agent.targetKey,
+            agentKey: agent.agentKey,
+            bridgeId: agent.bridgeId,
+            paneId: agent.paneId,
+            generationKey: agent.generationKey,
+          }
+        : null,
+    });
     if (!agent) {
       setWorldConversationTarget(null);
       return;
@@ -1392,16 +1439,33 @@ export function App() {
     const pane = source?.snapshot?.panes.find(
       ({ pane_id }) => pane_id === agent.currentPaneRef.nativeTargetId,
     );
+    const admissionReady = runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"]);
+    const admissionPending = worldConversationAdmissionPending(
+      runtime,
+      state,
+      agent.observedGeneration,
+    );
+    officeDebug("selection:agent-projected", {
+      key: agent.key,
+      bridgeId: agent.hostKey,
+      paneId: agent.currentPaneRef.nativeTargetId,
+      hasRuntime: Boolean(runtime),
+      hasState: Boolean(state),
+      hasPane: Boolean(pane),
+      stale: agent.stale,
+      generationMatches: agent.observedGeneration === runtime?.generationKey,
+      admissionReady,
+      admissionPending,
+    });
     setWorldSelectedKey(agent.key);
     setSelectedBridgeId(agent.hostKey);
     setWorldHandoffStatus(null);
     if (
       agent.stale ||
       !runtime ||
-      !state ||
       !pane ||
       agent.observedGeneration !== runtime.generationKey ||
-      !runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+      (!admissionReady && !admissionPending)
     ) {
       setWorldConversationTarget(null);
       return;
@@ -1440,16 +1504,34 @@ export function App() {
     const pane = occupant
       ? panes.find(({ pane_id }) => pane_id === occupant.currentPaneRef.nativeTargetId) ?? null
       : panes.find(({ focused }) => focused) ?? panes[0] ?? null;
+    const admissionReady = runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"]);
+    const admissionPending = worldConversationAdmissionPending(
+      runtime,
+      state,
+      desk.observedGeneration,
+    );
+    officeDebug("selection:desk-projected", {
+      key: desk.key,
+      bridgeId: desk.hostKey,
+      tabId: desk.tabRef.nativeTargetId,
+      paneId: pane?.pane_id ?? null,
+      hasRuntime: Boolean(runtime),
+      hasState: Boolean(state),
+      hasPane: Boolean(pane),
+      stale: desk.stale,
+      generationMatches: desk.observedGeneration === runtime?.generationKey,
+      admissionReady,
+      admissionPending,
+    });
     setSelectedBridgeId(desk.hostKey);
     setWorldSelectedKey(occupant?.key ?? desk.key);
     setWorldHandoffStatus(null);
     if (
       desk.stale ||
       !runtime ||
-      !state ||
       !pane ||
       desk.observedGeneration !== runtime.generationKey ||
-      !runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+      (!admissionReady && !admissionPending)
     ) {
       setWorldConversationTarget(null);
       return;
@@ -1518,11 +1600,27 @@ export function App() {
     return true;
   };
   const selectSidebarTab = (bridgeId: BridgeId, tabId: string) => {
+    pendingWorldPaneSelectionRef.current = null;
     if (activeSurface.id !== "world" || !selectWorldDeskForTab(bridgeId, tabId)) {
       selectTab(bridgeId, tabId);
     }
   };
   const selectSidebarPane = (bridgeId: BridgeId, pane: PaneInfo) => {
+    pendingWorldPaneSelectionRef.current = null;
+    officeDebug("selection:sidebar-pane", {
+      bridgeId,
+      paneId: pane.pane_id,
+      tabId: pane.tab_id,
+      activeSurface: activeSurface.id,
+      rosterMatches: worldProjection.roster.some(
+        ({ agent }) =>
+          agent.currentPaneRef.profileId === bridgeId &&
+          agent.currentPaneRef.nativeTargetId === pane.pane_id,
+      ),
+      deskMatches: worldProjection.deskRoster.some(
+        ({ desk }) => desk.tabRef.profileId === bridgeId && desk.tabRef.nativeTargetId === pane.tab_id,
+      ),
+    });
     if (activeSurface.id !== "world") {
       openPane(bridgeId, pane);
       return;
@@ -1543,13 +1641,64 @@ export function App() {
       selectWorldProjectedDesk(deskEntry.desk);
       return;
     }
+    pendingWorldPaneSelectionRef.current = {
+      bridgeId,
+      paneId: pane.pane_id,
+      tabId: pane.tab_id,
+    };
     setSelectedBridgeId(bridgeId);
     setWorldSelectedKey(null);
     setWorldHandoffStatus(null);
     setWorldConversationTarget(null);
   };
+
+  useEffect(() => {
+    const pending = pendingWorldPaneSelectionRef.current;
+    if (!pending) {
+      return;
+    }
+    if (activeSurface.id !== "world") {
+      pendingWorldPaneSelectionRef.current = null;
+      return;
+    }
+    const agentEntry = worldProjection.roster.find(
+      ({ agent }) =>
+        agent.currentPaneRef.profileId === pending.bridgeId &&
+        agent.currentPaneRef.nativeTargetId === pending.paneId,
+    );
+    if (agentEntry) {
+      pendingWorldPaneSelectionRef.current = null;
+      selectWorldProjectedAgent(agentEntry.agent);
+      return;
+    }
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) =>
+        desk.tabRef.profileId === pending.bridgeId &&
+        desk.tabRef.nativeTargetId === pending.tabId,
+    );
+    if (deskEntry) {
+      pendingWorldPaneSelectionRef.current = null;
+      selectWorldProjectedDesk(deskEntry.desk);
+    }
+  }, [
+    activeSurface.id,
+    selectWorldProjectedAgent,
+    selectWorldProjectedDesk,
+    worldProjection,
+  ]);
+
   const selectWorldKey = (key: string | null) => {
     cancelWorldCanvasSelection();
+    pendingWorldPaneSelectionRef.current = null;
+    officeDebug("selection:world-key", {
+      key,
+      renderer: window.__HERDR_WORLD_RENDERER__
+        ? {
+            ready: window.__HERDR_WORLD_RENDERER__.ready,
+            canvases: window.__HERDR_WORLD_RENDERER__.canvases,
+          }
+        : null,
+    });
     if (!key) {
       setWorldSelectedKey(null);
       setWorldConversationTarget(null);
@@ -1564,6 +1713,7 @@ export function App() {
       setWorldConversationTarget(null);
       worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
         worldCanvasSelectionTimerRef.current = null;
+        officeDebug("selection:world-key-timer-fired", { key, kind: "agent" });
         selectWorldProjectedAgent(agentEntry.agent);
       }, 300);
       return;
@@ -1576,6 +1726,7 @@ export function App() {
       setWorldConversationTarget(null);
       worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
         worldCanvasSelectionTimerRef.current = null;
+        officeDebug("selection:world-key-timer-fired", { key, kind: "desk" });
         selectWorldProjectedDesk(deskEntry.desk);
       }, 300);
       return;
@@ -4242,10 +4393,40 @@ export function App() {
     worldProjection,
   ]);
   useEffect(() => {
+    officeDebug("conversation:view", {
+      visible: Boolean(worldConversation),
+      targetKey: worldConversation?.targetKey ?? worldConversationTarget?.targetKey ?? null,
+      sessionKey: worldConversation?.session.sessionKey ?? null,
+      paneId: worldConversation?.pane.pane_id ?? worldConversationTarget?.paneId ?? null,
+      activeSurface: activeSurface.id,
+    });
+  }, [
+    activeSurface.id,
+    worldConversation?.pane.pane_id,
+    worldConversation?.session.sessionKey,
+    worldConversation?.targetKey,
+    worldConversationTarget?.paneId,
+    worldConversationTarget?.targetKey,
+  ]);
+  useEffect(() => {
     if (worldConversationTarget && !worldConversation) {
+      officeDebug("conversation:cleanup-check", {
+        targetKey: worldConversationTarget.targetKey,
+        activeSurface: activeSurface.id,
+      });
+      const runtime = bridge.getRuntime(worldConversationTarget.bridgeId);
+      if (
+        worldConversationAdmissionPending(
+          runtime,
+          runtime ? connectionStates[runtime.id] : null,
+          worldConversationTarget.generationKey,
+        )
+      ) {
+        return;
+      }
       setWorldConversationTarget(null);
     }
-  }, [worldConversation, worldConversationTarget]);
+  }, [bridge, connectionStates, worldConversation, worldConversationTarget]);
   const WorldSurface =
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
   const worldSurfaceContext: WorldSurfaceContext = {

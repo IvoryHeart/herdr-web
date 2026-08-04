@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
+import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
   x: number;
@@ -102,6 +103,11 @@ export function PixelOfficeCanvas({
       return;
     }
     let disposed = false;
+    officeDebug("renderer:mount-request", {
+      rooms: latestRef.current.projection.rooms.length,
+      agents: latestRef.current.projection.roster.length,
+      desks: latestRef.current.projection.deskRoster.length,
+    });
     void createOfficeRenderer(
       element,
       latestRef.current.projection,
@@ -116,12 +122,20 @@ export function PixelOfficeCanvas({
           return;
         }
         controllerRef.current = controller;
+        officeDebug("renderer:ready", {
+          rooms: latestRef.current.projection.rooms.length,
+          agents: latestRef.current.projection.roster.length,
+          desks: latestRef.current.projection.deskRoster.length,
+        });
         const latest = latestRef.current;
         controller.update(latest.projection, latest.selectedKey);
         window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
       .catch((error: unknown) => {
         if (!disposed) {
+          officeDebug("renderer:error", {
+            error: error instanceof Error ? error.message : String(error),
+          });
           if (window.__HERDR_WORLD_RENDERER__) {
             window.__HERDR_WORLD_RENDERER__.lastError =
               error instanceof Error ? error.message.slice(0, 160) : "renderer initialization failed";
@@ -131,6 +145,7 @@ export function PixelOfficeCanvas({
       });
     return () => {
       disposed = true;
+      officeDebug("renderer:destroy");
       controllerRef.current?.destroy();
       controllerRef.current = null;
     };

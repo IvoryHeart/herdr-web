@@ -2,6 +2,7 @@
 import "pixi.js/unsafe-eval";
 import {
   Application,
+  CanvasSource,
   Container,
   Graphics,
   Sprite,
@@ -32,6 +33,7 @@ import type {
   OfficeReceptionRect,
   OfficeRoomRect,
 } from "./officeGeometry";
+import { officeDebug } from "../officeDebug";
 
 const CHARACTER_URLS = Array.from(
   { length: 12 },
@@ -146,6 +148,11 @@ export async function createOfficeRenderer(
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
 ): Promise<OfficeRendererController> {
+  officeDebug("renderer:create-start", {
+    rooms: projection.rooms.length,
+    agents: projection.roster.length,
+    desks: projection.deskRoster.length,
+  });
   if (window.__HERDR_WORLD_FORCE_RENDERER_FAILURE__) {
     throw new Error("renderer unavailable");
   }
@@ -189,6 +196,7 @@ export async function createOfficeRenderer(
     app.destroy(true, { children: true });
     throw new Error("renderer disposed");
   }
+  officeDebug("renderer:pixi-ready");
   element.replaceChildren(app.canvas);
   app.canvas.setAttribute("aria-hidden", "true");
   app.canvas.setAttribute("data-office-canvas", "true");
@@ -199,6 +207,9 @@ export async function createOfficeRenderer(
   const textures = await Promise.all(
     CHARACTER_URLS.map((url) => loadTexture(url).catch(() => Texture.EMPTY)),
   );
+  officeDebug("renderer:textures-ready", {
+    textures: textures.filter((texture) => texture !== Texture.EMPTY).length,
+  });
   if (disposed) {
     app.destroy(true, { children: true });
     destroyTextures(textures);
@@ -310,6 +321,12 @@ export async function createOfficeRenderer(
       select,
       activateAgent,
     );
+    if (!diagnostics.ready) {
+      officeDebug("renderer:scene-ready", {
+        rooms: layout.rooms.length,
+        officeWidth: layout.officeWidth,
+      });
+    }
     diagnostics.ready = true;
     diagnostics.reducedMotion = reducedMotion;
     diagnostics.animation = {
@@ -1573,6 +1590,11 @@ function makeInteractive(
   node.cursor = "pointer";
   node.on("pointertap", (event) => {
     event.stopPropagation();
+    officeDebug("renderer:pointertap", {
+      key,
+      detail: event.detail,
+      hasActivation: Boolean(onActivate),
+    });
     if (event.detail === 0) {
       pointerSequences.delete(onSelect);
       canvasActivationCandidates.delete(onSelect);
@@ -1696,7 +1718,18 @@ async function loadTexture(url: string) {
       });
     });
   }
-  return Texture.from(image);
+  if (typeof globalThis.createImageBitmap === "function") {
+    return Texture.from(await globalThis.createImageBitmap(image));
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("character asset canvas unavailable");
+  }
+  context.drawImage(image, 0, 0);
+  return new Texture({ source: new CanvasSource({ resource: canvas }) });
 }
 
 function destroyTextures(textures: readonly Texture[]) {

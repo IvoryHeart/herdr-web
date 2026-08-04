@@ -123,6 +123,48 @@ describe("RuntimeConnection sockets", () => {
     expect(FakeWebSocket.instances).toHaveLength(3);
     expect(FakeWebSocket.instances.filter((socket) => socket.closed)).toHaveLength(0);
   });
+
+  it("coalesces an event burst into one snapshot refresh", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(emptySnapshot()), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const connectionRefs = { current: {} } as MutableRefObject<Record<string, BridgeConnectionRef>>;
+    const setConnectionStates = vi.fn() as unknown as Dispatch<
+      SetStateAction<Record<string, BridgeConnectionState>>
+    >;
+    const { render } = createConnectionHarness({
+      runtime: bridgeRuntime("bridge-a"),
+      connectionRefs,
+      setConnectionStates,
+    });
+
+    await render(vi.fn());
+    const events = FakeWebSocket.instances.find(
+      (socket) => socket.url === "ws://bridge-a/ws/events",
+    );
+    if (!events) {
+      throw new Error("missing events socket");
+    }
+    const initialFetchCount = fetchMock.mock.calls.length;
+    for (let index = 0; index < 20; index += 1) {
+      events.dispatchEvent(new MessageEvent("message", { data: "{}" }));
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(initialFetchCount);
+
+    await act(async () => {
+      vi.advanceTimersByTime(249);
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(initialFetchCount);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(initialFetchCount + 1);
+  });
 });
 
 describe("QuickPaneNoteDialog", () => {

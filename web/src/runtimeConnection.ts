@@ -7,8 +7,10 @@ import { createSnapshotRefreshController } from "./refreshCoordinator";
 import { fetchRuntimeSnapshot, RuntimeCache } from "./runtimeClient";
 import type { RuntimeLoadState } from "./runtimeClient";
 import type { Snapshot } from "./types";
+import { officeDebug } from "./officeDebug";
 
 const SNAPSHOT_REFRESH_INTERVAL_MS = 10_000;
+const EVENT_REFRESH_COALESCE_MS = 250;
 const SHARED_SELECTION_SETTLE_TIMEOUT_MS = 2_000;
 
 export type BridgeConnectionState = {
@@ -92,12 +94,21 @@ export function RuntimeConnection({
     let disposed = false;
     let interval: number | null = null;
     let intervalStartTimer: number | null = null;
+    let eventRefreshTimer: number | null = null;
+    let eventRefreshPending = false;
     const ref = ensureBridgeConnectionRef(connectionRefs, runtime, runtimeCache);
     const surfaceSupported = requiredCapabilities.every((capability) =>
       runtime.capabilities?.features?.includes(capability),
     );
 
     if (runtime.capabilityState !== "ready" || !runtime.canConnect || !surfaceSupported) {
+      officeDebug("runtime-connection:waiting", {
+        bridgeId: runtime.id,
+        capabilityState: runtime.capabilityState,
+        canConnect: runtime.canConnect,
+        surfaceSupported,
+        generationKey: runtime.generationKey,
+      });
       runtimeCache.markUnavailable(runtime.id, runtime.generationKey);
       setConnectionStates((current) => ({
         ...current,
@@ -131,11 +142,21 @@ export function RuntimeConnection({
     });
 
     const requestGenerationKey = runtime.generationKey;
+    let snapshotRequestCount = 0;
     const isCurrentConnection = () =>
       !disposed &&
       isRuntimeGenerationCurrent(connectionRefs.current[runtime.id], requestGenerationKey);
     const refreshController = createSnapshotRefreshController({
-      fetchSnapshot: () => fetchRuntimeSnapshot(httpUrlRef.current),
+      fetchSnapshot: () => {
+        snapshotRequestCount += 1;
+        if (snapshotRequestCount <= 5 || snapshotRequestCount % 50 === 0) {
+          officeDebug("snapshot:request", {
+            bridgeId: runtime.id,
+            count: snapshotRequestCount,
+          });
+        }
+        return fetchRuntimeSnapshot(httpUrlRef.current);
+      },
       getGeneration: () => connectionRefs.current[runtime.id]?.activityGeneration ?? 0,
       getBarrierGeneration: () =>
         connectionRefs.current[runtime.id]?.resyncBarrierGeneration ?? 0,
@@ -152,6 +173,14 @@ export function RuntimeConnection({
         if (!isRuntimeGenerationCurrent(currentRef, requestGenerationKey)) {
           return;
         }
+        officeDebug("snapshot:admit", {
+          bridgeId: runtime.id,
+          generationKey: requestGenerationKey,
+          refreshGeneration,
+          panes: next.panes.length,
+          tabs: next.tabs.length,
+          workspaces: next.workspaces.length,
+        });
         admitRuntimeSnapshot({
           runtime,
           snapshot: next,
@@ -164,6 +193,20 @@ export function RuntimeConnection({
       },
     });
     const refresh = () => refreshController.request();
+    const requestEventRefresh = () => {
+      eventRefreshPending = true;
+      if (eventRefreshTimer !== null) {
+        return;
+      }
+      eventRefreshTimer = window.setTimeout(() => {
+        eventRefreshTimer = null;
+        if (!eventRefreshPending) {
+          return;
+        }
+        eventRefreshPending = false;
+        refresh();
+      }, EVENT_REFRESH_COALESCE_MS);
+    };
     const requestActivityResync = () => {
       const currentRef = connectionRefs.current[runtime.id];
       if (!isRuntimeGenerationCurrent(currentRef, requestGenerationKey)) {
@@ -174,6 +217,11 @@ export function RuntimeConnection({
       refresh();
     };
 
+    officeDebug("runtime-connection:admitted", {
+      bridgeId: runtime.id,
+      generationKey: requestGenerationKey,
+      retainedSnapshot: ref.snapshot !== null,
+    });
     refresh();
     const refreshOffset = refreshOffsetRef.current;
     intervalStartTimer = window.setTimeout(() => {
@@ -181,7 +229,7 @@ export function RuntimeConnection({
       interval = window.setInterval(refresh, SNAPSHOT_REFRESH_INTERVAL_MS);
     }, SNAPSHOT_REFRESH_INTERVAL_MS + refreshOffset);
 
-    const events = openEventsSocket(wsUrlRef.current, "/ws/events", refresh);
+    const events = openEventsSocket(wsUrlRef.current, "/ws/events", requestEventRefresh);
     const activity = openEventsSocket(
       wsUrlRef.current,
       "/ws/activity",
@@ -284,6 +332,9 @@ export function RuntimeConnection({
       }
       if (interval !== null) {
         window.clearInterval(interval);
+      }
+      if (eventRefreshTimer !== null) {
+        window.clearTimeout(eventRefreshTimer);
       }
     };
   }, [
@@ -503,6 +554,7 @@ function openEventsSocket(
   let closed = false;
   let reconnectTimer: number | null = null;
   let attempts = 0;
+  let eventCount = 0;
 
   const connect = () => {
     if (closed) {
@@ -512,15 +564,28 @@ function openEventsSocket(
     socket = next;
     next.addEventListener("open", () => {
       attempts = 0;
+      officeDebug("events-socket:open", { path, url });
       options.onOpen?.();
     });
-    next.addEventListener("message", onEvent);
+    next.addEventListener("message", (event) => {
+      eventCount += 1;
+      if (eventCount <= 5 || eventCount % 50 === 0) {
+        officeDebug("events-socket:message", {
+          path,
+          count: eventCount,
+          dataType: typeof event.data,
+          preview: typeof event.data === "string" ? event.data.slice(0, 120) : null,
+        });
+      }
+      onEvent(event);
+    });
     next.addEventListener("close", () => {
       if (closed || socket !== next || reconnectTimer !== null) {
         return;
       }
       const delay = Math.min(500 * 2 ** attempts, 5_000);
       attempts += 1;
+      officeDebug("events-socket:close", { path, attempts, retryDelayMs: delay });
       reconnectTimer = window.setTimeout(() => {
         reconnectTimer = null;
         connect();
