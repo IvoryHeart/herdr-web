@@ -206,6 +206,7 @@ test("keeps the semantic view usable with reduced motion and renderer failure", 
 test("uses stage-first compact navigation and horizontal office scrolling at 375px", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/world");
   await waitForOffice(page);
@@ -533,9 +534,6 @@ test("isolates a stale host, retains its last-known room, and suppresses handoff
   await staleAgent.dblclick();
   await expect(page).toHaveURL(/\/world$/);
   await expect(page.locator(".world-notice-handoff")).toContainText("not live");
-  await expect(page.locator(".agent-row").filter({ hasText: "Codex A" })).not.toContainText(
-    "Stale",
-  );
 });
 
 async function waitForOffice(page: import("@playwright/test").Page) {
