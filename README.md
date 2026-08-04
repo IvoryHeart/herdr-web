@@ -4,6 +4,15 @@
 > It is experimental, Herdr compatibility code is vendored, and the runtime/API shape is expected to
 > change.
 
+## Spec-driven delivery
+
+Non-trivial product, API, data-contract, deployment, or user-visible behaviour
+changes begin with a reviewable specification in
+[`docs/specs/`](docs/specs/README.md). Once approved, a numbered specification
+is an immutable contract; implementation evidence and drift belong in its
+post-delivery `*-spec-summary.md`, while later intended behaviour belongs in a
+numbered extension.
+
 Browser UI for Herdr workspaces and agent panes.
 
 This repository is structured as a standalone app that can be distributed without asking users to

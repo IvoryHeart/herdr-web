@@ -155,6 +155,7 @@ import type { BridgeConnectionState } from "./runtimeConnection";
 import { qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
 import { terminalSessionDescriptor } from "./terminalSessions";
+import type { TerminalSessionDescriptor } from "./terminalSessions";
 import { coreSurfaceRegistry } from "./surfaceRegistry";
 import { SurfaceSlotBoundary } from "./SurfaceSlotBoundary";
 import type { WorldSurfaceContext } from "./world/WorldSurface";
@@ -165,6 +166,8 @@ import {
 } from "./world/herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
+import type { OfficeAgent } from "./world/herdrOfficeProjection";
+import { WorldConversationBubble } from "./world/WorldConversationBubble";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
@@ -221,6 +224,23 @@ type AgentSort = "attention" | "status" | "workspace" | "lastStatusChange";
 type AgentGroup = "none" | "host" | "workspace" | "hostWorkspace";
 type SpaceGroup = "none" | "host";
 type MenuKind = "space" | "tab" | "pane";
+type WorldConversationTarget = {
+  kind: "agent" | "desk";
+  targetKey: string;
+  agentKey: string | null;
+  bridgeId: BridgeId;
+  paneId: string;
+  generationKey: string;
+};
+type WorldConversationView = {
+  agent: OfficeAgent | null;
+  targetLabel: string;
+  hostLabel: string;
+  pane: PaneInfo;
+  runtime: BridgeRuntime;
+  session: TerminalSessionDescriptor;
+  targetKey: string;
+};
 type RuntimeCommandTarget = {
   kind: "workspace" | "tab" | "pane";
   id: string;
@@ -1030,7 +1050,16 @@ export function App() {
     },
   );
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
+  const [worldConversationTarget, setWorldConversationTarget] =
+    useState<WorldConversationTarget | null>(null);
+  const worldConversationCacheRef = useRef<WorldConversationView | null>(null);
+  const worldCanvasSelectionTimerRef = useRef<number | null>(null);
   const worldSelectionSeedPendingRef = useRef(false);
+  useEffect(() => () => {
+    if (worldCanvasSelectionTimerRef.current !== null) {
+      window.clearTimeout(worldCanvasSelectionTimerRef.current);
+    }
+  }, []);
   const [worldHandoffStatus, setWorldHandoffStatus] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -1328,6 +1357,112 @@ export function App() {
     () => projectHerdrOffice(worldSourcesInScope, Date.now()),
     [worldSourcesInScope],
   );
+  const cancelWorldCanvasSelection = () => {
+    if (worldCanvasSelectionTimerRef.current !== null) {
+      window.clearTimeout(worldCanvasSelectionTimerRef.current);
+      worldCanvasSelectionTimerRef.current = null;
+    }
+  };
+  const selectWorldAgent = (agent: WorldConversationTarget | null) => {
+    cancelWorldCanvasSelection();
+    if (!agent) {
+      setWorldConversationTarget(null);
+      return;
+    }
+    setSelectedBridgeId(agent.bridgeId);
+    setWorldSelectedKey(agent.agentKey ?? agent.targetKey);
+    setWorldHandoffStatus(null);
+    setWorldConversationTarget(agent);
+  };
+  const selectWorldProjectedAgent = (agent: {
+    key: string;
+    hostKey: BridgeId;
+    currentPaneRef: { nativeTargetId: string };
+    stale: boolean;
+    observedGeneration: string;
+  }) => {
+    cancelWorldCanvasSelection();
+    const runtime = bridge.getRuntime(agent.hostKey);
+    const source = worldSourcesInScope.find(
+      ({ profile }) => profile.profileId === agent.hostKey,
+    );
+    const state = runtime && connectionStates[runtime.id]?.connectionKey === runtime.generationKey
+      ? connectionStates[runtime.id]
+      : null;
+    const pane = source?.snapshot?.panes.find(
+      ({ pane_id }) => pane_id === agent.currentPaneRef.nativeTargetId,
+    );
+    setWorldSelectedKey(agent.key);
+    setSelectedBridgeId(agent.hostKey);
+    setWorldHandoffStatus(null);
+    if (
+      agent.stale ||
+      !runtime ||
+      !state ||
+      !pane ||
+      agent.observedGeneration !== runtime.generationKey ||
+      !runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+    ) {
+      setWorldConversationTarget(null);
+      return;
+    }
+    selectWorldAgent({
+      kind: "agent",
+      targetKey: agent.key,
+      agentKey: agent.key,
+      bridgeId: agent.hostKey,
+      paneId: pane.pane_id,
+      generationKey: runtime.generationKey,
+    });
+  };
+  const selectWorldProjectedDesk = (desk: {
+    key: string;
+    hostKey: BridgeId;
+    tabRef: { nativeTargetId: string };
+    observedGeneration: string;
+    stale: boolean;
+    occupantAgentKey?: string;
+  }) => {
+    cancelWorldCanvasSelection();
+    const runtime = bridge.getRuntime(desk.hostKey);
+    const source = worldSourcesInScope.find(
+      ({ profile }) => profile.profileId === desk.hostKey,
+    );
+    const state = runtime && connectionStates[runtime.id]?.connectionKey === runtime.generationKey
+      ? connectionStates[runtime.id]
+      : null;
+    const occupant = desk.occupantAgentKey
+      ? worldProjection.roster.find(({ agent }) => agent.key === desk.occupantAgentKey)?.agent ?? null
+      : null;
+    const panes = source?.snapshot?.panes.filter(
+      ({ tab_id }) => tab_id === desk.tabRef.nativeTargetId,
+    ) ?? [];
+    const pane = occupant
+      ? panes.find(({ pane_id }) => pane_id === occupant.currentPaneRef.nativeTargetId) ?? null
+      : panes.find(({ focused }) => focused) ?? panes[0] ?? null;
+    setSelectedBridgeId(desk.hostKey);
+    setWorldSelectedKey(occupant?.key ?? desk.key);
+    setWorldHandoffStatus(null);
+    if (
+      desk.stale ||
+      !runtime ||
+      !state ||
+      !pane ||
+      desk.observedGeneration !== runtime.generationKey ||
+      !runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+    ) {
+      setWorldConversationTarget(null);
+      return;
+    }
+    selectWorldAgent({
+      kind: "desk",
+      targetKey: desk.key,
+      agentKey: occupant?.key ?? null,
+      bridgeId: desk.hostKey,
+      paneId: pane.pane_id,
+      generationKey: runtime.generationKey,
+    });
+  };
   const syncWorldSelectionFromSpaces = useCallback(() => {
     const selectedRef = selectedPaneRefState;
     const selectedPane = selectedRef
@@ -1379,9 +1514,7 @@ export function App() {
     if (!deskEntry) {
       return false;
     }
-    setSelectedBridgeId(bridgeId);
-    setWorldSelectedKey(deskEntry.desk.occupantAgentKey ?? deskEntry.desk.key);
-    setWorldHandoffStatus(null);
+    selectWorldProjectedDesk(deskEntry.desk);
     return true;
   };
   const selectSidebarTab = (bridgeId: BridgeId, tabId: string) => {
@@ -1402,10 +1535,53 @@ export function App() {
     const deskEntry = worldProjection.deskRoster.find(
       ({ desk }) => desk.tabRef.profileId === bridgeId && desk.tabRef.nativeTargetId === pane.tab_id,
     );
+    if (agentEntry) {
+      selectWorldProjectedAgent(agentEntry.agent);
+      return;
+    }
+    if (deskEntry) {
+      selectWorldProjectedDesk(deskEntry.desk);
+      return;
+    }
     setSelectedBridgeId(bridgeId);
-    setWorldSelectedKey(
-      agentEntry?.agent.key ?? deskEntry?.desk.occupantAgentKey ?? deskEntry?.desk.key ?? null,
-    );
+    setWorldSelectedKey(null);
+    setWorldHandoffStatus(null);
+    setWorldConversationTarget(null);
+  };
+  const selectWorldKey = (key: string | null) => {
+    cancelWorldCanvasSelection();
+    if (!key) {
+      setWorldSelectedKey(null);
+      setWorldConversationTarget(null);
+      setWorldHandoffStatus(null);
+      return;
+    }
+    const agentEntry = worldProjection.roster.find(({ agent }) => agent.key === key);
+    if (agentEntry) {
+      setSelectedBridgeId(agentEntry.agent.hostKey);
+      setWorldSelectedKey(agentEntry.agent.key);
+      setWorldHandoffStatus(null);
+      setWorldConversationTarget(null);
+      worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
+        worldCanvasSelectionTimerRef.current = null;
+        selectWorldProjectedAgent(agentEntry.agent);
+      }, 300);
+      return;
+    }
+    const deskEntry = worldProjection.deskRoster.find(({ desk }) => desk.key === key);
+    if (deskEntry) {
+      setSelectedBridgeId(deskEntry.desk.hostKey);
+      setWorldSelectedKey(deskEntry.desk.occupantAgentKey ?? deskEntry.desk.key);
+      setWorldHandoffStatus(null);
+      setWorldConversationTarget(null);
+      worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
+        worldCanvasSelectionTimerRef.current = null;
+        selectWorldProjectedDesk(deskEntry.desk);
+      }, 300);
+      return;
+    }
+    setWorldSelectedKey(key);
+    setWorldConversationTarget(null);
     setWorldHandoffStatus(null);
   };
   const openWorldTabInSpaces = (bridgeId: BridgeId, tabId: string) => {
@@ -1446,6 +1622,27 @@ export function App() {
       return;
     }
     openWorldTabInSpaces(bridgeId, pane.tab_id);
+  };
+  const openWorldConversationInSpaces = (bridgeId: BridgeId, pane: PaneInfo) => {
+    cancelWorldCanvasSelection();
+    const runtime = bridge.getRuntime(bridgeId);
+    const state = runtime && connectionStates[runtime.id]?.connectionKey === runtime.generationKey
+      ? connectionStates[runtime.id]
+      : null;
+    const currentPane = state?.snapshot?.panes.find(({ pane_id }) => pane_id === pane.pane_id) ?? null;
+    if (
+      !runtime ||
+      !currentPane ||
+      !runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+    ) {
+      setWorldHandoffStatus("The full terminal is no longer available. Office remains open.");
+      return;
+    }
+    setWorldHandoffStatus(null);
+    setWorldConversationTarget(null);
+    navigatePrimaryView("spaces");
+    openPane(bridgeId, currentPane);
+    requestTerminalFocus();
   };
   const runtimeIsAdmitted = useCallback(
     (profileId: string) => {
@@ -2653,6 +2850,7 @@ export function App() {
   };
 
   const openWorldTargetInSpaces = (request: OfficeHandoffRequest) => {
+    cancelWorldCanvasSelection();
     const runtime = bridge.getRuntime(request.profileId);
     const resolution = resolveOfficeHandoff(
       request,
@@ -2696,6 +2894,7 @@ export function App() {
     }
 
     setWorldHandoffStatus(null);
+    setWorldConversationTarget(null);
     navigatePrimaryView("spaces");
     if (resolution.kind === "agent") {
       openPane(resolution.runtime.id, resolution.pane);
@@ -3963,20 +4162,128 @@ export function App() {
     activeSurface.requiredCapabilities,
   );
   const renderTerminal = !isCompactLayout || showDetail;
+  const worldConversation = useMemo(() => {
+    if (activeSurface.id !== "world" || !worldConversationTarget) {
+      return null;
+    }
+    const agentEntry = worldConversationTarget.agentKey
+      ? worldProjection.roster.find(
+          ({ agent }) => agent.key === worldConversationTarget.agentKey,
+        ) ?? null
+      : null;
+    const deskEntry = worldConversationTarget.kind === "desk"
+      ? worldProjection.deskRoster.find(
+          ({ desk }) => desk.key === worldConversationTarget.targetKey,
+        ) ?? null
+      : null;
+    const runtime = bridge.getRuntime(worldConversationTarget.bridgeId);
+    const state = runtime &&
+        connectionStates[runtime.id]?.connectionKey === runtime.generationKey
+      ? connectionStates[runtime.id]
+      : null;
+    const pane = state?.snapshot?.panes.find(
+      ({ pane_id }) => pane_id === worldConversationTarget.paneId,
+    ) ?? null;
+    const agent = agentEntry?.agent ?? null;
+    const runtimeMatchesTarget = Boolean(
+      runtime && runtime.generationKey === worldConversationTarget.generationKey,
+    );
+    if (
+      runtimeMatchesTarget &&
+      runtime &&
+      state &&
+      pane &&
+      runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+    ) {
+      const session = terminalSessionDescriptor(runtime, pane, state, ["snapshot"]);
+      if (session?.attachEnabled) {
+        const next: WorldConversationView = {
+          agent,
+          targetLabel:
+            agent?.displayLabel ??
+            pane.display_agent ??
+            pane.label ??
+            pane.title ??
+            pane.terminal_title ??
+            "Shell",
+          hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? "Host",
+          pane,
+          runtime,
+          session,
+          targetKey: worldConversationTarget.targetKey,
+        };
+        // Keep the last admitted terminal view across a transient observation
+        // refresh. The terminal identity is the selected pane, not the
+        // agent's animated destination or the desk's current occupant.
+        worldConversationCacheRef.current = next;
+        return next;
+      }
+    }
+
+    const cached = worldConversationCacheRef.current;
+    if (
+      runtimeMatchesTarget &&
+      cached?.targetKey === worldConversationTarget.targetKey &&
+      (!state || state.snapshot === null || state.loadState !== "ready")
+    ) {
+      return {
+        ...cached,
+        agent: agent ?? cached.agent,
+        targetLabel: agent?.displayLabel ?? cached.targetLabel,
+        hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? cached.hostLabel,
+      };
+    }
+    return null;
+  }, [
+    activeSurface.id,
+    bridge,
+    connectionStates,
+    worldConversationTarget,
+    worldProjection,
+  ]);
+  useEffect(() => {
+    if (worldConversationTarget && !worldConversation) {
+      setWorldConversationTarget(null);
+    }
+  }, [worldConversation, worldConversationTarget]);
   const WorldSurface =
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
     selectedKey: worldSelectedKey,
-    onSelect: (key) => {
-      setWorldSelectedKey(key);
-      setWorldHandoffStatus(null);
-    },
+    onSelect: selectWorldKey,
     compact: isCompactLayout,
     onBackToSidebar: closeMobileDetail,
     onToggleSidebar: () => setSidebarOpen((open) => !open),
     onOpenInSpaces: openWorldTargetInSpaces,
     handoffStatus: worldHandoffStatus,
+    conversationTargetKey: worldConversation?.targetKey ?? null,
+    conversationBubble: worldConversation ? (
+      <WorldConversationBubble
+        key={`${worldConversation.targetKey}:${worldConversation.session.sessionKey}`}
+        agent={worldConversation.agent}
+        targetLabel={worldConversation.targetLabel}
+        hostLabel={worldConversation.hostLabel}
+        pane={worldConversation.pane}
+        runtime={worldConversation.runtime}
+        session={worldConversation.session}
+        onClose={() => setWorldConversationTarget(null)}
+        onOpenInSpaces={() =>
+          openWorldConversationInSpaces(worldConversation.runtime.id, worldConversation.pane)
+        }
+        touchInput={isTouchInput}
+        terminalFontSizePx={terminalFontSizePx}
+        mobileControlsScalePercent={mobileControlsScalePercent}
+        mobileTapTarget={mobileTerminalTapTarget}
+        mobileLongPressBehavior={mobileLongPressBehavior}
+        mobileTouchSelectionEndpointTimeoutMs={mobileTouchSelectionEndpointTimeoutMs}
+        mobileCommandExpandingInput={mobileCommandExpandingInput}
+        mobileCommandEnterNewline={mobileCommandEnterNewline}
+        terminalInputTransport={terminalInputTransport}
+        terminalInputBatchDelayMs={terminalInputBatchDelayMs}
+        terminalOutputCoalesceMs={terminalOutputCoalesceMs}
+      />
+    ) : null,
   };
   const worldStage = WorldSurface ? (
     <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>

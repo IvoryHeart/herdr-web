@@ -3,36 +3,98 @@ import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
 
+export type OfficeCanvasAnchor = {
+  x: number;
+  y: number;
+  visible: boolean;
+};
+
+export type OfficeCanvasAnchors = {
+  agent: OfficeCanvasAnchor | null;
+  workbench: OfficeCanvasAnchor | null;
+};
+
 export function PixelOfficeCanvas({
   projection,
   selectedKey,
+  conversationTargetKey,
   onSelect,
   onActivateAgent,
   onActivateRoom,
+  onAnchorChange,
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
+  conversationTargetKey: string | null;
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
+  onAnchorChange?: (anchors: OfficeCanvasAnchors | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
   const latestRef = useRef({
     projection,
     selectedKey,
+    conversationTargetKey,
     onSelect,
     onActivateAgent,
     onActivateRoom,
+    onAnchorChange,
   });
   const [failure, setFailure] = useState(false);
   latestRef.current = {
     projection,
     selectedKey,
+    conversationTargetKey,
     onSelect,
     onActivateAgent,
     onActivateRoom,
+    onAnchorChange,
   };
+
+  const reportAnchors = () => {
+    const callback = latestRef.current.onAnchorChange;
+    if (!callback) {
+      return;
+    }
+    const controller = controllerRef.current;
+    const host = hostRef.current;
+    const scroll = host?.closest<HTMLElement>(".world-stage-scroll");
+    const canvas = host?.querySelector<HTMLCanvasElement>("canvas[data-office-canvas='true']");
+    const sceneAnchors = controller?.getAnchors(
+      latestRef.current.selectedKey,
+      latestRef.current.conversationTargetKey,
+    );
+    if (!scroll || !canvas || !sceneAnchors) {
+      callback(null);
+      return;
+    }
+    const canvasRect = canvas.getBoundingClientRect();
+    const scrollRect = scroll.getBoundingClientRect();
+    const toViewportAnchor = (sceneAnchor: { x: number; y: number } | null) => {
+      if (!sceneAnchor) {
+        return null;
+      }
+      const x = canvasRect.left + sceneAnchor.x;
+      const y = canvasRect.top + sceneAnchor.y - scroll.scrollTop;
+      return {
+        x,
+        y,
+        visible:
+          x >= scrollRect.left &&
+          x <= scrollRect.right &&
+          y >= scrollRect.top &&
+          y <= scrollRect.bottom,
+      };
+    };
+    callback({
+      agent: toViewportAnchor(sceneAnchors.agent),
+      workbench: toViewportAnchor(sceneAnchors.workbench),
+    });
+  };
+  const reportAnchorsRef = useRef(reportAnchors);
+  reportAnchorsRef.current = reportAnchors;
 
   useEffect(() => {
     const element = hostRef.current;
@@ -56,6 +118,7 @@ export function PixelOfficeCanvas({
         controllerRef.current = controller;
         const latest = latestRef.current;
         controller.update(latest.projection, latest.selectedKey);
+        window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
       .catch((error: unknown) => {
         if (!disposed) {
@@ -75,7 +138,23 @@ export function PixelOfficeCanvas({
 
   useEffect(() => {
     controllerRef.current?.update(projection, selectedKey);
-  }, [projection, selectedKey]);
+    window.requestAnimationFrame(() => reportAnchorsRef.current());
+  }, [conversationTargetKey, projection, selectedKey]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const scroll = host?.closest<HTMLElement>(".world-stage-scroll");
+    if (!scroll) {
+      return;
+    }
+    const scheduleReport = () => window.requestAnimationFrame(() => reportAnchorsRef.current());
+    scroll.addEventListener("scroll", scheduleReport, { passive: true });
+    window.addEventListener("resize", scheduleReport);
+    return () => {
+      scroll.removeEventListener("scroll", scheduleReport);
+      window.removeEventListener("resize", scheduleReport);
+    };
+  }, []);
 
   return (
     <div className="world-canvas-shell">

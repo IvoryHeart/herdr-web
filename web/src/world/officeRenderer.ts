@@ -121,7 +121,21 @@ declare global {
 
 export type OfficeRendererController = {
   update: (projection: HerdrOfficeProjection, selectedKey: string | null) => void;
+  getAnchors: (
+    selectedKey: string | null,
+    conversationTargetKey: string | null,
+  ) => OfficeRendererAnchors;
   destroy: () => void;
+};
+
+export type OfficeRendererAnchor = {
+  x: number;
+  y: number;
+};
+
+export type OfficeRendererAnchors = {
+  agent: OfficeRendererAnchor | null;
+  workbench: OfficeRendererAnchor | null;
 };
 
 export async function createOfficeRenderer(
@@ -431,6 +445,16 @@ export async function createOfficeRenderer(
       currentSelectedKey = nextSelectedKey;
       build(lastWidth || element.clientWidth);
     },
+    getAnchors(selectedKey, conversationTargetKey) {
+      return currentLayout
+        ? resolveOfficeAnchors(
+            currentProjection,
+            currentLayout,
+            selectedKey,
+            conversationTargetKey,
+          )
+        : { agent: null, workbench: null };
+    },
     destroy() {
       if (disposed) {
         return;
@@ -463,6 +487,117 @@ export async function createOfficeRenderer(
       diagnostics.ready = false;
     },
   };
+}
+
+function resolveOfficeAnchors(
+  projection: HerdrOfficeProjection,
+  layout: OfficeLayout,
+  selectedKey: string | null,
+  conversationTargetKey: string | null,
+): OfficeRendererAnchors {
+  const agentEntry = selectedKey
+    ? projection.roster.find(({ agent }) => agent.key === selectedKey) ?? null
+    : null;
+  const directDesk = conversationTargetKey
+    ? projection.deskRoster.find(({ desk }) => desk.key === conversationTargetKey)?.desk ?? null
+    : null;
+  const agentDesk = agentEntry?.agent.deskKey
+    ? projection.deskRoster.find(({ desk }) => desk.key === agentEntry.agent.deskKey)?.desk ?? null
+    : null;
+  return {
+    agent: agentEntry
+      ? resolveOfficeAgentAnchor(projection, layout, agentEntry.agent.key)
+      : null,
+    workbench: resolveOfficeDeskAnchor(projection, layout, directDesk ?? agentDesk),
+  };
+}
+
+function resolveOfficeDeskAnchor(
+  projection: HerdrOfficeProjection,
+  layout: OfficeLayout,
+  desk: OfficeDesk | null,
+): OfficeRendererAnchor | null {
+  if (!desk) {
+    return null;
+  }
+  const roomIndex = projection.rooms.findIndex(({ key }) => key === desk.roomKey);
+  const room = projection.rooms[roomIndex];
+  const rect = layout.rooms[roomIndex];
+  if (!room || !rect) {
+    return null;
+  }
+  const deskIndex = room.desks.findIndex(({ key }) => key === desk.key);
+  if (deskIndex < 0) {
+    return null;
+  }
+  const anchor = deskAnchor(rect, deskIndex);
+  return { x: anchor.x, y: anchor.deskY + 10 };
+}
+
+function resolveOfficeAgentAnchor(
+  projection: HerdrOfficeProjection,
+  layout: OfficeLayout,
+  key: string,
+): OfficeRendererAnchor | null {
+  const entry = projection.roster.find(({ agent }) => agent.key === key);
+  if (!entry) {
+    return null;
+  }
+  const agent = entry.agent;
+  if (agent.destination === "reception") {
+    const receptionIndex = projection.receptions.findIndex(
+      (reception) => reception.hostKey === agent.hostKey,
+    );
+    const reception = projection.receptions[receptionIndex];
+    const rect = resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length)
+      .receptions[receptionIndex];
+    if (!reception || !rect) {
+      return null;
+    }
+    const index = reception.waitingAgents.findIndex(({ key: agentKey }) => agentKey === key);
+    if (index < 0) {
+      return null;
+    }
+    const anchor = receptionAgentAnchor(rect, index);
+    return { x: anchor.x, y: anchor.characterFeetY - 42 };
+  }
+  if (agent.destination === "bar") {
+    const index = projection.barAgents.findIndex(({ key: agentKey }) => agentKey === key);
+    if (index < 0) {
+      return null;
+    }
+    const x = Math.floor(layout.officeWidth / 2) + 4;
+    const width = layout.officeWidth - x - 4;
+    const boardX = x + 16;
+    const barX = boardX + 120 + 16;
+    const barWidth = x + width - 16 - barX;
+    const stationSpan = barWidth / 5;
+    return {
+      x: barX + stationSpan * (index + 0.5),
+      y: layout.barBandY + 136 - 42,
+    };
+  }
+  const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
+  const room = projection.rooms[roomIndex];
+  const rect = layout.rooms[roomIndex];
+  if (!room || !rect) {
+    return null;
+  }
+  if (agent.placement === "seated") {
+    const deskIndex = room.desks.findIndex(({ occupantAgentKey }) => occupantAgentKey === key);
+    if (deskIndex >= 0) {
+      const anchor = deskAnchor(rect, deskIndex);
+      return { x: anchor.x, y: anchor.characterFeetY - 42 };
+    }
+  }
+  const standingIndex = room.roomAgents
+    .filter(({ placement }) => placement === "standing")
+    .findIndex(({ key: agentKey }) => agentKey === key);
+  if (standingIndex >= 0) {
+    const anchor = standingAnchor(rect, standingIndex);
+    return { x: anchor.x, y: anchor.characterFeetY - 42 };
+  }
+  return null;
 }
 
 function drawBackground(stage: Container, layout: OfficeLayout) {

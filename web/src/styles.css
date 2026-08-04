@@ -855,6 +855,7 @@ button {
 }
 
 .world-stage-shell {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -942,6 +943,131 @@ button {
   top: 0;
   display: block;
   max-width: none;
+}
+
+.world-conversation-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  margin: auto;
+  width: min(72%, 960px);
+  min-width: 560px;
+  height: min(60%, 560px);
+  min-height: 340px;
+  pointer-events: auto;
+}
+
+.world-conversation-bubble {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--base) 94%, #05050b);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 42%), 0 0 0 1px rgb(255 255 255 / 4%);
+}
+
+.world-conversation-header {
+  display: flex;
+  min-height: 52px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px 7px 13px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--mantle) 92%, var(--accent));
+}
+
+.world-conversation-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent);
+}
+
+.world-conversation-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.world-conversation-heading strong,
+.world-conversation-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.world-conversation-heading strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.world-conversation-heading span {
+  color: var(--subtext0);
+  font-size: 10px;
+}
+
+.world-conversation-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.world-conversation-terminal {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.world-conversation-terminal .terminal-stage {
+  border-radius: 0 0 9px 9px;
+}
+
+.world-conversation-connector {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.world-conversation-connector path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 72%, white);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 5;
+  opacity: 0.76;
+}
+
+.world-conversation-connector path[data-anchor="workbench"] {
+  stroke: color-mix(in srgb, var(--peach) 68%, var(--accent));
+  stroke-dasharray: 3 6;
+  opacity: 0.58;
+}
+
+.world-conversation-connector path[data-anchor="agent"] {
+  stroke: color-mix(in srgb, var(--accent) 82%, white);
+  opacity: 0.86;
+}
+
+.world-conversation-connector circle {
+  fill: var(--accent);
+  stroke: var(--base);
+  stroke-width: 2;
+}
+
+.world-conversation-connector circle[data-anchor="workbench"] {
+  fill: var(--peach);
 }
 
 .world-renderer-fallback {
@@ -3688,6 +3814,19 @@ button {
 
   .sidebar {
     border-right: 0;
+  }
+
+  .world-conversation-slot {
+    inset: 0;
+    margin: auto;
+    width: calc(100% - 20px);
+    min-width: 0;
+    height: min(60%, 520px);
+    min-height: 260px;
+  }
+
+  .world-conversation-heading strong {
+    font-size: 12px;
   }
 
   .sidebar-resizer {

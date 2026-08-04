@@ -304,7 +304,7 @@ function setFixtureState(hostId, value) {
   const commands = value.commands ?? current.commands;
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
-    !["default", "empty", "large"].includes(snapshotVariant) ||
+    !["default", "empty", "large", "idle-desk"].includes(snapshotVariant) ||
     (terminalProtocol !== null && terminalProtocol !== 18 && terminalProtocol !== 19) ||
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
@@ -329,6 +329,9 @@ function snapshot(fixture, variant = "default") {
   }
   if (variant === "large") {
     return largeSnapshot(fixture);
+  }
+  if (variant === "idle-desk") {
+    return idleDeskSnapshot(fixture);
   }
   const suffix = fixture.id.at(-1).toUpperCase();
   return {
@@ -429,6 +432,22 @@ function largeSnapshot(fixture) {
       ]
     : [];
   return { workspaces, tabs, panes, layouts: [], selected_pane_id: panes[0]?.pane_id };
+}
+
+function idleDeskSnapshot(fixture) {
+  const snapshot = largeSnapshot(fixture);
+  return {
+    ...snapshot,
+    panes: snapshot.panes.map((pane) =>
+      pane.pane_id === "large-pane-8"
+        ? {
+            ...pane,
+            agent_status: "idle",
+            state_labels: { idle: "Taking a break" },
+          }
+        : pane,
+    ),
+  };
 }
 
 function largePane(index, status, tabId, focused = false) {

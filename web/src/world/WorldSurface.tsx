@@ -5,9 +5,11 @@ import {
   PanelLeft,
   RotateCcw,
 } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
+import type { OfficeCanvasAnchor, OfficeCanvasAnchors } from "./PixelOfficeCanvas";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
 import {
@@ -25,6 +27,8 @@ export type WorldSurfaceContext = {
   onToggleSidebar: () => void;
   onOpenInSpaces: (request: OfficeHandoffRequest) => void;
   handoffStatus: string | null;
+  conversationBubble: ReactNode | null;
+  conversationTargetKey: string | null;
 };
 
 const FALLBACK_CONTEXT: WorldSurfaceContext = {
@@ -81,6 +85,8 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onToggleSidebar: () => {},
   onOpenInSpaces: () => {},
   handoffStatus: null,
+  conversationBubble: null,
+  conversationTargetKey: null,
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -125,8 +131,111 @@ function WorldStage({
   onActivateRoom: (key: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  const [conversationAnchors, setConversationAnchors] = useState<OfficeCanvasAnchors | null>(null);
+  const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
+  const [conversationRect, setConversationRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+    const measure = () => {
+      const shellRect = shell.getBoundingClientRect();
+      const nextSize = { width: shell.clientWidth, height: shell.clientHeight };
+      setShellSize((current) =>
+        current.width === nextSize.width && current.height === nextSize.height ? current : nextSize,
+      );
+      const bubble = conversationRef.current;
+      setConversationRect(bubble ? bubble.getBoundingClientRect() : null);
+      if (!bubble || shellRect.width <= 0 || shellRect.height <= 0) {
+        return;
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(shell);
+    if (conversationRef.current) {
+      observer.observe(conversationRef.current);
+    }
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [context.conversationBubble]);
+
+  useEffect(() => {
+    if (!context.conversationBubble) {
+      setConversationAnchors(null);
+      setConversationRect(null);
+    }
+  }, [context.conversationBubble]);
+
+  const connector = (() => {
+    const shell = shellRef.current;
+    if (
+      !shell ||
+      !context.conversationBubble ||
+      !context.conversationTargetKey ||
+      !conversationRect ||
+      shellSize.width <= 0 ||
+      shellSize.height <= 0
+    ) {
+      return null;
+    }
+    const endpoints: Array<{
+      kind: "workbench" | "agent";
+      anchor: OfficeCanvasAnchor;
+    }> = [];
+    for (const kind of ["workbench", "agent"] as const) {
+      const anchor = conversationAnchors?.[kind];
+      if (anchor?.visible) {
+        endpoints.push({ kind, anchor });
+      }
+    }
+    if (endpoints.length === 0) {
+      return null;
+    }
+    const shellRect = shell.getBoundingClientRect();
+    const bubbleLeft = conversationRect.left - shellRect.left;
+    const bubbleRight = conversationRect.right - shellRect.left;
+    const bubbleTop = conversationRect.top - shellRect.top;
+    const bubbleBottom = conversationRect.bottom - shellRect.top;
+    const bubbleCenterX = (bubbleLeft + bubbleRight) / 2;
+    const paths = endpoints.map(({ kind, anchor }) => {
+      const targetX = anchor.x - shellRect.left;
+      const targetY = anchor.y - shellRect.top;
+      const edgeX = targetX <= bubbleCenterX ? bubbleLeft : bubbleRight;
+      const preferredEdgeY = targetY + (kind === "workbench" ? -10 : 10);
+      const edgeY = Math.max(bubbleTop + 22, Math.min(bubbleBottom - 22, preferredEdgeY));
+      const bendX = targetX + (edgeX - targetX) * 0.55;
+      const path = `M ${targetX.toFixed(1)} ${targetY.toFixed(1)} C ${bendX.toFixed(1)} ${targetY.toFixed(1)}, ${bendX.toFixed(1)} ${edgeY.toFixed(1)}, ${edgeX.toFixed(1)} ${edgeY.toFixed(1)}`;
+      return { kind, path, targetX, targetY };
+    });
+    return (
+      <svg
+        className="world-conversation-connector"
+        aria-hidden="true"
+        width={shellSize.width}
+        height={shellSize.height}
+        viewBox={`0 0 ${shellSize.width} ${shellSize.height}`}
+        preserveAspectRatio="none"
+      >
+        {paths.map(({ kind, path, targetX, targetY }) => (
+          <g key={kind}>
+            <path data-anchor={kind} d={path} />
+            <circle data-anchor={kind} cx={targetX} cy={targetY} r="4" />
+          </g>
+        ))}
+      </svg>
+    );
+  })();
+
   return (
-    <div className="world-stage-shell">
+    <div ref={shellRef} className="world-stage-shell">
       <header className="stage-bar world-stage-bar">
         <button
           className="icon-btn"
@@ -188,11 +297,19 @@ function WorldStage({
         <PixelOfficeCanvas
           projection={projection}
           selectedKey={context.selectedKey}
+          conversationTargetKey={context.conversationTargetKey}
           onSelect={context.onSelect}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
+          onAnchorChange={setConversationAnchors}
         />
       </div>
+      {connector}
+      {context.conversationBubble ? (
+        <div ref={conversationRef} className="world-conversation-slot">
+          {context.conversationBubble}
+        </div>
+      ) : null}
     </div>
   );
 }

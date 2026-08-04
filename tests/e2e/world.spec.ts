@@ -235,6 +235,151 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
   await expect(page.getByRole("button", { name: "Back to Herdr sidebar" })).toBeVisible();
 });
 
+test("opens one stable live conversation bubble for the selected Office agent", async ({
+  page,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await waitForLiveOffice(page);
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  const firstAgent = page.locator(".agent-row").filter({ hasText: "Codex A" });
+  await firstAgent.click();
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
+  await expect(bubble.getByRole("button", { name: "Close agent conversation" })).toBeVisible();
+  await expect(bubble.locator(".terminal-stage")).toBeVisible();
+  const connector = page.locator(".world-conversation-connector");
+  await expect(connector).toBeVisible();
+  await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(1);
+  await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(1);
+
+  const slot = page.locator(".world-conversation-slot");
+  const before = await slot.boundingBox();
+  expect(before).not.toBeNull();
+  const stageBox = await page.locator(".world-stage-shell").boundingBox();
+  expect(stageBox).not.toBeNull();
+  expect(before?.width ?? 0).toBeGreaterThanOrEqual(560);
+  expect(before?.width ?? 0).toBeGreaterThan(before?.height ?? 0);
+  expect(Math.abs(
+    (before?.x ?? 0) + (before?.width ?? 0) / 2 -
+      ((stageBox?.x ?? 0) + (stageBox?.width ?? 0) / 2),
+  )).toBeLessThanOrEqual(1);
+  expect(Math.abs(
+    (before?.y ?? 0) + (before?.height ?? 0) / 2 -
+      ((stageBox?.y ?? 0) + (stageBox?.height ?? 0) / 2),
+  )).toBeLessThanOrEqual(1);
+  await page.locator(".world-stage-scroll").evaluate((element) =>
+    element.scrollTo({ top: element.scrollHeight, behavior: "auto" }),
+  );
+  const after = await slot.boundingBox();
+  expect(after).not.toBeNull();
+  expect(Math.abs((after?.x ?? 0) - (before?.x ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((after?.y ?? 0) - (before?.y ?? 0))).toBeLessThanOrEqual(1);
+
+  const secondAgent = page.locator(".agent-row").filter({ hasText: "Codex B" });
+  await secondAgent.click();
+  await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
+  await expect(bubble).toContainText("Codex B");
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(1);
+
+  await page.keyboard.press("Escape");
+  await expect(bubble).toHaveCount(0);
+});
+
+test("opens the conversation target in the full Spaces terminal", async ({ page }) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  await bubble.getByRole("button", { name: "Open full terminal in Spaces" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(".stage-title")).toHaveText("Codex A");
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(0);
+  await expect(page.locator(".terminal-stage")).toBeVisible();
+});
+
+test("opens the attached terminal when an occupied desk is selected", async ({
+  page,
+  request,
+}) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", snapshotVariant: "large" },
+  });
+  await page.goto("/world");
+  await waitForOffice(page);
+  await expect(page.locator(".agent-row").filter({ hasText: "Agent 01" })).toBeVisible();
+
+  const officeWidth = await page.evaluate(
+    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
+  );
+  const layout = resolveOfficeLayout(officeWidth, [
+    { deskCount: 8, standingCount: 2 },
+    ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
+  ]);
+  const desk = deskAnchor(layout.rooms[0], 0);
+  await page.locator("canvas[data-office-canvas='true']").click({
+    position: { x: desk.x, y: desk.deskY + 12 },
+  });
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toContainText("Agent 01");
+  await expect(bubble.locator(".terminal-overlay")).toHaveCount(0);
+});
+
+test("keeps a desk terminal open when its idle agent moves onto the work floor", async ({
+  page,
+  request,
+}) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", snapshotVariant: "idle-desk" },
+  });
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  const officeWidth = await page.evaluate(
+    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
+  );
+  const layout = resolveOfficeLayout(officeWidth, [
+    { deskCount: 8, standingCount: 2 },
+    ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
+  ]);
+  const desk = deskAnchor(layout.rooms[0], 7);
+  await page.locator("canvas[data-office-canvas='true']").click({
+    position: { x: desk.x, y: desk.deskY + 12 },
+  });
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toContainText("Agent 09");
+
+  const eventResponse = await request.post("http://127.0.0.1:4173/__fixture/ws-event", {
+    data: {
+      hostId: "host-a",
+      path: "/ws/activity",
+      event: {
+        type: "pane.agent_status_changed",
+        pane_id: "large-pane-8",
+        workspace_id: "workspace-1",
+        agent_status: "working",
+        agent: "codex",
+        title: null,
+        display_agent: "Agent 09",
+        state_labels: { working: "Running" },
+      },
+    },
+  });
+  expect((await eventResponse.json()).sent).toBeGreaterThan(0);
+
+  await expect(bubble).toBeVisible();
+  await expect(page.locator(".agent-row").filter({ hasText: "Agent 09" }).first()).toContainText("Running");
+});
+
 test("shows perceptible working animation when motion is allowed", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/world");
@@ -313,6 +458,7 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 13" }).click();
+  await page.getByRole("button", { name: "Close agent conversation" }).click();
   await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
   const stage = page.locator(".world-stage-scroll");
   await stage.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "auto" }));
