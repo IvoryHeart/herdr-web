@@ -9,6 +9,8 @@ import {
 } from "../../web/src/world/officeGeometry";
 import { hostStore } from "./hostStore";
 
+test.describe.configure({ timeout: 90_000 });
+
 test.beforeEach(async ({ page, request }) => {
   await request.post("http://127.0.0.1:4173/__fixture/reset");
   await page.addInitScript((store) => {
@@ -238,7 +240,6 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
 test("opens one stable live conversation bubble for the selected Office agent", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
   await page.goto("/world");
   await waitForOffice(page);
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
