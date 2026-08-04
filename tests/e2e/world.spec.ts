@@ -27,8 +27,8 @@ test("uses one persistent frame for direct World entry, history, and view switch
   await expect(frame).toHaveCount(1);
   await expect(page.locator("aside.sidebar")).toHaveCount(1);
   await expect(page.locator("section.stage")).toHaveCount(1);
-  await expect(page.getByRole("group", { name: "Spaces | World" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "World", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("group", { name: "Spaces | Office" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Office", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -112,7 +112,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     await expect
       .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.activeApplications ?? 0))
       .toBe(0);
-    await page.getByRole("button", { name: "World", exact: true }).click();
+    await page.getByRole("button", { name: "Office", exact: true }).click();
     await waitForOffice(page);
     await expect(frame).toHaveAttribute("data-lifecycle-frame", "stable");
   }
@@ -184,7 +184,7 @@ test("keeps the semantic view usable with reduced motion and renderer failure", 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
   await expect.poll(() => page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(2);
-  await expect(page.getByRole("group", { name: "Spaces | World" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Spaces | Office" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Roster" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Inspector" })).toBeVisible();
   const zoomAccessibility = await new AxeBuilder({ page }).analyze();
@@ -213,7 +213,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/world");
   await waitForOffice(page);
-  await expect(page.getByRole("button", { name: "Back to World roster" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to Office roster" })).toBeVisible();
   await expect
     .poll(() =>
       page.locator(".world-stage-scroll").evaluate((element) => ({
@@ -223,7 +223,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
     )
     .toMatchObject({ clientWidth: 375, scrollWidth: 1000 });
 
-  await page.getByRole("button", { name: "Back to World roster" }).click();
+  await page.getByRole("button", { name: "Back to Office roster" }).click();
   await page.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.getByRole("button", { name: "View office" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Roster" })).toBeVisible();
@@ -235,7 +235,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
   await expect(room).toBeFocused();
   expect(await room.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
   await page.getByRole("button", { name: "View office" }).click();
-  await expect(page.getByRole("button", { name: "Back to World roster" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to Office roster" })).toBeVisible();
 });
 
 test("shows perceptible working animation when motion is allowed", async ({ page }) => {
@@ -317,7 +317,7 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
 
-  await page.getByRole("button", { name: "World", exact: true }).click();
+  await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".world-agent-row").filter({ hasText: "Agent 13" }).click();
   await expect(page.locator(".world-inspector")).toContainText("Agent 13");
@@ -354,7 +354,7 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 10");
 
-  await page.getByRole("button", { name: "World", exact: true }).click();
+  await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".world-agent-row").filter({ hasText: "Agent 02" }).click();
   await expect(page.locator(".world-inspector")).toContainText("Agent 02");
@@ -426,7 +426,7 @@ test("single-clicks then double-clicks the exact colliding host room", async ({
     })
     .toEqual({ hostA: 0, hostB: 1 });
 
-  await page.getByRole("button", { name: "World", exact: true }).click();
+  await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".world-room-row").first().click();
   await expect(page.locator(".world-inspector")).toContainText("Same origin · HOST 01");
@@ -496,7 +496,7 @@ test("revalidates a colliding live agent and opens its exact host in Spaces", as
     })
     .toEqual({ hostA: 0, hostB: 1 });
 
-  await page.getByRole("button", { name: "World", exact: true }).click();
+  await page.getByRole("button", { name: "Office", exact: true }).click();
   await waitForOffice(page);
   await page.locator(".world-agent-row").filter({ hasText: "Codex A" }).click();
   await expect(page.locator(".world-inspector")).toContainText("Codex A");

@@ -83,18 +83,18 @@ export function resolveOfficeHandoff(
       (request.terminalRef.profileId !== request.profileId ||
         request.currentPaneRef.profileId !== request.profileId))
   ) {
-    return failure("invalid", "The qualified World target is no longer valid.");
+    return failure("invalid", "The qualified Office target is no longer valid.");
   }
   if (request.observedGeneration !== runtime.generationKey) {
     return failure(
       "reconnected",
-      "This host reconnected. Review the refreshed World selection and try again.",
+      "This host reconnected. Review the refreshed Office selection and try again.",
     );
   }
   if (!runtimeAdmissionReady(runtime, state, SPACES_HANDOFF_CAPABILITIES)) {
     return failure(
       "unavailable",
-      "This host is not live and Spaces-compatible. World remains open.",
+      "This host is not live and Spaces-compatible. Office remains open.",
     );
   }
 

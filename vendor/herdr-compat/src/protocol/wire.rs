@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Current protocol version. Bumped when wire format changes incompatibly.
-pub const PROTOCOL_VERSION: u32 = 17;
+pub const PROTOCOL_VERSION: u32 = 19;
 
 /// Maximum allowed frame payload size (2 MB). Frames larger than this are
 /// rejected to prevent denial-of-service via oversized length prefixes.
@@ -656,6 +656,12 @@ pub enum ServerMessage {
         /// True when Herdr mouse UI is enabled or the focused pane app requests mouse reporting.
         enabled: bool,
     },
+
+    /// Whether the focused terminal requests Kitty report-all keyboard input.
+    ///
+    /// This is emitted only to full app clients; terminal attach clients ignore
+    /// the enhancement and continue using raw terminal input bytes.
+    KittyKeyboardReportAll { enabled: bool },
 
     /// Apply the prefix-mode ASCII input-source change on the foreground client.
     /// `active = true` → switch to an ASCII-capable source (saving the current one);

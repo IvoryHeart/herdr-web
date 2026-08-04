@@ -5,8 +5,8 @@ import {
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
   receptionTableRect,
+  resolveCeoBlockLayout,
   resolveOfficeLayout,
-  resolveReceptionLayout,
   standingAnchor,
 } from "./officeGeometry";
 
@@ -44,18 +44,30 @@ describe("Pixel Office geometry", () => {
 
   it("keeps CEO and all host reception desks on one bounded horizontal row", () => {
     const officeWidth = minimumOfficeWidthForReceptions(6);
-    const receptions = resolveReceptionLayout(officeWidth, 6);
+    const blocks = resolveCeoBlockLayout(officeWidth, 6);
+    const receptions = blocks.receptions;
     expect(officeWidth).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minOfficeWidth);
     expect(receptions).toHaveLength(6);
+    expect(blocks.ceoX).toBe(OFFICE_GEOMETRY.ceoEdgePadding);
+    expect(blocks.boardX).toBe(
+      blocks.ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
+    );
+    expect(receptions[0].x).toBe(
+      blocks.boardX + OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,
+    );
     expect(new Set(receptions.map(({ y }) => y))).toEqual(new Set([36]));
     expect(receptions.every(({ width }) =>
       width === OFFICE_GEOMETRY.receptionStationMinWidth)).toBe(true);
+    expect(receptions.every(({ gapBefore }) => gapBefore === blocks.blockGap)).toBe(true);
+    expect(receptions[1].x - (receptions[0].x + receptions[0].width))
+      .toBe(blocks.blockGap);
     expect(receptions.at(-1)!.x + receptions.at(-1)!.width).toBeLessThanOrEqual(officeWidth - 12);
     const agents = Array.from({ length: 4 }, (_, index) =>
       receptionAgentAnchor(receptions[0], index));
     expect(new Set(agents.map(({ x }) => x)).size).toBe(4);
+    expect(agents[1].x - agents[0].x).toBe(agents[0].stationSpan);
     const table = receptionTableRect(receptions[0]);
-    expect(table.width).toBe(OFFICE_GEOMETRY.deskWidth * 3);
+    expect(table.width).toBe(OFFICE_GEOMETRY.receptionTableWidth);
     expect(table.x).toBeGreaterThan(receptions[0].x);
     expect(table.x + table.width).toBeLessThan(receptions[0].x + receptions[0].width);
   });
@@ -67,6 +79,10 @@ describe("Pixel Office geometry", () => {
     expect(anchors.map(({ row }) => row)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
     expect(anchors.every(({ stationSpan }) => stationSpan >= 112)).toBe(true);
     expect(new Set(anchors.map(({ x, deskY }) => `${x}:${deskY}`)).size).toBe(8);
+    expect(anchors[0].nameY).toBe(
+      layout.rooms[0].y + 42 + OFFICE_GEOMETRY.deskTopOffset,
+    );
+    expect(anchors[4].nameY - anchors[0].nameY).toBe(OFFICE_GEOMETRY.deskRowHeight);
     expect(anchors.every(({ characterFeetY, deskY }) => characterFeetY - deskY === 20))
       .toBe(true);
   });

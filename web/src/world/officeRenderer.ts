@@ -23,8 +23,8 @@ import {
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
   receptionTableRect,
+  resolveCeoBlockLayout,
   resolveOfficeLayout,
-  resolveReceptionLayout,
   standingAnchor,
 } from "./officeGeometry";
 import type {
@@ -37,6 +37,8 @@ const CHARACTER_URLS = Array.from(
   { length: 12 },
   (_, index) => `/world/characters/${index + 1}-D-1.png`,
 );
+
+const OFFICE_HEADING_TEXT_SIZE = 13;
 
 const pointerSequences = new WeakMap<
   (key: string) => void,
@@ -507,19 +509,26 @@ function drawCeoReception(
     .roundRect(4, 4, layout.officeWidth - 8, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
-  addSign(band, 12, 8, "CEO RECEPTION", 0x76571c, 112);
-  const subtitle = label("ONE HERDR CLIENT · HOST-QUALIFIED WAITING", {
-    size: 10,
-    color: 0xd8bd7c,
-  });
-  subtitle.position.set(138, 12);
-  band.addChild(subtitle);
+  addSign(
+    band,
+    layout.officeWidth / 2 - 88,
+    8,
+    "CEO OFFICE",
+    0x76571c,
+    176,
+    undefined,
+    undefined,
+    undefined,
+    13,
+  );
 
-  drawCeo(band, textures);
-  const receptionRects = resolveReceptionLayout(
+  const ceoBlocks = resolveCeoBlockLayout(
     layout.officeWidth,
     projection.receptions.length,
   );
+  drawCeo(band, textures, ceoBlocks.ceoX);
+  drawLiveStateBlackboard(band, projection, ceoBlocks.boardX);
+  const receptionRects = ceoBlocks.receptions;
   projection.receptions.forEach((reception, index) => {
     const rect = receptionRects[index];
     if (!rect) {
@@ -549,33 +558,85 @@ function drawCeoReception(
   stage.addChild(band);
 }
 
-function drawCeo(parent: Container, textures: readonly Texture[]) {
+function drawCeo(parent: Container, textures: readonly Texture[], deskX: number) {
+  const deskWidth = OFFICE_GEOMETRY.ceoDeskWidth;
+  const deskCenterX = deskX + deskWidth / 2;
   const title = label("YOU · CEO", { size: 11, color: 0xf6e3b2, anchor: 0.5 });
-  title.position.set(94, 48);
+  title.position.set(deskCenterX, 48);
   parent.addChild(title);
-  const copy = label("Reception", { size: 9, color: 0xb7a47b, anchor: 0.5 });
-  copy.position.set(94, 63);
-  parent.addChild(copy);
-  drawChair(parent, 94, 136, 0x8c6e35);
+  drawChair(parent, deskCenterX, 136, 0x8c6e35);
   const viewer = new Container();
-  viewer.position.set(94, 148);
+  viewer.position.set(deskCenterX, 148);
   addCharacterSprite(viewer, textures[0] ?? Texture.EMPTY);
   parent.addChild(viewer);
-  drawChairArms(parent, 94, 136, 0x8c6e35);
+  drawChairArms(parent, deskCenterX, 136, 0x8c6e35);
   const desk = new Graphics();
-  desk.roundRect(14, 130, 160, 44, 5).fill(0x493728);
-  desk.roundRect(18, 134, 152, 36, 4).fill(0x705234);
-  desk.roundRect(64, 138, 60, 25, 3).fill(0x182031);
-  desk.roundRect(71, 144, 46, 13, 2).fill(0x356c9e);
-  desk.rect(18, 168, 152, 2).fill({ color: 0xc39a55, alpha: 0.72 });
+  desk.roundRect(deskX, 130, deskWidth, 44, 5).fill(0x493728);
+  desk.roundRect(deskX + 4, 134, deskWidth - 8, 36, 4).fill(0x705234);
+  desk.roundRect(deskX + 50, 138, 60, 25, 3).fill(0x182031);
+  desk.roundRect(deskX + 57, 144, 46, 13, 2).fill(0x356c9e);
+  desk.rect(deskX + 4, 168, deskWidth - 8, 2).fill({ color: 0xc39a55, alpha: 0.72 });
   parent.addChild(desk);
-  const note = label("No inferred activity state", {
-    size: 8,
-    color: 0x8f8ca8,
+}
+
+function drawLiveStateBlackboard(
+  parent: Container,
+  projection: HerdrOfficeProjection,
+  x: number,
+) {
+  const {
+    ceoBoardY: y,
+    ceoBoardWidth: width,
+    ceoBoardHeight: height,
+  } = OFFICE_GEOMETRY;
+  const board = new Graphics();
+  board.roundRect(x + 4, y + 5, width, height, 5).fill({ color: 0x000000, alpha: 0.34 });
+  board.roundRect(x, y, width, height, 5).fill(0x553b25);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 3).fill(0x17251f);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 3)
+    .stroke({ width: 1, color: 0x9b7542, alpha: 0.78 });
+  board.rect(x + 10, y + 18, width - 20, 1).fill({ color: 0xd8e8c8, alpha: 0.2 });
+  board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
+  parent.addChild(board);
+
+  const heading = label("LIVE ADMITTED STATE", {
+    size: 10,
+    color: 0xe2f1d1,
     anchor: 0.5,
   });
-  note.position.set(94, 190);
-  parent.addChild(note);
+  heading.position.set(x + width / 2, y + 12);
+  parent.addChild(heading);
+
+  const metrics = [
+    ["HOSTS", projection.coverage.observedHosts],
+    ["SPACES", projection.coverage.observedWorkspaces],
+    ["AGENTS", projection.coverage.observedAgents],
+    ["WORKING", projection.coverage.status.working],
+    ["INPUT", projection.coverage.status.blocked],
+    ["STALE", projection.coverage.staleHosts],
+  ] as const;
+  const columnWidth = (width - 20) / 3;
+  metrics.forEach(([metric, value], index) => {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const centerX = x + 10 + columnWidth * (column + 0.5);
+    const centerY = y + 52 + row * 44;
+    const valueLabel = label(String(value), {
+      size: 20,
+      color: metric === "STALE" && value > 0 ? 0xffb0ba : 0xf1e9bd,
+      anchor: 0.5,
+    });
+    valueLabel.position.set(centerX, centerY);
+    parent.addChild(valueLabel);
+    const metricLabel = label(metric, {
+      size: 10,
+      color: 0xa9c8a4,
+      anchor: 0.5,
+    });
+    metricLabel.position.set(centerX, centerY + 13);
+    parent.addChild(metricLabel);
+  });
+
 }
 
 function drawReceptionDesk(
@@ -605,28 +666,13 @@ function drawReceptionDesk(
   if (rect.index > 0) {
     const separator = new Graphics();
     separator.rect(
-      rect.x - OFFICE_GEOMETRY.receptionStationGap / 2,
+      rect.x - rect.gapBefore / 2,
       rect.y + 8,
       1,
       rect.height - 20,
     ).fill({ color: 0x77749a, alpha: 0.22 });
     parent.addChild(separator);
   }
-  const heading = label(`${host.deterministicSkin.badge} · ${host.displayLabel}`, {
-    size: 10,
-    color: accent,
-    anchor: 0.5,
-  });
-  heading.position.set(centerX, rect.y + 10);
-  parent.addChild(heading);
-  const state = label(`${host.connectionState.toUpperCase()}${reception.stale ? " · STALE" : ""}`, {
-    size: 8,
-    color: reception.stale ? 0xffb0ba : 0xabb6c8,
-    anchor: 0.5,
-  });
-  state.position.set(centerX, rect.y + 24);
-  parent.addChild(state);
-
   const agents = reception.waitingAgents;
   const table = receptionTableRect(rect);
   const receptionChairs = Array.from({ length: 4 }, (_, index) => {
@@ -635,8 +681,8 @@ function drawReceptionDesk(
     drawChair(parent, anchor.x, chairY, accent);
     return { anchor, chairY };
   });
-  Array.from({ length: 3 }, (_, index) =>
-    table.x + table.width * ((index + 0.5) / 3)).forEach((x) => {
+  Array.from({ length: 4 }, (_, index) =>
+    table.x + table.width * ((index + 0.5) / 4)).forEach((x) => {
     const chairY = table.y + table.height + 10;
     drawChair(parent, x, chairY, accent);
     drawChairArms(parent, x, chairY, accent);
@@ -680,12 +726,12 @@ function drawReceptionDesk(
   desk.roundRect(table.x + table.width * 0.32, table.y + 8, table.width * 0.36, 7, 3)
     .fill(0x2d2b32);
   desk.roundRect(table.x + 6, table.y + 6, table.width - 12, table.height - 12, 11)
-    .stroke({ width: 1, color: accent, alpha: 0.58 });
+    .stroke({ width: 1, color: accent, alpha: 0.68 });
   makeInteractive(desk, host.key, onSelect);
   parent.addChild(desk);
-  const deskLabel = label(agents.length ? "WAITING · NEEDS INPUT" : "RECEPTION DESK · CLEAR", {
-    size: 8,
-    color: agents.length ? 0xffbec8 : 0xc5d0df,
+  const deskLabel = label(shortLabel(host.displayLabel, 20), {
+    size: 10,
+    color: 0xf4e6c0,
     anchor: 0.5,
   });
   deskLabel.position.set(centerX, table.y + table.height / 2);
@@ -713,6 +759,109 @@ function drawHallways(stage: Container, layout: OfficeLayout) {
   stage.addChild(hall);
 }
 
+function roomHasActivity(room: OfficeRoom) {
+  const activeAgentKeys = new Set(
+    room.roomAgents
+      .filter(({ semanticStatus }) => semanticStatus !== "idle")
+      .map(({ key }) => key),
+  );
+  return room.roomAgents.some(({ semanticStatus }) => semanticStatus !== "idle")
+    || room.desks.some(({ occupantAgentKey }) => Boolean(occupantAgentKey && activeAgentKeys.has(occupantAgentKey)));
+}
+
+function drawRoomHeading(
+  parent: Container,
+  room: OfficeRoom,
+  host: OfficeHost,
+  rect: OfficeRoomRect,
+  accent: number,
+  selectedKey: string | null,
+  onSelect: (key: string) => void,
+  onActivateRoom: (key: string) => void,
+) {
+  const workspace = label(shortLabel(room.displayLabel, 18).toUpperCase(), {
+    size: OFFICE_HEADING_TEXT_SIZE,
+    color: 0xffffff,
+    anchor: { x: 0, y: 0.5 },
+  });
+  const hostName = label(shortLabel(host.displayLabel, 16).toUpperCase(), {
+    size: OFFICE_HEADING_TEXT_SIZE,
+    color: 0xf5d892,
+    anchor: { x: 0, y: 0.5 },
+  });
+  const hyphenOne = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
+  const hyphenTwo = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
+  const width = 20 + 16 + 10 + hyphenOne.width + workspace.width + 12 + 20 + 10 + hyphenTwo.width + hostName.width;
+  const x = rect.x + (rect.width - width) / 2;
+  const y = rect.y - 6;
+  const background = new Graphics();
+  background.roundRect(x, y, width, 22, 4)
+    .fill(selectedKey === room.key ? accent : blendColor(accent, 0x121522, 0.5));
+  background.roundRect(x, y, width, 22, 4)
+    .stroke({ width: selectedKey === room.key ? 2 : 1, color: blendColor(accent, 0xffffff, 0.35), alpha: 0.84 });
+  makeInteractive(background, room.key, onSelect, onActivateRoom);
+  parent.addChild(background);
+
+  let cursor = x + 10;
+  drawNotebookIcon(parent, cursor, y + 3, 0xf6e3b2, room.key, onSelect, onActivateRoom);
+  cursor += 16;
+  hyphenOne.position.set(cursor + hyphenOne.width / 2, y + 11);
+  makeInteractive(hyphenOne, room.key, onSelect, onActivateRoom);
+  parent.addChild(hyphenOne);
+  cursor += hyphenOne.width;
+  workspace.position.set(cursor, y + 11);
+  makeInteractive(workspace, room.key, onSelect, onActivateRoom);
+  parent.addChild(workspace);
+  cursor += workspace.width + 12;
+  drawComputerIcon(parent, cursor, y + 4, 0xe4f0ff, room.key, onSelect, onActivateRoom);
+  cursor += 20;
+  hyphenTwo.position.set(cursor + hyphenTwo.width / 2, y + 11);
+  makeInteractive(hyphenTwo, room.key, onSelect, onActivateRoom);
+  parent.addChild(hyphenTwo);
+  cursor += hyphenTwo.width;
+  hostName.position.set(cursor, y + 11);
+  makeInteractive(hostName, room.key, onSelect, onActivateRoom);
+  parent.addChild(hostName);
+}
+
+function drawNotebookIcon(
+  parent: Container,
+  x: number,
+  y: number,
+  color: number,
+  key: string,
+  onSelect: (key: string) => void,
+  onActivate: (key: string) => void,
+) {
+  const icon = new Graphics();
+  icon.roundRect(x + 2, y, 12, 16, 2).fill({ color, alpha: 0.94 });
+  icon.rect(x + 4, y + 4, 7, 1).fill(0x604e35);
+  icon.rect(x + 4, y + 7, 7, 1).fill(0x604e35);
+  icon.rect(x + 4, y + 10, 5, 1).fill(0x604e35);
+  icon.rect(x, y + 3, 2, 10).fill(blendColor(color, 0x0c101a, 0.35));
+  makeInteractive(icon, key, onSelect, onActivate);
+  parent.addChild(icon);
+}
+
+function drawComputerIcon(
+  parent: Container,
+  x: number,
+  y: number,
+  color: number,
+  key: string,
+  onSelect: (key: string) => void,
+  onActivate: (key: string) => void,
+) {
+  const icon = new Graphics();
+  icon.roundRect(x, y, 17, 11, 2).fill({ color, alpha: 0.94 });
+  icon.roundRect(x + 3, y + 3, 11, 5, 1).fill(0x344a5e);
+  icon.rect(x + 7, y + 11, 3, 3).fill(color);
+  icon.rect(x + 4, y + 14, 9, 1).fill(color);
+  makeInteractive(icon, key, onSelect, onActivate);
+  parent.addChild(icon);
+}
+
+
 function drawRoom(
   stage: Container,
   room: OfficeRoom,
@@ -730,9 +879,12 @@ function drawRoom(
     return;
   }
   const theme = THEMES[host.deterministicSkin.themeIndex % THEMES.length];
+  const active = roomHasActivity(room);
   const parent = new Container();
   const floor = new Graphics();
-  drawTiledFloor(floor, rect.x, rect.y, rect.width, rect.height, theme.floorA, theme.floorB);
+  const floorA = active ? blendColor(theme.floorA, 0x5d5138, 0.34) : theme.floorA;
+  const floorB = active ? blendColor(theme.floorB, 0x443a2a, 0.32) : theme.floorB;
+  drawTiledFloor(floor, rect.x, rect.y, rect.width, rect.height, floorA, floorB);
   floor.rect(rect.x, rect.y, rect.width, 34).fill({ color: theme.wall, alpha: 0.76 });
   floor.roundRect(rect.x, rect.y, rect.width, rect.height, 4).stroke({
     width: selectedKey === room.key ? 4 : 2,
@@ -741,23 +893,7 @@ function drawRoom(
   });
   makeInteractive(floor, room.key, onSelect, onActivateRoom);
   parent.addChild(floor);
-  addSign(
-    parent,
-    rect.x + rect.width / 2 - 126,
-    rect.y - 5,
-    `${shortLabel(room.displayLabel.toUpperCase(), 26)} · ${host.deterministicSkin.badge}`,
-    theme.accent,
-    252,
-    room.key,
-    onSelect,
-    onActivateRoom,
-  );
-  const hostText = label(`${host.displayLabel} · ${host.connectionState}${room.stale ? " · STALE" : ""}`, {
-    size: 9,
-    color: room.stale ? 0xffb0ba : 0xbcc8d9,
-  });
-  hostText.position.set(rect.x + 12, rect.y + 20);
-  parent.addChild(hostText);
+  drawRoomHeading(parent, room, host, rect, theme.accent, selectedKey, onSelect, onActivateRoom);
   drawWindow(parent, rect.x + rect.width / 2 - 18, rect.y + 17);
   drawPlant(parent, rect.x + 14, rect.y + rect.height - 18, theme.accent);
   drawPlant(parent, rect.x + rect.width - 16, rect.y + rect.height - 18, theme.accent);
@@ -834,17 +970,18 @@ function drawTabDesk(
   onActivateAgent: (key: string) => void,
 ) {
   const anchor = deskAnchor(rect, index);
+  const deskSelected = selectedKey === desk.key || selectedKey === occupant?.key;
   const tabName = label(shortLabel(desk.displayLabel, 18), {
     size: 9,
-    color: selectedKey === desk.key ? 0xffffff : 0xdce6f3,
+    color: deskSelected ? 0xffffff : 0xdce6f3,
     anchor: 0.5,
   });
   const plateWidth = Math.max(58, Math.min(anchor.stationSpan - 6, tabName.width + 14));
   const tabPlate = new Graphics();
   tabPlate.roundRect(anchor.x - plateWidth / 2, anchor.nameY, plateWidth, 16, 4)
-    .fill({ color: selectedKey === desk.key ? accent : 0x1c2736, alpha: 0.96 });
+    .fill({ color: deskSelected ? accent : 0x1c2736, alpha: 0.96 });
   tabPlate.roundRect(anchor.x - plateWidth / 2, anchor.nameY, plateWidth, 16, 4)
-    .stroke({ width: selectedKey === desk.key ? 2 : 1, color: accent, alpha: 0.82 });
+    .stroke({ width: deskSelected ? 2 : 1, color: accent, alpha: 0.82 });
   makeInteractive(tabPlate, desk.key, onSelect);
   parent.addChild(tabPlate);
   tabName.position.set(anchor.x, anchor.nameY + 8);
@@ -855,18 +992,18 @@ function drawTabDesk(
   drawChair(parent, anchor.x, chairY, accent);
   if (occupant) {
     const cue = occupant.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[occupant.semanticStatus];
-    const status = label(`${shortLabel(occupant.displayLabel, 11)} · ${cue.label}`, {
-      size: 7,
+    const status = label(`${shortLabel(occupant.displayLabel, 14)} · ${cue.label}`, {
+      size: 9,
       color: 0x111722,
       anchor: 0.5,
     });
     const statusWidth = Math.max(54, Math.min(anchor.stationSpan - 4, status.width + 10));
     const statusPlate = new Graphics();
-    statusPlate.roundRect(anchor.x - statusWidth / 2, anchor.nameY + 18, statusWidth, 12, 3)
+    statusPlate.roundRect(anchor.x - statusWidth / 2, anchor.nameY + 18, statusWidth, 15, 3)
       .fill({ color: cue.color, alpha: 0.96 });
     makeInteractive(statusPlate, occupant.key, onSelect, onActivateAgent);
     parent.addChild(statusPlate);
-    status.position.set(anchor.x, anchor.nameY + 24);
+    status.position.set(anchor.x, anchor.nameY + 25.5);
     makeInteractive(status, occupant.key, onSelect, onActivateAgent);
     parent.addChild(status);
     if (occupant.semanticStatus === "working" && !occupant.stale) {
@@ -882,7 +1019,7 @@ function drawTabDesk(
       animated,
       occupant.key,
       onSelect,
-      selectedKey,
+      deskSelected ? occupant.key : selectedKey,
       onActivateAgent,
     );
     character.alpha = occupant.stale ? 0.56 : 1;
@@ -900,6 +1037,7 @@ function drawTabDesk(
     accent,
     occupant?.semanticStatus === "working" && !occupant.stale,
     animated,
+    deskSelected,
   );
   makeInteractive(deskNode, desk.key, onSelect);
 }
@@ -917,8 +1055,8 @@ function drawStandingAgent(
 ) {
   const anchor = standingAnchor(rect, index);
   const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
-  const name = label(shortLabel(agent.displayLabel, 10), {
-    size: 8,
+  const name = label(shortLabel(agent.displayLabel, 13), {
+    size: 9,
     color: 0xf2f4f8,
     anchor: 0.5,
   });
@@ -955,53 +1093,62 @@ function drawAgentBar(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
 ) {
-  const x = 4;
+  const x = Math.floor(layout.officeWidth / 2) + 4;
   const y = layout.barBandY;
-  const width = layout.officeWidth - 8;
+  const width = layout.officeWidth - x - 4;
   const room = new Container();
   const floor = new Graphics();
   drawTiledFloor(floor, x, y, width, OFFICE_GEOMETRY.barBandHeight, 0x17140f, 0x11100d);
-  floor.rect(x, y, width, 34).fill({ color: 0x4a3b22, alpha: 0.72 });
+  floor.rect(x, y, width, 42).fill({ color: 0x3c2d22, alpha: 0.9 });
   floor.roundRect(x, y, width, OFFICE_GEOMETRY.barBandHeight, 4)
     .stroke({ width: 2, color: 0xb59048, alpha: 0.72 });
   room.addChild(floor);
-  addSign(room, x + width / 2 - 72, y - 5, "AGENT BAR", 0xa17d37, 144);
-  const copy = label("IDLE and DONE agents are off the work floor, with their structured status retained", {
-    size: 10,
-    color: 0xd1c39f,
-  });
-  copy.position.set(x + 14, y + 20);
-  room.addChild(copy);
-  const counter = new Graphics();
-  counter.roundRect(x + 20, y + 88, width - 40, 24, 8).fill(0x4c3122);
-  counter.roundRect(x + 24, y + 92, width - 48, 16, 6).fill(0x75482d);
-  room.addChild(counter);
+  addSign(
+    room,
+    x + width / 2 - 72,
+    y - 5,
+    "AGENT BAR",
+    0xa17d37,
+    144,
+    undefined,
+    undefined,
+    undefined,
+    OFFICE_HEADING_TEXT_SIZE,
+  );
 
-  const columns = 8;
-  const stationSpan = (width - 32) / columns;
-  projection.barAgents.forEach((agent, index) => {
-    const column = index % columns;
-    const rowIndex = Math.floor(index / columns);
-    const px = x + 16 + stationSpan * (column + 0.5);
-    const rowY = y + 38 + rowIndex * 116;
+  const boardX = x + 16;
+  const boardY = y + 44;
+  const boardWidth = 120;
+  const boardHeight = OFFICE_GEOMETRY.barBandHeight - 60;
+  const barX = boardX + boardWidth + 16;
+  const barWidth = x + width - 16 - barX;
+  const columns = 5;
+  const stationSpan = barWidth / columns;
+  const labelY = y + 47;
+  const characterFeetY = y + 136;
+  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
+  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
+  projection.barAgents.slice(0, columns).forEach((agent, index) => {
+    const px = barX + stationSpan * (index + 0.5);
     const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
     const name = label(shortLabel(agent.displayLabel, 14), {
-      size: 9,
+      size: 10,
       color: 0xf0ece5,
       anchor: 0.5,
     });
-    name.position.set(px, rowY + 6);
+    name.position.set(px, labelY);
     makeInteractive(name, agent.key, onSelect, onActivateAgent);
     room.addChild(name);
     const state = label(cue.label, { size: 8, color: cue.color, anchor: 0.5 });
-    state.position.set(px, rowY + 20);
+    state.position.set(px, labelY + 14);
     makeInteractive(state, agent.key, onSelect, onActivateAgent);
     room.addChild(state);
+    drawBarStool(room, px, characterFeetY - 3, cue.color);
     const character = drawCharacter(
       room,
       textures[agent.characterIndex] ?? Texture.EMPTY,
       px,
-      rowY + 103,
+      characterFeetY,
       false,
       agent.stale,
       animated,
@@ -1012,8 +1159,11 @@ function drawAgentBar(
     );
     character.alpha = agent.stale ? 0.56 : 1;
   });
-  if (projection.coverage.omittedBarAgents > 0) {
-    const overflow = label(`+${projection.coverage.omittedBarAgents} more in roster`, {
+  drawBarCounter(room, barX, y + 138, barWidth);
+  drawBarBackWall(room, barX, y + 180, barWidth);
+  const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - columns);
+  if (overflowCount > 0) {
+    const overflow = label(`+${overflowCount} more in roster`, {
       size: 9,
       color: 0xe5cf98,
       anchor: { x: 1, y: 0 },
@@ -1022,6 +1172,99 @@ function drawAgentBar(
     room.addChild(overflow);
   }
   stage.addChild(room);
+}
+
+function drawPartyBoard(
+  parent: Container,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  idleCount: number,
+) {
+  const board = new Graphics();
+  board.roundRect(x + 3, y + 4, width, height, 4).fill({ color: 0x000000, alpha: 0.28 });
+  board.roundRect(x, y, width, height, 4).fill(0x553b25);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2).fill(0x17251f);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2)
+    .stroke({ width: 1, color: 0x9b7542, alpha: 0.72 });
+  parent.addChild(board);
+  const heading = label("PARTY", { size: 14, color: 0xf2d78f, anchor: 0.5 });
+  heading.position.set(x + width / 2, y + 20);
+  parent.addChild(heading);
+  const value = label(String(idleCount), { size: 32, color: 0xf1e9bd, anchor: 0.5 });
+  value.position.set(x + width / 2, y + height / 2 - 6);
+  parent.addChild(value);
+  drawPartyDecorations(parent, x, y, width, height);
+}
+
+function drawPartyDecorations(parent: Container, x: number, y: number, width: number, height: number) {
+  const decorations = new Graphics();
+  const confetti = [
+    [18, 31, 0xe29b66], [width - 24, 28, 0x8fb9d8], [28, 68, 0x9fceac],
+    [width - 32, 78, 0xdca4c7], [16, height - 50, 0xf3c07e], [width - 20, height - 48, 0xe29b66],
+  ] as const;
+  confetti.forEach(([offsetX, offsetY, color], index) => {
+    if (index % 2 === 0) {
+      decorations.rect(x + offsetX, y + offsetY, 4, 8).fill(color);
+    } else {
+      decorations.circle(x + offsetX, y + offsetY, 3).fill(color);
+    }
+  });
+  const glassX = x + width / 2 - 4;
+  const glassY = y + height - 37;
+  decorations.roundRect(glassX - 7, glassY, 14, 10, 3)
+    .stroke({ width: 2, color: 0xf1d19a, alpha: 0.9 });
+  decorations.rect(glassX - 1, glassY + 10, 2, 10).fill(0xf1d19a);
+  decorations.rect(glassX - 8, glassY + 20, 16, 2).fill(0xf1d19a);
+  decorations.circle(glassX - 3, glassY - 3, 2).fill({ color: 0xf8df99, alpha: 0.9 });
+  decorations.circle(glassX + 3, glassY - 5, 2).fill({ color: 0xf8df99, alpha: 0.9 });
+  parent.addChild(decorations);
+}
+function drawBarBackWall(parent: Container, x: number, y: number, width: number) {
+  const wall = new Graphics();
+  wall.roundRect(x, y, width, 44, 4).fill(0x271b18);
+  wall.roundRect(x + 4, y + 4, width - 8, 36, 3).fill(0x34221c);
+  wall.roundRect(x + 8, y + 8, width - 16, 2, 1).fill({ color: 0xb59048, alpha: 0.5 });
+  wall.roundRect(x + 8, y + 29, width - 16, 2, 1).fill({ color: 0x8d6335, alpha: 0.64 });
+  for (let index = 0; index < Math.floor((width - 28) / 22); index += 1) {
+    const bottleX = x + 14 + index * 22;
+    const color = [0xe29b66, 0x8fb9d8, 0x9fceac, 0xdca4c7, 0xf3c07e][index % 5];
+    wall.roundRect(bottleX, y + 14, 7, 13, 2).fill(color);
+    wall.rect(bottleX + 2, y + 10, 3, 5).fill(blendColor(color, 0xf6e5b7, 0.3));
+    wall.rect(bottleX + 1, y + 28, 5, 1).fill({ color: 0xffffff, alpha: 0.18 });
+  }
+  parent.addChild(wall);
+  const neon = label("AFTER HOURS", { size: 8, color: 0xf0c878, anchor: 0.5 });
+  neon.position.set(x + width / 2, y + 6);
+  parent.addChild(neon);
+}
+
+function drawBarCounter(parent: Container, x: number, y: number, width: number) {
+  const counter = new Graphics();
+  counter.roundRect(x + 3, y + 6, width, 38, 8).fill({ color: 0x000000, alpha: 0.28 });
+  counter.roundRect(x, y, width, 36, 7).fill(0x4c3122);
+  counter.roundRect(x + 4, y + 4, width - 8, 10, 4).fill(0x8b5b35);
+  counter.rect(x + 8, y + 7, width - 16, 2).fill({ color: 0xd0a878, alpha: 0.54 });
+  counter.roundRect(x + 8, y + 17, width - 16, 14, 4).fill(0x38231d);
+  for (let panel = x + 28; panel < x + width - 18; panel += 58) {
+    counter.rect(panel, y + 20, 1, 8).fill({ color: 0xb07945, alpha: 0.4 });
+  }
+  for (let tap = x + 28; tap < x + width - 20; tap += 82) {
+    counter.circle(tap, y + 11, 3).fill(0xd0a878);
+    counter.rect(tap - 1, y + 10, 2, 8).fill(0x5b3c2b);
+  }
+  parent.addChild(counter);
+}
+
+function drawBarStool(parent: Container, x: number, y: number, accent: number) {
+  const stool = new Graphics();
+  stool.ellipse(x, y + 8, 18, 4).fill({ color: 0x000000, alpha: 0.26 });
+  stool.roundRect(x - 13, y - 4, 26, 8, 4).fill(blendColor(accent, 0x2b1f1c, 0.58));
+  stool.roundRect(x - 10, y - 2, 20, 4, 2).fill(blendColor(accent, 0xf1d19a, 0.16));
+  stool.rect(x - 2, y + 3, 4, 11).fill(0x8d6335);
+  stool.rect(x - 10, y + 13, 20, 2).fill(0x6b482e);
+  parent.addChild(stool);
 }
 
 function drawCharacter(
@@ -1098,6 +1341,7 @@ function drawDesk(
   accent: number,
   working: boolean,
   animated: AnimatedItem[],
+  selected = false,
 ) {
   const desk = new Graphics();
   desk.ellipse(x + 24, y + 30, 30, 6).fill({ color: 0x000000, alpha: 0.22 });
@@ -1106,6 +1350,10 @@ function drawDesk(
   desk.roundRect(x + 14, y + 10, 21, 13, 2).fill(blendColor(accent, 0x101722, 0.7));
   desk.roundRect(x + 16, y + 12, 17, 8, 1).fill(working ? 0x347d86 : 0x172131);
   desk.rect(x + 1, y + 24, 46, 2).fill({ color: accent, alpha: 0.78 });
+  if (selected) {
+    desk.roundRect(x - 3, y - 3, 54, 32, 5)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.92 });
+  }
   parent.addChild(desk);
   if (working) {
     const glow = new Graphics();
@@ -1162,6 +1410,7 @@ function addSign(
   key?: string,
   onSelect?: (key: string) => void,
   onActivate?: (key: string) => void,
+  textSize = 10,
 ) {
   const background = new Graphics();
   background.roundRect(x, y, width, 19, 4).fill(color);
@@ -1171,7 +1420,7 @@ function addSign(
     makeInteractive(background, key, onSelect, onActivate);
   }
   parent.addChild(background);
-  const copy = label(value, { size: 10, color: 0xffffff, anchor: 0.5 });
+  const copy = label(value, { size: textSize, color: 0xffffff, anchor: 0.5 });
   copy.position.set(x + width / 2, y + 9.5);
   if (key && onSelect) {
     makeInteractive(copy, key, onSelect, onActivate);

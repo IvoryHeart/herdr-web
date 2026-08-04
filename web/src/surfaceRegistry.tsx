@@ -55,7 +55,10 @@ export class SurfaceRegistry {
   }
 
   resolvePath(pathname: string) {
-    return this.list().find((surface) => surface.route === pathname) ?? null;
+    const normalizedPath = pathname.length > 1
+      ? pathname.replace(/\/+$/u, "")
+      : pathname;
+    return this.list().find((surface) => surface.route === normalizedPath) ?? null;
   }
 
   component(id: string) {
@@ -97,7 +100,7 @@ export const coreSurfaceRegistry = new SurfaceRegistry([
   },
   {
     id: "world",
-    label: "World",
+    label: "Office",
     route: "/world",
     semanticIcon: "pixel-office",
     hostScope: "multi-host",

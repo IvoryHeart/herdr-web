@@ -82,6 +82,7 @@ function fixtureHost({
       true,
       displayOrder,
     ),
+    location: "remote",
     connectionState,
     generationKey: `${profileId}:fixture-generation`,
     features,

@@ -15,6 +15,7 @@ import {
   probeBridgeBaseUrl,
   removeNoteDraftsForBridgeConnection,
   SAME_ORIGIN_BRIDGE_ID,
+  sameOriginHostLabel,
 } from "./bridge";
 
 afterEach(() => {
@@ -77,6 +78,18 @@ describe("bridge URL builders", () => {
     expect(buildWsUrl("http://192.168.1.20:4000", "/ws/terminal", query)).toBe(
       "ws://192.168.1.20:4000/ws/terminal?terminal_id=term-1",
     );
+  });
+});
+
+describe("same-origin bridge label", () => {
+  it("uses localhost for loopback browser hosts", () => {
+    vi.stubGlobal("location", { hostname: "127.0.0.1" });
+    expect(sameOriginHostLabel()).toBe("localhost");
+  });
+
+  it("uses the browser hostname for named hosts", () => {
+    vi.stubGlobal("location", { hostname: "host01" });
+    expect(sameOriginHostLabel()).toBe("host01");
   });
 });
 
@@ -320,8 +333,8 @@ describe("capabilities", () => {
         bridge_api_version: 1,
         commands: ["pane.split", 42],
         bridge_version: "1.2.3",
-        herdr_version: "0.7.5",
-        terminal_protocol: 17,
+        herdr_version: "0.8.0",
+        terminal_protocol: 19,
         configured_label: "Build host",
         features: ["snapshot", "terminal_attach", 42],
         web_compat: 1,
@@ -334,8 +347,8 @@ describe("capabilities", () => {
       bridge_api_version: 1,
       commands: ["pane.split"],
       bridge_version: "1.2.3",
-      herdr_version: "0.7.5",
-      terminal_protocol: 17,
+      herdr_version: "0.8.0",
+      terminal_protocol: 19,
       configured_label: "Build host",
       features: ["snapshot", "terminal_attach"],
       web_compat: 1,
@@ -386,8 +399,8 @@ function compatibleCapabilities(overrides: Record<string, unknown> = {}) {
   return {
     bridge_api_version: 1,
     bridge_version: "0.1.0",
-    herdr_version: "0.7.5",
-    terminal_protocol: 17,
+    herdr_version: "0.8.0",
+    terminal_protocol: 19,
     features: ["snapshot", "terminal_attach"],
     commands: [],
     web_compat: 1,

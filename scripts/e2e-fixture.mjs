@@ -230,9 +230,9 @@ function capabilities(fixture, state) {
   return {
     bridge_api_version: 1,
     bridge_version: "0.1.0",
-    herdr_version: "0.7.5",
+    herdr_version: "0.8.0",
     terminal_protocol:
-      state.terminalProtocol ?? (fixture.variant === "incompatible" ? 16 : 17),
+      state.terminalProtocol ?? (fixture.variant === "incompatible" ? 18 : 19),
     configured_label: fixture.label,
     features:
       state.features ?? [
@@ -305,7 +305,7 @@ function setFixtureState(hostId, value) {
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
     !["default", "empty", "large"].includes(snapshotVariant) ||
-    (terminalProtocol !== null && terminalProtocol !== 16 && terminalProtocol !== 17) ||
+    (terminalProtocol !== null && terminalProtocol !== 18 && terminalProtocol !== 19) ||
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
     (commands !== null &&

@@ -158,7 +158,11 @@ import { terminalSessionDescriptor } from "./terminalSessions";
 import { coreSurfaceRegistry } from "./surfaceRegistry";
 import { SurfaceSlotBoundary } from "./SurfaceSlotBoundary";
 import type { WorldSurfaceContext } from "./world/WorldSurface";
-import { resolveOfficeHandoff } from "./world/herdrOfficeHandoff";
+import {
+  officeAgentHandoffRequest,
+  officeRoomHandoffRequest,
+  resolveOfficeHandoff,
+} from "./world/herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
@@ -1020,12 +1024,13 @@ export function App() {
   const [resizingNotesListPane, setResizingNotesListPane] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(initialPrefs.sidebarOpen);
   const [showDetail, setShowDetail] = useState(
-    () => globalThis.location?.pathname === "/world",
+    () => {
+      const pathname = globalThis.location?.pathname;
+      return pathname === "/world" || pathname === "/world/";
+    },
   );
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
-  const [worldHostFilter, setWorldHostFilter] = useState("all");
-  const [worldStatusFilter, setWorldStatusFilter] = useState("all");
-  const [worldRosterPage, setWorldRosterPage] = useState(0);
+  const worldSelectionSeedPendingRef = useRef(false);
   const [worldHandoffStatus, setWorldHandoffStatus] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -1313,24 +1318,135 @@ export function App() {
       ),
     [bridge.availableRuntimes, bridge.profiles, connectionStates],
   );
-  const worldAllHostsProjection = useMemo(
-    () => projectHerdrOffice(worldSources, Date.now()),
-    [worldSources],
+  const worldSourcesInScope = useMemo(
+    () => hostScope === "selected" && selectedBridgeId
+      ? worldSources.filter((source) => source.profile.profileId === selectedBridgeId)
+      : worldSources,
+    [hostScope, selectedBridgeId, worldSources],
   );
-  const effectiveWorldHostFilter =
-    hostScope === "selected" ? (selectedBridgeId ?? "all") : worldHostFilter;
   const worldProjection = useMemo(
-    () =>
-      projectHerdrOffice(
-        effectiveWorldHostFilter === "all"
-          ? worldSources
-          : worldSources.filter(
-              (source) => source.profile.profileId === effectiveWorldHostFilter,
-            ),
-        Date.now(),
-      ),
-    [effectiveWorldHostFilter, worldSources],
+    () => projectHerdrOffice(worldSourcesInScope, Date.now()),
+    [worldSourcesInScope],
   );
+  const syncWorldSelectionFromSpaces = useCallback(() => {
+    const selectedRef = selectedPaneRefState;
+    const selectedPane = selectedRef
+      ? worldSourcesInScope.find(({ profile }) => profile.profileId === selectedRef.bridgeId)
+        ?.snapshot?.panes.find(({ pane_id }) => pane_id === selectedRef.paneId)
+      : null;
+    if (!selectedRef) {
+      setWorldSelectedKey(null);
+      return true;
+    }
+    const agentEntry = worldProjection.roster.find(
+      ({ agent }) =>
+        agent.currentPaneRef.profileId === selectedRef.bridgeId &&
+        agent.currentPaneRef.nativeTargetId === selectedRef.paneId,
+    );
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) =>
+        desk.tabRef.profileId === selectedRef.bridgeId &&
+        desk.tabRef.nativeTargetId === selectedPane?.tab_id,
+    );
+    if (!agentEntry && !deskEntry) {
+      const host = worldProjection.hosts.find(({ key }) => key === selectedRef.bridgeId);
+      if (host && !host.observed && host.connectionState === "connecting") {
+        return false;
+      }
+      setWorldSelectedKey(null);
+      return true;
+    }
+    setSelectedBridgeId(selectedRef.bridgeId);
+    setWorldSelectedKey(
+      agentEntry?.agent.key ?? deskEntry?.desk.occupantAgentKey ?? deskEntry?.desk.key ?? null,
+    );
+    setWorldHandoffStatus(null);
+    return true;
+  }, [selectedPaneRefState, worldProjection, worldSourcesInScope]);
+  useEffect(() => {
+    if (activeSurface.id !== "world" || !worldSelectionSeedPendingRef.current) {
+      return;
+    }
+    if (syncWorldSelectionFromSpaces()) {
+      worldSelectionSeedPendingRef.current = false;
+    }
+  }, [activeSurface.id, syncWorldSelectionFromSpaces]);
+
+  const selectWorldDeskForTab = (bridgeId: BridgeId, tabId: string) => {
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) => desk.tabRef.profileId === bridgeId && desk.tabRef.nativeTargetId === tabId,
+    );
+    if (!deskEntry) {
+      return false;
+    }
+    setSelectedBridgeId(bridgeId);
+    setWorldSelectedKey(deskEntry.desk.occupantAgentKey ?? deskEntry.desk.key);
+    setWorldHandoffStatus(null);
+    return true;
+  };
+  const selectSidebarTab = (bridgeId: BridgeId, tabId: string) => {
+    if (activeSurface.id !== "world" || !selectWorldDeskForTab(bridgeId, tabId)) {
+      selectTab(bridgeId, tabId);
+    }
+  };
+  const selectSidebarPane = (bridgeId: BridgeId, pane: PaneInfo) => {
+    if (activeSurface.id !== "world") {
+      openPane(bridgeId, pane);
+      return;
+    }
+    const agentEntry = worldProjection.roster.find(
+      ({ agent }) =>
+        agent.currentPaneRef.profileId === bridgeId &&
+        agent.currentPaneRef.nativeTargetId === pane.pane_id,
+    );
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) => desk.tabRef.profileId === bridgeId && desk.tabRef.nativeTargetId === pane.tab_id,
+    );
+    setSelectedBridgeId(bridgeId);
+    setWorldSelectedKey(
+      agentEntry?.agent.key ?? deskEntry?.desk.occupantAgentKey ?? deskEntry?.desk.key ?? null,
+    );
+    setWorldHandoffStatus(null);
+  };
+  const openWorldTabInSpaces = (bridgeId: BridgeId, tabId: string) => {
+    if (activeSurface.id !== "world") {
+      selectTab(bridgeId, tabId);
+      requestTerminalFocus();
+      return;
+    }
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) => desk.tabRef.profileId === bridgeId && desk.tabRef.nativeTargetId === tabId,
+    );
+    const room = deskEntry
+      ? worldProjection.roomRoster.find(({ key }) => key === deskEntry.desk.roomKey)
+      : null;
+    if (room) {
+      const opened = openWorldTargetInSpaces(officeRoomHandoffRequest(room));
+      if (opened) {
+        const pane = snapshotForBridge(bridgeId)?.panes.find(({ tab_id }) => tab_id === tabId);
+        if (pane) {
+          openPane(bridgeId, pane);
+        }
+      }
+    }
+  };
+  const openWorldPaneInSpaces = (bridgeId: BridgeId, pane: PaneInfo) => {
+    if (activeSurface.id !== "world") {
+      openPane(bridgeId, pane);
+      requestTerminalFocus();
+      return;
+    }
+    const agentEntry = worldProjection.roster.find(
+      ({ agent }) =>
+        agent.currentPaneRef.profileId === bridgeId &&
+        agent.currentPaneRef.nativeTargetId === pane.pane_id,
+    );
+    if (agentEntry) {
+      openWorldTargetInSpaces(officeAgentHandoffRequest(agentEntry.agent));
+      return;
+    }
+    openWorldTabInSpaces(bridgeId, pane.tab_id);
+  };
   const runtimeIsAdmitted = useCallback(
     (profileId: string) => {
       const runtime = bridge.getRuntime(profileId);
@@ -2552,7 +2668,7 @@ export function App() {
             : null,
         );
       }
-      return;
+      return false;
     }
 
     const currentTarget =
@@ -2574,9 +2690,9 @@ export function App() {
       });
     } catch {
       setWorldHandoffStatus(
-        "The exact Spaces target became unavailable. World remains open.",
+        "The exact Spaces target became unavailable. Office remains open.",
       );
-      return;
+      return false;
     }
 
     setWorldHandoffStatus(null);
@@ -2587,6 +2703,7 @@ export function App() {
       selectSpace(resolution.runtime.id, resolution.workspace.workspace_id);
     }
     requestTerminalFocus();
+    return true;
   };
 
   const selectNote = (bridgeId: BridgeId, noteId: string) => {
@@ -3850,41 +3967,17 @@ export function App() {
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
-    availableHosts: worldAllHostsProjection.hosts,
     selectedKey: worldSelectedKey,
     onSelect: (key) => {
       setWorldSelectedKey(key);
       setWorldHandoffStatus(null);
     },
-    hostFilter: effectiveWorldHostFilter,
-    hostFilterLocked: hostScope === "selected",
-    onHostFilter: (value) => {
-      setWorldHostFilter(value);
-      setWorldRosterPage(0);
-      setWorldHandoffStatus(null);
-    },
-    statusFilter: worldStatusFilter,
-    onStatusFilter: (value) => {
-      setWorldStatusFilter(value);
-      setWorldRosterPage(0);
-      setWorldHandoffStatus(null);
-    },
-    rosterPage: worldRosterPage,
-    onRosterPage: setWorldRosterPage,
     compact: isCompactLayout,
     onBackToSidebar: closeMobileDetail,
-    onViewOffice: openMobileDetail,
     onToggleSidebar: () => setSidebarOpen((open) => !open),
     onOpenInSpaces: openWorldTargetInSpaces,
     handoffStatus: worldHandoffStatus,
   };
-  const worldSidebar = WorldSurface ? (
-    <SurfaceSlotBoundary label="World sidebar" resetKey={activeSurface.id}>
-      <Suspense fallback={<div className="surface-loading" role="status">Loading World…</div>}>
-        <WorldSurface slot="sidebar" context={worldSurfaceContext} />
-      </Suspense>
-    </SurfaceSlotBoundary>
-  ) : null;
   const worldStage = WorldSurface ? (
     <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>
       <Suspense
@@ -3934,12 +4027,12 @@ export function App() {
           bridgeViews={bridgeViews}
           primaryView={activeSurface.id}
           onPrimaryView={(surfaceId) => {
+            worldSelectionSeedPendingRef.current = surfaceId === "world";
             navigatePrimaryView(surfaceId);
             if (surfaceId === "world" && isCompactLayout) {
               openMobileDetail();
             }
           }}
-          worldSidebar={worldSidebar}
           selectedBridgeId={selectedRuntime?.id ?? null}
           hostScope={hostScope}
           snapshot={snapshot}
@@ -3989,8 +4082,10 @@ export function App() {
           onSpaceGroup={setSpaceGroup}
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
-          onSelectTab={selectTab}
-          onSelectPane={openPane}
+          onSelectTab={selectSidebarTab}
+          onDoubleClickTab={openWorldTabInSpaces}
+          onSelectPane={selectSidebarPane}
+          onDoubleClickPane={openWorldPaneInSpaces}
           onRefresh={refreshNow}
           onRefreshBridge={(bridgeId) => {
             bridge.retryBridgeProbe(bridgeId);
@@ -5804,7 +5899,6 @@ function Switcher({
   bridgeViews,
   primaryView,
   onPrimaryView,
-  worldSidebar,
   selectedBridgeId,
   hostScope,
   snapshot,
@@ -5849,7 +5943,9 @@ function Switcher({
   onSelectBridge,
   onSelectSpace,
   onSelectTab,
+  onDoubleClickTab,
   onSelectPane,
+  onDoubleClickPane,
   onRefresh,
   onRefreshBridge,
   onBackendSettings,
@@ -5862,7 +5958,6 @@ function Switcher({
   bridgeViews: BridgeConnectionView[];
   primaryView: string;
   onPrimaryView: (surfaceId: string) => void;
-  worldSidebar: ReactNode;
   selectedBridgeId: BridgeId | null;
   hostScope: HostScope;
   snapshot: Snapshot | null;
@@ -5907,7 +6002,9 @@ function Switcher({
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
   onSelectTab: (bridgeId: BridgeId, tabId: string) => void;
+  onDoubleClickTab: (bridgeId: BridgeId, tabId: string) => void;
   onSelectPane: (bridgeId: BridgeId, pane: PaneInfo) => void;
+  onDoubleClickPane: (bridgeId: BridgeId, pane: PaneInfo) => void;
   onRefresh: () => void;
   onRefreshBridge: (bridgeId: BridgeId) => void;
   onBackendSettings: () => void;
@@ -6280,6 +6377,7 @@ function Switcher({
                   pinned={pinned}
                   active={active}
                   onSelect={onSelect}
+                  onDoubleClick={() => onDoubleClickPane(group.bridgeId, pane)}
                   onMenu={onPaneMenu}
                 />
               );
@@ -6297,6 +6395,7 @@ function Switcher({
                 pinned={pinned}
                 active={active}
                 onSelect={onSelect}
+                onDoubleClick={() => onDoubleClickPane(group.bridgeId, pane)}
                 onMenu={onPaneMenu}
               />
             );
@@ -6311,6 +6410,7 @@ function Switcher({
                   label={tabLabel}
                   count={tabPanes.length}
                   onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
+                  onDoubleClick={() => onDoubleClickTab(group.bridgeId, tab.tab_id)}
                   onMenu={(x, y) =>
                     onScopedMenu(
                       "tab",
@@ -6570,6 +6670,7 @@ function Switcher({
           entry.pane.pane_id === selectedPane?.pane_id
         }
         onSelect={() => onSelectPane(entry.bridgeId, entry.pane)}
+        onDoubleClick={() => onDoubleClickPane(entry.bridgeId, entry.pane)}
         onMenu={(x, y) =>
           onScopedMenu(
             "pane",
@@ -6746,7 +6847,7 @@ function Switcher({
         </button>
       </header>
 
-      <div className="primary-view-switch" role="group" aria-label="Spaces | World">
+      <div className="primary-view-switch" role="group" aria-label="Spaces | Office">
         <button
           type="button"
           data-on={primaryView === "spaces"}
@@ -6763,7 +6864,7 @@ function Switcher({
           onClick={() => onPrimaryView("world")}
         >
           <Building2 size={14} aria-hidden="true" />
-          World
+          Office
         </button>
       </div>
 
@@ -6801,8 +6902,7 @@ function Switcher({
         ) : null}
       </div>
 
-      {primaryView === "world" ? worldSidebar : (
-        <>
+      <>
       <div className="sidebar-mode" role="group" aria-label="Sidebar view">
         <button
           type="button"
@@ -7147,8 +7247,7 @@ function Switcher({
           onClose={() => setSpaceOptionsMenu(null)}
         />
       ) : null}
-        </>
-      )}
+      </>
     </>
   );
 }
@@ -8376,17 +8475,24 @@ function TabDivider({
   label,
   count,
   onSelect,
+  onDoubleClick,
   onMenu,
 }: {
   label: string;
   count: number;
   onSelect: () => void;
+  onDoubleClick: () => void;
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
   return (
     <div className="tab-div">
-      <button type="button" className="tab-head" {...press}>
+      <button
+        type="button"
+        className="tab-head"
+        {...press}
+        onDoubleClick={onDoubleClick}
+      >
         <span className="tab-name">{label}</span>
         {count > 1 ? (
           <span className="tab-split mono">
@@ -8409,6 +8515,7 @@ function PaneRow({
   active,
   index,
   onSelect,
+  onDoubleClick,
   onMenu,
 }: {
   pane: PaneInfo;
@@ -8419,6 +8526,7 @@ function PaneRow({
   active: boolean;
   index: number;
   onSelect: () => void;
+  onDoubleClick?: () => void;
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
@@ -8434,6 +8542,7 @@ function PaneRow({
       data-status={pane.agent_status}
       style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
       {...press}
+      onDoubleClick={onDoubleClick}
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
@@ -8463,6 +8572,7 @@ function AgentRow({
   active,
   index,
   onSelect,
+  onDoubleClick,
   onMenu,
 }: {
   pane: PaneInfo;
@@ -8473,6 +8583,7 @@ function AgentRow({
   active: boolean;
   index: number;
   onSelect: () => void;
+  onDoubleClick?: () => void;
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
@@ -8485,6 +8596,7 @@ function AgentRow({
       data-status={pane.agent_status}
       style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
       {...press}
+      onDoubleClick={onDoubleClick}
     >
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">

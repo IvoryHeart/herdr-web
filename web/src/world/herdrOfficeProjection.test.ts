@@ -298,6 +298,7 @@ function liveHost(
 ): HerdrOfficeSourceHost {
   return {
     profile: hostProfile(profileId, label, `http://${profileId}.example`, true, displayOrder),
+    location: "remote",
     connectionState: "compatible",
     generationKey: `${profileId}:generation-1`,
     features: ["snapshot", "terminal_attach"],

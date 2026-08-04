@@ -57,7 +57,7 @@ if rg -n '#\[path[[:space:]]*=' "$ROOT/bridge" "$COMPAT" >/dev/null; then
 fi
 
 if rg -n '\bcustom_status\b' "$COMPAT" >/dev/null; then
-  echo "obsolete custom_status fields are not allowed in the Herdr 0.7.5 compatibility copy" >&2
+  echo "obsolete custom_status fields are not allowed in the Herdr API compatibility copy" >&2
   rg -n '\bcustom_status\b' "$COMPAT" >&2
   exit 1
 fi
@@ -82,13 +82,13 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
 
   upstream_commit="$(git -C "$HERDR_SRC" rev-parse HEAD 2>/dev/null || true)"
   if [[ "$upstream_commit" != "$EXPECTED_HERDR_COMMIT" ]]; then
-    echo "HERDR_SRC must be a Herdr v0.7.5 checkout at $EXPECTED_HERDR_COMMIT" >&2
+    echo "HERDR_SRC must be the reviewed Herdr API/schema checkout at v0.7.5 ($EXPECTED_HERDR_COMMIT)" >&2
     echo "found: ${upstream_commit:-not a git checkout}" >&2
     exit 1
   fi
 
   if [[ -n "$(git -C "$HERDR_SRC" status --short)" ]]; then
-    echo "HERDR_SRC must be a clean Herdr v0.7.5 checkout" >&2
+    echo "HERDR_SRC must be a clean reviewed Herdr API/schema checkout" >&2
     git -C "$HERDR_SRC" status --short >&2
     exit 1
   fi
@@ -103,23 +103,13 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
     fi
   }
 
-  compare_wire_body() {
-    local wire_file
-    for wire_file in "$HERDR_SRC/src/protocol/wire.rs" "$COMPAT/src/protocol/wire.rs"; do
-      if ! grep -q '^use std::collections::HashMap;' "$wire_file"; then
-        echo "wire.rs anchor line missing in $wire_file; update compare_wire_body" >&2
-        exit 1
-      fi
-    done
-    if ! diff -q \
-      <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$HERDR_SRC/src/protocol/wire.rs") \
-      <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$COMPAT/src/protocol/wire.rs") \
-      >/dev/null; then
-      echo "Herdr protocol wire copy drifted from HERDR_SRC" >&2
-      diff -u \
-        <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$HERDR_SRC/src/protocol/wire.rs") \
-        <(awk 'seen || /^use std::collections::HashMap;/{seen=1} seen {print}' "$COMPAT/src/protocol/wire.rs") \
-        | sed -n '1,120p' >&2
+  check_terminal_attach_protocol() {
+    if ! rg -q '^pub const PROTOCOL_VERSION: u32 = 19;' "$COMPAT/src/protocol/wire.rs"; then
+      echo "terminal attach compatibility copy must advertise Herdr protocol 19" >&2
+      exit 1
+    fi
+    if ! rg -q 'KittyKeyboardReportAll' "$COMPAT/src/protocol/wire.rs"; then
+      echo "terminal attach compatibility copy is missing the protocol-19 server message" >&2
       exit 1
     fi
   }
@@ -159,10 +149,10 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
     compare_exact "src/api/schema/$file_name" "src/api/schema/$file_name"
   done < <(find "$HERDR_SRC/src/api/schema" -maxdepth 1 -type f -name '*.rs' -print0)
   compare_popup_size
-  compare_wire_body
+  check_terminal_attach_protocol
 
-  echo "Herdr v0.7.5 compatibility vendor layout and HERDR_SRC drift checks passed"
+  echo "Herdr API/schema compatibility vendor layout and HERDR_SRC drift checks passed"
 else
-  echo "Herdr v0.7.5 compatibility vendor layout looks clean"
-  echo "Set HERDR_SRC=/path/to/clean/herdr-v0.7.5 to compare exact upstream schema/wire copies"
+  echo "Herdr API/schema compatibility vendor layout looks clean"
+  echo "Set HERDR_SRC=/path/to/clean/herdr-v0.7.5 to compare the reviewed API/schema copies"
 fi

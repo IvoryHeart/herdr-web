@@ -34,8 +34,8 @@ async function json(origin, path) {
 async function bridgeState(origin) {
   const capabilities = await json(origin, "/api/capabilities");
   assert.equal(capabilities.bridge_api_version, 1);
-  assert.equal(capabilities.herdr_version, "0.7.5");
-  assert.equal(capabilities.terminal_protocol, 17);
+  assert.equal(capabilities.herdr_version, "0.8.0");
+  assert.equal(capabilities.terminal_protocol, 19);
   for (const feature of requiredFeatures) {
     assert.ok(
       capabilities.features.includes(feature),

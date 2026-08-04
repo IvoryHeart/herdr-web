@@ -32,8 +32,13 @@ The browser app is not vendored into Herdr. It lives at `web/`, and `herdr-web-b
 ## Current Reference
 
 - Upstream checkout: a clean Herdr source checkout outside this repository
-- Upstream release baseline: `v0.7.5`
-- Terminal wire baseline: protocol `17`
+- Upstream API/schema source baseline: `v0.7.5`
+- Terminal attach wire baseline: Herdr `v0.8.0`, protocol `19`
+
+The current bridge refresh is deliberately narrow: Herdr `0.8.0` keeps the raw terminal attach
+messages used by the bridge stable while adding protocol-19 input and full-client messages. The
+vendored API/schema copy remains rooted in the reviewed `v0.7.5` source until a broader compatibility
+refresh is undertaken.
 
 Use the upstream checkout as an external reference for audits and refreshes. It is not required to
 build `herdr-web`.
@@ -114,10 +119,12 @@ scripts/check-vendor.sh
 HERDR_SRC="$HERDR_SRC" scripts/check-vendor.sh
 ```
 
-The optional `HERDR_SRC` mode exact-compares unmodified schema files and the terminal wire protocol
-body. Locally adapted files are intentionally excluded from exact comparison and must be reviewed
-manually during refresh. `PopupSize` is compared with only the documented visibility adaptation
-allowed.
+The optional `HERDR_SRC` mode exact-compares the reviewed API/schema files. The protocol-19 terminal
+attach overlay is checked for its required version and message marker separately because the
+vendored wire module intentionally retains the stable raw-attach subset rather than mirroring all
+of Herdr `0.8.0`'s new structured-input types. Locally adapted files are intentionally excluded
+from exact comparison and must be reviewed manually during refresh. `PopupSize` is compared with
+only the documented visibility adaptation allowed.
 
 5. Re-run validation:
 
@@ -138,8 +145,8 @@ the refit button after changing browser sizes.
 
 ## Compatibility Policy
 
-The bridge pings Herdr's status API at startup and requires Herdr `v0.7.5` or newer with daemon
-protocol exactly `17`. Older daemons and any unreviewed newer protocol are rejected before serving
+The bridge pings Herdr's status API at startup and requires Herdr `v0.8.0` or newer with daemon
+protocol exactly `19`. Older daemons and any unreviewed newer protocol are rejected before serving
 the web app. The version floor covers the private JSON API shape, including the managed
 `agent.start` contract; the exact protocol check protects the copied bincode terminal wire format.
 This is not a complete stability guarantee because the bridge mirrors private APIs.

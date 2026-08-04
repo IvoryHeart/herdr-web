@@ -57,7 +57,7 @@ test("captures deterministic compact office and roster at 375x812", async ({ pag
   await page.goto("/world");
   await waitForOffice(page);
   await waitForFrameFixtures(page);
-  await page.getByRole("button", { name: "Back to World roster" }).click();
+  await page.getByRole("button", { name: "Back to Office roster" }).click();
   await page
     .getByRole("group", { name: "Host" })
     .getByRole("button", { name: "All", exact: true })
@@ -70,7 +70,7 @@ test("captures deterministic compact office and roster at 375x812", async ({ pag
     animations: "disabled",
   });
 
-  await page.getByRole("button", { name: "Back to World roster" }).click();
+  await page.getByRole("button", { name: "Back to Office roster" }).click();
   await expect(page.getByRole("button", { name: "View office" })).toBeVisible();
   await page.screenshot({
     path: resolve(evidenceDir, "world-live-375x812-roster.png"),

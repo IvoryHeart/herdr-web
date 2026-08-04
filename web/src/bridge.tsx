@@ -16,6 +16,20 @@ import { addNativeResumeHandler } from "./native";
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
 
+export function sameOriginHostLabel(): string {
+  const hostname = globalThis.location?.hostname?.trim();
+  if (
+    !hostname
+    || hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1"
+    || hostname === "[::1]"
+  ) {
+    return "localhost";
+  }
+  return hostname;
+}
+
 export type BridgeId = string;
 
 export type BridgeBackendProfile = {
@@ -125,8 +139,8 @@ const NOTE_DRAFT_STORAGE_PREFIX = "herdr-web:note-draft:v1:";
 const STORE_VERSION = 2;
 const APP_MIN_WEB_COMPAT = 1;
 const APP_BRIDGE_API_VERSION = 1;
-const APP_TERMINAL_PROTOCOL = 17;
-const APP_MIN_HERDR_VERSION = [0, 7, 5] as const;
+const APP_TERMINAL_PROTOCOL = 19;
+const APP_MIN_HERDR_VERSION = [0, 8, 0] as const;
 const MAX_CAPABILITY_STRING_LENGTH = 120;
 const MAX_CAPABILITY_LIST_LENGTH = 128;
 export const SAME_ORIGIN_BRIDGE_COLOR = "#b4befe";
@@ -573,7 +587,7 @@ function buildAvailableRuntimes({
       createBridgeRuntime({
         id: SAME_ORIGIN_BRIDGE_ID,
         mode: "same-origin",
-        label: "Same origin",
+        label: sameOriginHostLabel(),
         backend: null,
         baseUrl: null,
         capabilityGeneration: capabilityGenerations[SAME_ORIGIN_BRIDGE_ID] ?? 0,
@@ -1174,7 +1188,7 @@ function compatibilityError(capabilities: BridgeCapabilities) {
     return `Terminal protocol ${String(capabilities.terminal_protocol)} is incompatible; expected ${APP_TERMINAL_PROTOCOL}`;
   }
   if (!minimumVersionSatisfied(capabilities.herdr_version, APP_MIN_HERDR_VERSION)) {
-    return "Herdr version is incompatible; expected 0.7.5 or newer";
+    return "Herdr version is incompatible; expected 0.8.0 or newer";
   }
   if (
     typeof capabilities.web_compat === "number" &&

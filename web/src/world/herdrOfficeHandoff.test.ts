@@ -158,8 +158,8 @@ function liveRuntime(): BridgeRuntime {
     capabilities: {
       bridge_api_version: 1,
       bridge_version: "0.1.0",
-      herdr_version: "0.7.5",
-      terminal_protocol: 17,
+      herdr_version: "0.8.0",
+      terminal_protocol: 19,
       features: ["snapshot", "terminal_attach"],
       commands: [],
     },

@@ -20,6 +20,7 @@ import {
   normalizeBackendColor,
   SAME_ORIGIN_BRIDGE_ID,
   SAME_ORIGIN_BRIDGE_COLOR,
+  sameOriginHostLabel,
   suggestBackendColor,
   useBridge,
 } from "./bridge";
@@ -281,6 +282,7 @@ export function BackendSettingsDialog({
   const canDelete = Boolean(form.id);
   const editingBackend = selectionMode !== "same-origin";
   const sameOriginUrl = sameOriginDisplayUrl();
+  const sameOriginLabel = sameOriginHostLabel();
   const showSameOrigin = bridge.sameOriginAvailable;
   const areas: { id: SettingsArea; label: string; icon: typeof Server }[] = [
     { id: "bridge", label: "Bridge", icon: Server },
@@ -354,9 +356,9 @@ export function BackendSettingsDialog({
                         active={selectionMode === "same-origin"}
                         color={SAME_ORIGIN_BRIDGE_COLOR}
                         enabled={sameOriginEnabled}
-                        title="Same origin"
+                        title={sameOriginLabel}
                         subtitle={sameOriginUrl}
-                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} Same origin bridge`}
+                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} ${sameOriginLabel} bridge`}
                         onSelect={selectSameOrigin}
                         onToggle={() => bridge.setBridgeEnabled(SAME_ORIGIN_BRIDGE_ID, !sameOriginEnabled)}
                       />
@@ -393,7 +395,7 @@ export function BackendSettingsDialog({
                   <div className="backend-form">
                     {selectionMode === "same-origin" ? (
                       <div className="backend-static">
-                        <strong>Same origin</strong>
+                        <strong>{sameOriginLabel}</strong>
                         <span>
                           {sameOriginEnabled ? "Enabled" : "Disabled"}; uses the server that
                           delivered this web app.
@@ -1359,7 +1361,7 @@ function clampPercent(value: number) {
 function sameOriginDisplayUrl() {
   const location = globalThis.location;
   if (!location?.origin || location.origin === "null") {
-    return "same-origin";
+    return sameOriginHostLabel();
   }
   return location.origin;
 }

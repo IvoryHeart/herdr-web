@@ -30,6 +30,12 @@
 
 ### Changed
 
+- Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state
+  coverage onto a CEO-room blackboard, opened the CEO/reception composition for future plugin
+  boards, shifted room furniture down within the existing wall clearance, and refreshed the Agent
+  Bar with a warm Claw-Empire-inspired bar setting using the existing character art. The board now
+  uses a legible three-column/two-row metric grid with a compact single-dot state cue, and the
+  Agent Bar now stacks agents/stools, counter, and drinks shelf from front to back.
 - Remodeled Pixel Office around qualified Herdr topology: tabs are desks; `working` and `unknown`
   agents work or stand in their exact workspace; `blocked` agents wait at horizontal host reception
   conference tables; and `idle` and `done` agents move to the shared Agent Bar. The reception floor

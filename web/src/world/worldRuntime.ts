@@ -3,6 +3,7 @@ import type { HostProfile } from "../hostProfile";
 import { hostConnectionState } from "../runtimeClient";
 import type { BridgeConnectionState } from "../runtimeConnection";
 import type { HerdrOfficeSourceHost } from "./herdrOfficeProjection";
+import type { OfficeHostLocation } from "./herdrOfficeProjection";
 
 export function herdrOfficeSourcesFromRuntime(
   profiles: readonly HostProfile[],
@@ -23,6 +24,7 @@ export function herdrOfficeSourcesFromRuntime(
 
     return {
       profile,
+      location: hostLocation(profile.baseUrl, runtime?.mode),
       connectionState: !profile.enabled
         ? "disabled"
         : runtime
@@ -38,4 +40,18 @@ export function herdrOfficeSourcesFromRuntime(
       snapshot,
     };
   });
+}
+
+function hostLocation(baseUrl: string, mode: BridgeRuntime["mode"] | undefined): OfficeHostLocation {
+  if (mode === "same-origin") {
+    return "local";
+  }
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+      ? "local"
+      : "remote";
+  } catch {
+    return "remote";
+  }
 }

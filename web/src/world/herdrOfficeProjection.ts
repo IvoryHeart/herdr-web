@@ -22,11 +22,14 @@ const MAX_STATE_LABEL = 96;
 
 export type HerdrOfficeSourceHost = {
   profile: HostProfile;
+  location: OfficeHostLocation;
   connectionState: HostConnectionState;
   generationKey: string | null;
   features: readonly string[];
   snapshot: Snapshot | null;
 };
+
+export type OfficeHostLocation = "local" | "remote";
 
 export type OfficeHostSkin = {
   themeIndex: number;
@@ -37,6 +40,7 @@ export type OfficeHost = {
   key: string;
   displayLabel: string;
   displayOrder: number;
+  location: OfficeHostLocation;
   connectionState: HostConnectionState;
   observed: boolean;
   stale: boolean;
@@ -417,6 +421,7 @@ function projectHost(source: HerdrOfficeSourceHost): ProjectedHost {
       key: source.profile.profileId,
       displayLabel: boundedLabel(source.profile.label, "Host"),
       displayOrder: source.profile.displayOrder,
+      location: source.location,
       connectionState: enabled ? source.connectionState : "disabled",
       observed: source.snapshot !== null,
       stale,
