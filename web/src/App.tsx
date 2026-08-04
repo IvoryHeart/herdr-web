@@ -215,6 +215,7 @@ type ScopedWorkspaceRef = {
   workspaceId: string;
 };
 type SpaceReorderMode = ScopedWorkspaceRef;
+const SPACE_REORDER_INSTRUCTIONS_ID = "space-reorder-instructions";
 type SpaceDragState = {
   pointerId: number;
   startY: number;
@@ -1010,6 +1011,23 @@ export function App() {
   const [showDetail, setShowDetail] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [spaceReorderMode, setSpaceReorderMode] = useState<SpaceReorderMode | null>(null);
+  const [spaceReorderAnnouncement, setSpaceReorderAnnouncement] = useState("");
+  const spaceReorderAnnouncementFrameRef = useRef<number | null>(null);
+  const announceSpaceReorder = useCallback((message: string) => {
+    if (spaceReorderAnnouncementFrameRef.current !== null) {
+      window.cancelAnimationFrame(spaceReorderAnnouncementFrameRef.current);
+    }
+    setSpaceReorderAnnouncement("");
+    spaceReorderAnnouncementFrameRef.current = window.requestAnimationFrame(() => {
+      setSpaceReorderAnnouncement(message);
+      spaceReorderAnnouncementFrameRef.current = null;
+    });
+  }, []);
+  const closeSpaceReorder = useCallback(() => setSpaceReorderMode(null), []);
+  const cancelSpaceReorder = useCallback(() => {
+    announceSpaceReorder("Canceled moving space.");
+    closeSpaceReorder();
+  }, [announceSpaceReorder, closeSpaceReorder]);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
@@ -1189,7 +1207,7 @@ export function App() {
         return true;
       }
       if (spaceReorderMode) {
-        setSpaceReorderMode(null);
+        cancelSpaceReorder();
         return true;
       }
       if (notesPanelOpen) {
@@ -1200,6 +1218,7 @@ export function App() {
     });
   }, [
     backendSettingsOpen,
+    cancelSpaceReorder,
     deletingNote,
     dialog,
     launchTarget,
@@ -1216,12 +1235,21 @@ export function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setSpaceReorderMode(null);
+        cancelSpaceReorder();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [spaceReorderMode]);
+  }, [cancelSpaceReorder, spaceReorderMode]);
+
+  useEffect(
+    () => () => {
+      if (spaceReorderAnnouncementFrameRef.current !== null) {
+        window.cancelAnimationFrame(spaceReorderAnnouncementFrameRef.current);
+      }
+    },
+    [],
+  );
 
   const bridgeViews = useMemo<BridgeConnectionView[]>(
     () =>
@@ -3429,7 +3457,8 @@ export function App() {
     bridgeId: BridgeId,
     sourceWorkspaceId: string,
     beforeWorkspaceId: string | null,
-  ) {
+    keepMode = false,
+  ): Promise<boolean> {
     const runtime = bridge.getRuntime(bridgeId);
     const snapshot = connectionRefs.current[bridgeId]?.snapshot;
     const params = snapshot
@@ -3443,18 +3472,21 @@ export function App() {
       !runtime.capabilities?.commands.includes("workspace.move_block")
     ) {
       setError("Space ordering is unavailable");
-      setSpaceReorderMode(null);
-      return;
+      closeSpaceReorder();
+      return false;
     }
     if (!params) {
-      setSpaceReorderMode(null);
-      return;
+      closeSpaceReorder();
+      return false;
     }
     const commands = createCommands(runtime.httpUrl);
-    await exec(runtime, () =>
+    const moved = await exec(runtime, () =>
       commands.moveWorkspaceBlock(params.workspaceIds, params.beforeWorkspaceId),
     );
-    setSpaceReorderMode(null);
+    if (!keepMode || !moved) {
+      closeSpaceReorder();
+    }
+    return moved;
   }
 
   async function toggleAgentPin(bridgeId: BridgeId, paneId: string, pinned: boolean) {
@@ -3662,6 +3694,9 @@ export function App() {
       data-touch={isTouchInput ? "true" : "false"}
       data-detail={isCompactLayout && showDetail ? "true" : "false"}
     >
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {spaceReorderAnnouncement}
+      </span>
       {bridge.enabledRuntimes.map((runtime) => (
         <BridgeConnectionController
           key={runtime.id}
@@ -3765,9 +3800,10 @@ export function App() {
           onToggleCollapsedGroup={toggleCollapsedSidebarGroup}
           onSetCollapsedGroups={setVisibleSidebarGroupsCollapsed}
           onSpaceGroup={setSpaceGroup}
-          onCancelSpaceReorder={() => setSpaceReorderMode(null)}
-          onReorderSpace={(bridgeId, workspaceId, beforeWorkspaceId) =>
-            void reorderSpace(bridgeId, workspaceId, beforeWorkspaceId)
+          onCancelSpaceReorder={cancelSpaceReorder}
+          onAnnounceSpaceReorder={announceSpaceReorder}
+          onReorderSpace={(bridgeId, workspaceId, beforeWorkspaceId, keepMode) =>
+            reorderSpace(bridgeId, workspaceId, beforeWorkspaceId, keepMode)
           }
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
@@ -5904,6 +5940,7 @@ function Switcher({
   onSetCollapsedGroups,
   onSpaceGroup,
   onCancelSpaceReorder,
+  onAnnounceSpaceReorder,
   onReorderSpace,
   onSelectBridge,
   onSelectSpace,
@@ -5961,11 +5998,13 @@ function Switcher({
   onSetCollapsedGroups: (keys: readonly string[], collapsed: boolean) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
   onCancelSpaceReorder: () => void;
+  onAnnounceSpaceReorder: (message: string) => void;
   onReorderSpace: (
     bridgeId: BridgeId,
     workspaceId: string,
     beforeWorkspaceId: string | null,
-  ) => void;
+    keepMode?: boolean,
+  ) => Promise<boolean>;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
   onSelectTab: (bridgeId: BridgeId, tabId: string) => void;
@@ -6048,6 +6087,11 @@ function Switcher({
     [reorderWorkspaces],
   );
   const reorderSourceRootId = spaceReorderMode?.workspaceId ?? null;
+  const reorderSourceLabel = spaceReorderMode
+    ? (reorderWorkspaces.find(
+        (workspace) => workspace.workspace_id === spaceReorderMode.workspaceId,
+      )?.label ?? "Space")
+    : "Space";
   const remainingReorderRootIds = useMemo(
     () => reorderRootIds.filter((workspaceId) => workspaceId !== reorderSourceRootId),
     [reorderRootIds, reorderSourceRootId],
@@ -6329,11 +6373,16 @@ function Switcher({
     }
     if (!reorderBridgeView?.snapshot || reorderBlockIds.length === 0) {
       onCancelSpaceReorder();
+    }
+  }, [onCancelSpaceReorder, reorderBlockIds.length, reorderBridgeView?.snapshot, spaceReorderMode]);
+
+  useEffect(() => {
+    if (!spaceReorderMode) {
       return;
     }
     const frame = window.requestAnimationFrame(() => spaceReorderCardRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [onCancelSpaceReorder, reorderBlockIds.length, reorderBridgeView, spaceReorderMode]);
+  }, [spaceReorderMode?.bridgeId, spaceReorderMode?.workspaceId]);
 
   const rowRefKey = (bridgeId: BridgeId, workspaceId: string) =>
     `${bridgeId}:${workspaceId}`;
@@ -6399,11 +6448,15 @@ function Switcher({
     spaceDragRef.current = null;
     setSpaceDragTarget(undefined);
     if (commit && drag.moved) {
-      onReorderSpace(
+      void onReorderSpace(
         spaceReorderMode.bridgeId,
         spaceReorderMode.workspaceId,
         drag.beforeWorkspaceId,
-      );
+      ).then((moved) => {
+        if (moved) {
+          onAnnounceSpaceReorder(`Moved ${reorderSourceLabel}.`);
+        }
+      });
     }
   };
   const beginSpaceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -6432,13 +6485,37 @@ function Switcher({
       spaceReorderMode.workspaceId,
       direction,
     );
-    if (destination !== undefined) {
-      onReorderSpace(
-        spaceReorderMode.bridgeId,
-        spaceReorderMode.workspaceId,
-        destination,
-      );
+    if (destination === undefined) {
+      const boundaryLabel: Record<WorkspaceReorderDirection, string> = {
+        up: "is already at the beginning",
+        down: "is already at the end",
+        top: "is already at the beginning",
+        bottom: "is already at the end",
+      };
+      onAnnounceSpaceReorder(`${reorderSourceLabel} ${boundaryLabel[direction]}.`);
+      return;
     }
+    void onReorderSpace(
+      spaceReorderMode.bridgeId,
+      spaceReorderMode.workspaceId,
+      destination,
+      true,
+    ).then((moved) => {
+      if (!moved) {
+        return;
+      }
+      const destinationLabel: Record<WorkspaceReorderDirection, string> = {
+        up: "up one position",
+        down: "down one position",
+        top: "to the beginning",
+        bottom: "to the end",
+      };
+      onAnnounceSpaceReorder(`Moved ${reorderSourceLabel} ${destinationLabel[direction]}.`);
+      window.requestAnimationFrame(() => spaceReorderCardRef.current?.focus());
+    });
+  };
+  const cancelSpaceReorder = () => {
+    onCancelSpaceReorder();
   };
 
   let agentPaneIndex = 0;
@@ -6957,16 +7034,22 @@ function Switcher({
           moveSpaceWithKeyboard(direction);
         } else if (event.key === "Escape") {
           event.preventDefault();
-          onCancelSpaceReorder();
+          cancelSpaceReorder();
         }
       }}
-      onCancelReorder={onCancelSpaceReorder}
+      onCancelReorder={cancelSpaceReorder}
     />
     );
   };
 
   return (
     <>
+      {spaceReorderMode ? (
+        <span id={SPACE_REORDER_INSTRUCTIONS_ID} className="sr-only">
+          Use the Up and Down arrow keys to move this space one position, Home and End to move it
+          to either end, and Escape to cancel.
+        </span>
+      ) : null}
       <header className="sb-head">
         <div className="brand">
           <span className="brand-mark">
@@ -8625,6 +8708,7 @@ function SpaceRow({
         data-reorder-drag={reorderSource ? "true" : undefined}
         disabled={reorderSource && reorderBusy}
         aria-label={reorderSource ? `Move ${workspace.label}` : undefined}
+        aria-describedby={reorderSource ? SPACE_REORDER_INSTRUCTIONS_ID : undefined}
         style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
         {...(reorderSource
           ? {
