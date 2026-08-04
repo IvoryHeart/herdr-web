@@ -80,6 +80,9 @@ const ACTIVITY_WATCHER_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const ACTIVITY_WATCHER_MAX_BACKOFF: Duration = Duration::from_secs(30);
 const ACTIVITY_RESUBSCRIBE_DEBOUNCE: Duration = Duration::from_millis(100);
 const ACTIVITY_READ_TIMEOUT: Duration = Duration::from_millis(250);
+const MANAGED_AGENT_SHELL_SETTLE_DELAY: Duration = Duration::from_millis(100);
+const MANAGED_AGENT_SHELL_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(300);
+const MANAGED_AGENT_SHELL_READY_TIMEOUT: Duration = Duration::from_secs(3);
 const MANAGED_AGENT_START_TIMEOUT: Duration = Duration::from_secs(30);
 const MANAGED_AGENT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 static UPLOAD_TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -1278,6 +1281,8 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "workspace.rename",
     "workspace.close",
     "workspace.focus",
+    // Atomic same-session workspace ordering; the browser supplies explicit ids only.
+    "workspace.move_block",
     "tab.create",
     "tab.rename",
     "tab.close",
@@ -1510,6 +1515,38 @@ fn validate_web_command(method: &Method) -> Result<(), BridgeError> {
                 ));
             }
         }
+        Method::WorkspaceMoveBlock(params) => {
+            if params.workspace_ids.is_empty() || params.workspace_ids.len() > 256 {
+                return Err(BridgeError::BadRequest(
+                    "workspace.move_block requires between 1 and 256 workspace_ids".to_string(),
+                ));
+            }
+            let mut unique_ids = HashSet::with_capacity(params.workspace_ids.len());
+            if params.workspace_ids.iter().any(|workspace_id| {
+                workspace_id.trim().is_empty()
+                    || workspace_id.len() > 256
+                    || !unique_ids.insert(workspace_id.as_str())
+            }) {
+                return Err(BridgeError::BadRequest(
+                    "workspace.move_block workspace_ids must be unique, non-empty, and at most 256 bytes"
+                        .to_string(),
+                ));
+            }
+            if params
+                .before_workspace_id
+                .as_deref()
+                .is_some_and(|workspace_id| {
+                    workspace_id.trim().is_empty()
+                        || workspace_id.len() > 256
+                        || unique_ids.contains(workspace_id)
+                })
+            {
+                return Err(BridgeError::BadRequest(
+                    "workspace.move_block before_workspace_id must be a distinct valid workspace id"
+                        .to_string(),
+                ));
+            }
+        }
         Method::TabCreate(params) => {
             if params
                 .workspace_id
@@ -1705,6 +1742,7 @@ struct LauncherPresetError {
     status: StatusCode,
     code: &'static str,
     message: String,
+    herdr_code: Option<String>,
 }
 
 impl LauncherPresetError {
@@ -1713,6 +1751,7 @@ impl LauncherPresetError {
             status: StatusCode::BAD_REQUEST,
             code: "invalid_preset_launch",
             message: message.into(),
+            herdr_code: None,
         }
     }
 
@@ -1721,6 +1760,7 @@ impl LauncherPresetError {
             status: StatusCode::FORBIDDEN,
             code: "forbidden",
             message: message.into(),
+            herdr_code: None,
         }
     }
 
@@ -1729,6 +1769,7 @@ impl LauncherPresetError {
             status: StatusCode::NOT_FOUND,
             code: "preset_not_found",
             message: message.into(),
+            herdr_code: None,
         }
     }
 
@@ -1737,6 +1778,7 @@ impl LauncherPresetError {
             status: StatusCode::CONFLICT,
             code: "layout_changed",
             message: message.into(),
+            herdr_code: None,
         }
     }
 
@@ -1745,6 +1787,16 @@ impl LauncherPresetError {
             status: StatusCode::BAD_GATEWAY,
             code: "herdr_launch_failed",
             message: message.into(),
+            herdr_code: None,
+        }
+    }
+
+    fn from_herdr_error(code: String, message: String) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            code: "herdr_launch_failed",
+            message,
+            herdr_code: Some(code),
         }
     }
 
@@ -1904,14 +1956,26 @@ fn launch_preset_blocking(
 
 trait LauncherApiRequest {
     fn request(&mut self, id: &str, method: Method) -> Result<ResponseResult, LauncherPresetError>;
+
+    fn now(&self) -> std::time::Instant {
+        std::time::Instant::now()
+    }
+
+    fn wait(&mut self, duration: Duration) {
+        thread::sleep(duration);
+    }
 }
 
 struct HerdrLauncherApi<'a>(&'a ApiClient);
 
 impl LauncherApiRequest for HerdrLauncherApi<'_> {
     fn request(&mut self, id: &str, method: Method) -> Result<ResponseResult, LauncherPresetError> {
-        api_request(self.0, id, method)
-            .map_err(|err| LauncherPresetError::launch_failed(err.to_string()))
+        api_request(self.0, id, method).map_err(|err| match err {
+            BridgeError::Api(ApiClientError::ErrorResponse(response)) => {
+                LauncherPresetError::from_herdr_error(response.error.code, response.error.message)
+            }
+            err => LauncherPresetError::launch_failed(err.to_string()),
+        })
     }
 }
 
@@ -2145,16 +2209,35 @@ fn start_managed_agent(
     args: &[String],
 ) -> Result<(), LauncherPresetError> {
     let name = managed_agent_name(kind, pane_id);
-    let result = api.request(
-        "herdr-web:launcher:start-managed-agent",
-        Method::AgentStart(AgentStartParams {
-            name: name.clone(),
-            kind: kind.as_str().to_string(),
-            pane_id: pane_id.to_string(),
-            args: args.to_vec(),
-            timeout_ms: None,
-        }),
-    )?;
+    // Herdr v0.8 can acknowledge pane creation before its process detector sees the shell as the
+    // pane's foreground job. The API exposes no shell-ready event or authoritative readiness flag,
+    // so allow that shell to settle and retry only the transient `agent_pane_busy` response.
+    let deadline = api.now() + MANAGED_AGENT_SHELL_READY_TIMEOUT;
+    api.wait(MANAGED_AGENT_SHELL_SETTLE_DELAY);
+    let mut retry_delay = MANAGED_AGENT_SHELL_RETRY_INITIAL_DELAY;
+    let result = loop {
+        match api.request(
+            "herdr-web:launcher:start-managed-agent",
+            Method::AgentStart(AgentStartParams {
+                name: name.clone(),
+                kind: kind.as_str().to_string(),
+                pane_id: pane_id.to_string(),
+                args: args.to_vec(),
+                timeout_ms: None,
+            }),
+        ) {
+            Ok(result) => break result,
+            Err(error)
+                if error.herdr_code.as_deref() == Some("agent_pane_busy")
+                    && api.now() < deadline =>
+            {
+                let remaining = deadline.saturating_duration_since(api.now());
+                api.wait(retry_delay.min(remaining));
+                retry_delay = retry_delay.saturating_mul(3);
+            }
+            Err(error) => return Err(error),
+        }
+    };
     let ResponseResult::AgentStarted { agent, .. } = result else {
         return Err(LauncherPresetError::launch_failed(
             "unexpected response for managed agent launch",
@@ -4937,7 +5020,7 @@ mod tests {
         assert!(!ALLOWED_COMMANDS.contains(&"server.stop"));
         assert!(!ALLOWED_COMMANDS.contains(&"pane.send_keys"));
         assert!(!ALLOWED_COMMANDS.contains(&"pane.send_input"));
-        assert!(!ALLOWED_COMMANDS.contains(&"workspace.move_block"));
+        assert!(ALLOWED_COMMANDS.contains(&"workspace.move_block"));
         // pane.split is intentionally allowed so the web client can create splits.
         assert!(ALLOWED_COMMANDS.contains(&"pane.split"));
         assert!(ALLOWED_COMMANDS.contains(&"pane.focus_direction"));
@@ -5528,6 +5611,38 @@ mod tests {
     }
 
     #[test]
+    fn validates_atomic_workspace_reorder_commands() {
+        let valid: Request = serde_json::from_value(serde_json::json!({
+            "id": "test",
+            "method": "workspace.move_block",
+            "params": {
+                "workspace_ids": ["w1", "w1-child"],
+                "before_workspace_id": "w3"
+            }
+        }))
+        .unwrap();
+        assert!(validate_web_command(&valid.method).is_ok());
+
+        for params in [
+            serde_json::json!({ "workspace_ids": [] }),
+            serde_json::json!({ "workspace_ids": ["w1", "w1"] }),
+            serde_json::json!({ "workspace_ids": [""] }),
+            serde_json::json!({
+                "workspace_ids": ["w1"],
+                "before_workspace_id": "w1"
+            }),
+        ] {
+            let invalid: Request = serde_json::from_value(serde_json::json!({
+                "id": "test",
+                "method": "workspace.move_block",
+                "params": params
+            }))
+            .unwrap();
+            assert!(validate_web_command(&invalid.method).is_err());
+        }
+    }
+
+    #[test]
     fn validates_narrow_workspace_and_tab_rename_commands() {
         let request: Request = serde_json::from_value(serde_json::json!({
             "id": "test",
@@ -5920,6 +6035,74 @@ mod tests {
         };
         assert_eq!(params.target, name);
         assert_eq!(api.requests.len(), 4);
+        assert_eq!(api.waits, vec![MANAGED_AGENT_SHELL_SETTLE_DELAY]);
+    }
+
+    #[test]
+    fn managed_agent_launch_waits_for_new_shell_before_retrying_start() {
+        let pane = launcher_test_pane("pane-new", "workspace-1", "tab-new");
+        let tab = launcher_test_tab("tab-new", "workspace-1");
+        let name = managed_agent_name(ManagedAgentKind::Claude, "pane-new");
+        let mut pending = launcher_test_agent("pane-new", "workspace-1", "tab-new");
+        pending.name = Some(name);
+        pending.agent = None;
+        let mut ready = pending.clone();
+        ready.agent = Some("claude".into());
+        ready.launch_pending = false;
+        ready.interactive_ready = true;
+        let mut api = MockLauncherApi::new([
+            Ok(ResponseResult::TabCreated {
+                tab,
+                root_pane: pane,
+            }),
+            Ok(ResponseResult::Ok {}),
+            Err(LauncherPresetError::from_herdr_error(
+                "agent_pane_busy".into(),
+                "agent target pane pane-new is not an available shell".into(),
+            )),
+            Err(LauncherPresetError::from_herdr_error(
+                "agent_pane_busy".into(),
+                "agent target pane pane-new is not an available shell".into(),
+            )),
+            Err(LauncherPresetError::from_herdr_error(
+                "agent_pane_busy".into(),
+                "agent target pane pane-new is not an available shell".into(),
+            )),
+            Ok(ResponseResult::AgentStarted {
+                agent: pending,
+                argv: vec!["claude".into()],
+            }),
+            Ok(ResponseResult::AgentInfo { agent: ready }),
+        ]);
+        let preset = launcher_test_managed_preset(ManagedAgentKind::Claude);
+
+        let response = launch_preset_with(
+            &mut api,
+            &preset,
+            "Claude",
+            LauncherPresetLaunchTarget::Tab {
+                workspace_id: "workspace-1".into(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.pane_id, "pane-new");
+        assert_eq!(
+            api.requests
+                .iter()
+                .filter(|request| matches!(request, Method::AgentStart(_)))
+                .count(),
+            4
+        );
+        assert_eq!(
+            api.waits,
+            vec![
+                MANAGED_AGENT_SHELL_SETTLE_DELAY,
+                MANAGED_AGENT_SHELL_RETRY_INITIAL_DELAY,
+                Duration::from_millis(900),
+                Duration::from_millis(1700),
+            ]
+        );
     }
 
     #[test]
@@ -6045,6 +6228,8 @@ mod tests {
     struct MockLauncherApi {
         results: std::collections::VecDeque<Result<ResponseResult, LauncherPresetError>>,
         requests: Vec<Method>,
+        waits: Vec<Duration>,
+        clock: std::time::Instant,
     }
 
     impl MockLauncherApi {
@@ -6054,6 +6239,8 @@ mod tests {
             Self {
                 results: results.into_iter().collect(),
                 requests: Vec::new(),
+                waits: Vec::new(),
+                clock: std::time::Instant::now(),
             }
         }
     }
@@ -6068,6 +6255,15 @@ mod tests {
             self.results
                 .pop_front()
                 .expect("mock launcher response missing")
+        }
+
+        fn now(&self) -> std::time::Instant {
+            self.clock
+        }
+
+        fn wait(&mut self, duration: Duration) {
+            self.waits.push(duration);
+            self.clock += duration;
         }
     }
 

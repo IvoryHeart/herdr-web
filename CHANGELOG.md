@@ -10,6 +10,10 @@
 
 ### Added
 
+- Added a contextual Move Space mode to the Spaces menu. The selected space card becomes draggable,
+  retains a cancel control and arrow/Home/End keyboard support, mutes unrelated sidebar actions
+  until the move is completed or canceled, and moves worktree groups atomically within their host's
+  canonical workspace order.
 - Added persistent expand/collapse controls to grouped Agents, Tabs, and Spaces headers, including
   independent, visually nested host and workspace controls for Host + workspace grouping and a
   bulk expand/collapse control for the current Agents or Tabs list.
@@ -22,13 +26,15 @@
 
 - Refreshed the minimal vendored Herdr compatibility sources to the `v0.8.0`/protocol `19`
   baseline, including the current API schemas, terminal wire definitions, and input model shims.
-- Follow Herdr's canonical workspace order when atomic worktree groups are reordered. The browser
-  observes these changes but does not expose workspace reordering controls.
+- Follow Herdr's canonical workspace order when atomic worktree groups are reordered.
 - Simplified Workspace grouping in the Agents and Tabs sidebars to show workspace-only group
   headers and move host context into each detail row. Host + workspace grouping keeps its nested
   host and workspace headers. [PR #47](https://github.com/kcosr/herdr-web/pull/47)
 
 ### Fixed
+
+- Fixed built-in agent launches against Herdr `v0.8.0` by waiting for a newly created pane's shell
+  to become available before starting the managed agent.
 
 ### Removed
 

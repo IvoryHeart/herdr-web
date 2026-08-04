@@ -98,6 +98,11 @@ export function createCommands(httpUrl: BridgeHttpUrl = sameOriginHttpUrl) {
       runCommand(httpUrl, "workspace.close", { workspace_id: workspaceId }),
     focusWorkspace: (workspaceId: string) =>
       runCommand(httpUrl, "workspace.focus", { workspace_id: workspaceId }),
+    moveWorkspaceBlock: (workspaceIds: string[], beforeWorkspaceId: string | null) =>
+      runCommand(httpUrl, "workspace.move_block", {
+        workspace_ids: workspaceIds,
+        before_workspace_id: beforeWorkspaceId,
+      }),
 
     createTab: (workspaceId: string, label?: string) =>
       runCommand(httpUrl, "tab.create", { workspace_id: workspaceId, focus: true, label }),

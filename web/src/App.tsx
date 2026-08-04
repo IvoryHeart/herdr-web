@@ -39,6 +39,7 @@ import type {
   FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MutableRefObject,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
   SetStateAction,
 } from "react";
@@ -179,6 +180,13 @@ import type {
   TabInfo,
   WorkspaceInfo,
 } from "./types";
+import {
+  workspaceMoveBlockParams,
+  workspaceReorderBlockIds,
+  workspaceReorderDestination,
+  workspaceReorderRoots,
+} from "./workspaceReorder";
+import type { WorkspaceReorderDirection } from "./workspaceReorder";
 
 const NoteMarkdownPreview = lazy(() => import("./NoteMarkdownPreview"));
 
@@ -205,6 +213,13 @@ type MobileNotesScreen = "list" | "editor";
 type ScopedWorkspaceRef = {
   bridgeId: BridgeId;
   workspaceId: string;
+};
+type SpaceReorderMode = ScopedWorkspaceRef;
+type SpaceDragState = {
+  pointerId: number;
+  startY: number;
+  beforeWorkspaceId: string | null;
+  moved: boolean;
 };
 type ScopedLaunchTarget = LaunchTarget & {
   bridgeId: BridgeId;
@@ -994,6 +1009,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(initialPrefs.sidebarOpen);
   const [showDetail, setShowDetail] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [spaceReorderMode, setSpaceReorderMode] = useState<SpaceReorderMode | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
@@ -1172,6 +1188,10 @@ export function App() {
         setBackendSettingsOpen(false);
         return true;
       }
+      if (spaceReorderMode) {
+        setSpaceReorderMode(null);
+        return true;
+      }
       if (notesPanelOpen) {
         setNotesPanelOpen(false);
         return true;
@@ -1186,7 +1206,22 @@ export function App() {
     menu,
     noteDeleteTarget,
     notesPanelOpen,
+    spaceReorderMode,
   ]);
+
+  useEffect(() => {
+    if (!spaceReorderMode) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSpaceReorderMode(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [spaceReorderMode]);
 
   const bridgeViews = useMemo<BridgeConnectionView[]>(
     () =>
@@ -1358,6 +1393,19 @@ export function App() {
   );
   const menuSupportedCommands = menuCommandsReady ? (menuRuntime?.capabilities?.commands ?? []) : [];
   const menuPaneMoveSupported = menuSupportedCommands.includes("pane.move");
+  const menuWorkspace =
+    menu?.kind === "space"
+      ? menuConnectionState?.snapshot?.workspaces.find(
+          (workspace) => workspace.workspace_id === menu.id,
+        )
+      : undefined;
+  const menuWorkspaceReorderSupported = Boolean(
+    menuWorkspace &&
+      !menuWorkspace.worktree?.is_linked_worktree &&
+      menuConnectionState?.snapshot &&
+      workspaceReorderRoots(menuConnectionState.snapshot.workspaces).length > 1 &&
+      menuSupportedCommands.includes("workspace.move_block"),
+  );
   const menuAgentPinsSupported = Boolean(
     menu &&
       menu.kind === "pane" &&
@@ -1393,6 +1441,7 @@ export function App() {
         menuPanePinned,
         menuPinLabel,
         menuNotesSupported,
+        menuWorkspaceReorderSupported,
       )
     : [];
 
@@ -3376,6 +3425,38 @@ export function App() {
     }
   }
 
+  async function reorderSpace(
+    bridgeId: BridgeId,
+    sourceWorkspaceId: string,
+    beforeWorkspaceId: string | null,
+  ) {
+    const runtime = bridge.getRuntime(bridgeId);
+    const snapshot = connectionRefs.current[bridgeId]?.snapshot;
+    const params = snapshot
+      ? workspaceMoveBlockParams(snapshot.workspaces, sourceWorkspaceId, beforeWorkspaceId)
+      : null;
+    if (
+      !runtime ||
+      !snapshot ||
+      !runtime.canConnect ||
+      runtime.capabilityState !== "ready" ||
+      !runtime.capabilities?.commands.includes("workspace.move_block")
+    ) {
+      setError("Space ordering is unavailable");
+      setSpaceReorderMode(null);
+      return;
+    }
+    if (!params) {
+      setSpaceReorderMode(null);
+      return;
+    }
+    const commands = createCommands(runtime.httpUrl);
+    await exec(runtime, () =>
+      commands.moveWorkspaceBlock(params.workspaceIds, params.beforeWorkspaceId),
+    );
+    setSpaceReorderMode(null);
+  }
+
   async function toggleAgentPin(bridgeId: BridgeId, paneId: string, pinned: boolean) {
     const runtime = bridge.getRuntime(bridgeId);
     if (
@@ -3426,6 +3507,8 @@ export function App() {
         current[bridgeId] === id ? current : { ...current, [bridgeId]: id },
       );
       setLaunchTarget({ mode: "tab", workspaceId: id, bridgeId });
+    } else if (key === "reorder" && kind === "space") {
+      setSpaceReorderMode({ bridgeId, workspaceId: id });
     } else if (key === "pin" && kind === "pane") {
       void toggleAgentPin(bridgeId, id, false);
     } else if (key === "unpin" && kind === "pane") {
@@ -3592,7 +3675,51 @@ export function App() {
           onNotesChanged={refreshNotesForBridge}
         />
       ))}
-      <aside className="sidebar" aria-label="Switcher">
+      <aside
+        className="sidebar"
+        aria-label="Switcher"
+        data-space-reorder={spaceReorderMode ? "true" : undefined}
+        onClickCapture={(event) => {
+          if (
+            spaceReorderMode &&
+            event.target instanceof Element &&
+            !event.target.closest(".space-row-shell[data-reorder-source='true']")
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onContextMenuCapture={(event) => {
+          if (spaceReorderMode) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (!spaceReorderMode || event.key !== "Tab") {
+            return;
+          }
+          const controls = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>(
+              ".space-row-shell[data-reorder-source='true'] > .space-row:not(:disabled), " +
+                ".space-reorder-controls button:not(:disabled)",
+            ),
+          );
+          if (controls.length === 0) {
+            return;
+          }
+          event.preventDefault();
+          const currentIndex = controls.indexOf(document.activeElement as HTMLButtonElement);
+          const nextIndex = event.shiftKey
+            ? currentIndex <= 0
+              ? controls.length - 1
+              : currentIndex - 1
+            : currentIndex < 0 || currentIndex === controls.length - 1
+              ? 0
+              : currentIndex + 1;
+          controls[nextIndex]?.focus();
+        }}
+      >
         <Switcher
           bridgeViews={bridgeViews}
           selectedBridgeId={selectedRuntime?.id ?? null}
@@ -3620,6 +3747,8 @@ export function App() {
           combineMatchingWorkspaceNames={combineMatchingWorkspaceNames}
           collapsedSidebarGroupKeys={collapsedSidebarGroupKeys}
           spaceGroup={spaceGroup}
+          spaceReorderMode={spaceReorderMode}
+          spaceReorderBusy={busy}
           multiHostSpaceSelection={multiHostSpaceSelection}
           activeSpace={activeSpace}
           activeWorkspacesByBridgeId={activeWorkspacesByBridgeId}
@@ -3636,6 +3765,10 @@ export function App() {
           onToggleCollapsedGroup={toggleCollapsedSidebarGroup}
           onSetCollapsedGroups={setVisibleSidebarGroupsCollapsed}
           onSpaceGroup={setSpaceGroup}
+          onCancelSpaceReorder={() => setSpaceReorderMode(null)}
+          onReorderSpace={(bridgeId, workspaceId, beforeWorkspaceId) =>
+            void reorderSpace(bridgeId, workspaceId, beforeWorkspaceId)
+          }
           onSelectBridge={setSelectedBridgeId}
           onSelectSpace={selectSpace}
           onSelectTab={selectTab}
@@ -5752,6 +5885,8 @@ function Switcher({
   combineMatchingWorkspaceNames,
   collapsedSidebarGroupKeys,
   spaceGroup,
+  spaceReorderMode,
+  spaceReorderBusy,
   multiHostSpaceSelection,
   activeSpace,
   activeWorkspacesByBridgeId,
@@ -5768,6 +5903,8 @@ function Switcher({
   onToggleCollapsedGroup,
   onSetCollapsedGroups,
   onSpaceGroup,
+  onCancelSpaceReorder,
+  onReorderSpace,
   onSelectBridge,
   onSelectSpace,
   onSelectTab,
@@ -5805,6 +5942,8 @@ function Switcher({
   combineMatchingWorkspaceNames: boolean;
   collapsedSidebarGroupKeys: ReadonlySet<string>;
   spaceGroup: SpaceGroup;
+  spaceReorderMode: SpaceReorderMode | null;
+  spaceReorderBusy: boolean;
   multiHostSpaceSelection: boolean;
   activeSpace: WorkspaceInfo | null;
   activeWorkspacesByBridgeId: Record<string, string>;
@@ -5821,6 +5960,12 @@ function Switcher({
   onToggleCollapsedGroup: (key: string) => void;
   onSetCollapsedGroups: (keys: readonly string[], collapsed: boolean) => void;
   onSpaceGroup: (group: SpaceGroup) => void;
+  onCancelSpaceReorder: () => void;
+  onReorderSpace: (
+    bridgeId: BridgeId,
+    workspaceId: string,
+    beforeWorkspaceId: string | null,
+  ) => void;
   onSelectBridge: (bridgeId: BridgeId) => void;
   onSelectSpace: (bridgeId: BridgeId, workspaceId: string) => void;
   onSelectTab: (bridgeId: BridgeId, tabId: string) => void;
@@ -5843,6 +5988,11 @@ function Switcher({
 }) {
   const [optionsMenu, setOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceOptionsMenu, setSpaceOptionsMenu] = useState<{ x: number; y: number } | null>(null);
+  const [spaceDragTarget, setSpaceDragTarget] = useState<string | null | undefined>(undefined);
+  const spaceDragRef = useRef<SpaceDragState | null>(null);
+  const spaceListRef = useRef<HTMLDivElement | null>(null);
+  const spaceRowRefs = useRef(new Map<string, HTMLDivElement>());
+  const spaceReorderCardRef = useRef<HTMLButtonElement | null>(null);
   const selectedBridgeView = selectedBridgeId
     ? (bridgeViews.find((view) => view.runtime.id === selectedBridgeId) ?? null)
     : null;
@@ -5881,6 +6031,34 @@ function Switcher({
       };
     });
   });
+  const reorderBridgeView = spaceReorderMode
+    ? (hostBridgeViews.find((view) => view.runtime.id === spaceReorderMode.bridgeId) ?? null)
+    : null;
+  const reorderWorkspaces = reorderBridgeView?.snapshot?.workspaces ?? [];
+  const reorderBlockIds = useMemo(
+    () =>
+      spaceReorderMode
+        ? workspaceReorderBlockIds(reorderWorkspaces, spaceReorderMode.workspaceId)
+        : [],
+    [reorderWorkspaces, spaceReorderMode],
+  );
+  const reorderBlockIdSet = useMemo(() => new Set(reorderBlockIds), [reorderBlockIds]);
+  const reorderRootIds = useMemo(
+    () => workspaceReorderRoots(reorderWorkspaces).map((workspace) => workspace.workspace_id),
+    [reorderWorkspaces],
+  );
+  const reorderSourceRootId = spaceReorderMode?.workspaceId ?? null;
+  const remainingReorderRootIds = useMemo(
+    () => reorderRootIds.filter((workspaceId) => workspaceId !== reorderSourceRootId),
+    [reorderRootIds, reorderSourceRootId],
+  );
+  const finalReorderWorkspaceId = useMemo(() => {
+    const finalRootId = remainingReorderRootIds.at(-1);
+    if (!finalRootId) {
+      return null;
+    }
+    return workspaceReorderBlockIds(reorderWorkspaces, finalRootId).at(-1) ?? finalRootId;
+  }, [remainingReorderRootIds, reorderWorkspaces]);
   const canGroupSpacesByHost = shouldOfferSpaceHostGrouping(hostScope, hostBridgeViews.length);
   const effectiveSpaceGroup = resolveEffectiveSpaceGroup(
     spaceGroup,
@@ -6142,6 +6320,126 @@ function Switcher({
       setSpaceOptionsMenu(null);
     }
   }, [canGroupSpacesByHost, spaceOptionsMenu]);
+
+  useEffect(() => {
+    if (!spaceReorderMode) {
+      spaceDragRef.current = null;
+      setSpaceDragTarget(undefined);
+      return;
+    }
+    if (!reorderBridgeView?.snapshot || reorderBlockIds.length === 0) {
+      onCancelSpaceReorder();
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => spaceReorderCardRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [onCancelSpaceReorder, reorderBlockIds.length, reorderBridgeView, spaceReorderMode]);
+
+  const rowRefKey = (bridgeId: BridgeId, workspaceId: string) =>
+    `${bridgeId}:${workspaceId}`;
+  const setSpaceRowRef = (
+    bridgeId: BridgeId,
+    workspaceId: string,
+    node: HTMLDivElement | null,
+  ) => {
+    const key = rowRefKey(bridgeId, workspaceId);
+    if (node) {
+      spaceRowRefs.current.set(key, node);
+    } else {
+      spaceRowRefs.current.delete(key);
+    }
+  };
+  const reorderTargetAtY = (clientY: number) => {
+    if (!spaceReorderMode) {
+      return null;
+    }
+    for (const rootId of remainingReorderRootIds) {
+      const blockIds = workspaceReorderBlockIds(reorderWorkspaces, rootId);
+      const firstRow = spaceRowRefs.current.get(rowRefKey(spaceReorderMode.bridgeId, rootId));
+      const lastRow = spaceRowRefs.current.get(
+        rowRefKey(spaceReorderMode.bridgeId, blockIds.at(-1) ?? rootId),
+      );
+      if (firstRow && lastRow) {
+        const firstRect = firstRow.getBoundingClientRect();
+        const lastRect = lastRow.getBoundingClientRect();
+        if (clientY < (firstRect.top + lastRect.bottom) / 2) {
+          return rootId;
+        }
+      }
+    }
+    return null;
+  };
+  const updateSpaceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = spaceDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    const listRect = spaceListRef.current?.getBoundingClientRect();
+    if (listRect) {
+      const edge = 42;
+      if (event.clientY < listRect.top + edge) {
+        spaceListRef.current?.scrollBy({ top: -12 });
+      } else if (event.clientY > listRect.bottom - edge) {
+        spaceListRef.current?.scrollBy({ top: 12 });
+      }
+    }
+    const beforeWorkspaceId = reorderTargetAtY(event.clientY);
+    const moved = drag.moved || Math.abs(event.clientY - drag.startY) > 5;
+    spaceDragRef.current = { ...drag, beforeWorkspaceId, moved };
+    setSpaceDragTarget(moved ? beforeWorkspaceId : undefined);
+  };
+  const finishSpaceDrag = (event: ReactPointerEvent<HTMLButtonElement>, commit: boolean) => {
+    const drag = spaceDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !spaceReorderMode) {
+      return;
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    spaceDragRef.current = null;
+    setSpaceDragTarget(undefined);
+    if (commit && drag.moved) {
+      onReorderSpace(
+        spaceReorderMode.bridgeId,
+        spaceReorderMode.workspaceId,
+        drag.beforeWorkspaceId,
+      );
+    }
+  };
+  const beginSpaceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (
+      !spaceReorderMode ||
+      spaceReorderBusy ||
+      (event.button !== 0 && event.pointerType !== "touch")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    spaceDragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      beforeWorkspaceId: reorderTargetAtY(event.clientY),
+      moved: false,
+    };
+  };
+  const moveSpaceWithKeyboard = (direction: WorkspaceReorderDirection) => {
+    if (!spaceReorderMode || spaceReorderBusy) {
+      return;
+    }
+    const destination = workspaceReorderDestination(
+      reorderWorkspaces,
+      spaceReorderMode.workspaceId,
+      direction,
+    );
+    if (destination !== undefined) {
+      onReorderSpace(
+        spaceReorderMode.bridgeId,
+        spaceReorderMode.workspaceId,
+        destination,
+      );
+    }
+  };
 
   let agentPaneIndex = 0;
   let paneIndex = 0;
@@ -6596,8 +6894,20 @@ function Switcher({
     entry: (typeof spaceEntries)[number],
     index: number,
     showBridgeLabel: boolean,
-  ) => (
-    <SpaceRow
+  ) => {
+    const workspaceId = entry.workspace.workspace_id;
+    const bridgeId = entry.view.runtime.id;
+    const reorderMember =
+      spaceReorderMode?.bridgeId === bridgeId && reorderBlockIdSet.has(workspaceId);
+    const reorderSource = reorderMember && workspaceId === spaceReorderMode?.workspaceId;
+    const dropBefore =
+      spaceReorderMode?.bridgeId === bridgeId && spaceDragTarget === workspaceId;
+    const dropAfter =
+      spaceReorderMode?.bridgeId === bridgeId &&
+      spaceDragTarget === null &&
+      finalReorderWorkspaceId === workspaceId;
+    return (
+      <SpaceRow
       key={`${entry.view.runtime.id}:${entry.workspace.workspace_id}`}
       index={index}
       workspace={entry.workspace}
@@ -6605,20 +6915,55 @@ function Switcher({
       agentCount={entry.workspacePanes.filter(isAgentPane).length}
       active={entry.active}
       attention={countAttention(entry.workspacePanes)}
-      onSelect={() => onSelectSpace(entry.view.runtime.id, entry.workspace.workspace_id)}
+      reorderMember={reorderMember}
+      reorderSource={reorderSource}
+      reorderBusy={spaceReorderBusy}
+      dropBefore={dropBefore}
+      dropAfter={dropAfter}
+      rowRef={(node) => setSpaceRowRef(bridgeId, workspaceId, node)}
+      reorderCardRef={reorderSource ? spaceReorderCardRef : undefined}
+      onSelect={() => {
+        if (!spaceReorderMode) {
+          onSelectSpace(bridgeId, workspaceId);
+        }
+      }}
       onMenu={(x, y) =>
-        onScopedMenu(
-          "space",
-          entry.view.runtime.id,
-          entry.workspace.workspace_id,
-          entry.workspace.label,
-          x,
-          y,
-          canClearWorkspaceName(entry.workspace, entry.workspacePanes),
-        )
+        !spaceReorderMode
+          ? onScopedMenu(
+              "space",
+              bridgeId,
+              workspaceId,
+              entry.workspace.label,
+              x,
+              y,
+              canClearWorkspaceName(entry.workspace, entry.workspacePanes),
+            )
+          : undefined
       }
+      onReorderPointerDown={beginSpaceDrag}
+      onReorderPointerMove={updateSpaceDrag}
+      onReorderPointerUp={(event) => finishSpaceDrag(event, true)}
+      onReorderPointerCancel={(event) => finishSpaceDrag(event, false)}
+      onReorderKeyDown={(event) => {
+        const directions: Partial<Record<string, WorkspaceReorderDirection>> = {
+          ArrowUp: "up",
+          ArrowDown: "down",
+          Home: "top",
+          End: "bottom",
+        };
+        const direction = directions[event.key];
+        if (direction) {
+          event.preventDefault();
+          moveSpaceWithKeyboard(direction);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          onCancelSpaceReorder();
+        }
+      }}
+      onCancelReorder={onCancelSpaceReorder}
     />
-  );
+    );
+  };
 
   return (
     <>
@@ -6739,7 +7084,7 @@ function Switcher({
         </button>
       </div>
 
-      <div className="list">
+      <div className="list" ref={spaceListRef}>
         {!hasListSnapshot ? (
           <div className="empty">
             <strong>
@@ -6770,7 +7115,7 @@ function Switcher({
           <>
             {/* SPACES ---------------------------------------------------- */}
             {scope === "space" && hostBridgeViews.some((view) => view.snapshot) ? (
-            <section className="sec">
+            <section className="sec" data-sidebar-section="spaces">
               <div className="sec-head">
                 <span className="sec-label">spaces</span>
                 <span className="sec-rule" />
@@ -6851,7 +7196,7 @@ function Switcher({
             {/* PANES ----------------------------------------------------- */}
             {notesViewActive ||
             (hostScope === "all" ? hasListSnapshot : snapshot && snapshot.workspaces.length > 0) ? (
-            <section className="sec">
+            <section className="sec" data-sidebar-section="content">
               <div className="sec-head">
                 <span className="sec-label">
                   {sidebarView === "agents"
@@ -8224,8 +8569,21 @@ function SpaceRow({
   active,
   attention,
   index,
+  reorderMember,
+  reorderSource,
+  reorderBusy,
+  dropBefore,
+  dropAfter,
+  rowRef,
+  reorderCardRef,
   onSelect,
   onMenu,
+  onReorderPointerDown,
+  onReorderPointerMove,
+  onReorderPointerUp,
+  onReorderPointerCancel,
+  onReorderKeyDown,
+  onCancelReorder,
 }: {
   workspace: WorkspaceInfo;
   bridgeLabel?: string;
@@ -8233,27 +8591,75 @@ function SpaceRow({
   active: boolean;
   attention: number;
   index: number;
+  reorderMember: boolean;
+  reorderSource: boolean;
+  reorderBusy: boolean;
+  dropBefore: boolean;
+  dropAfter: boolean;
+  rowRef: (node: HTMLDivElement | null) => void;
+  reorderCardRef?: MutableRefObject<HTMLButtonElement | null>;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
+  onReorderPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onReorderPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onReorderPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onReorderPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onReorderKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onCancelReorder: () => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
   return (
-    <button
-      className="space-row"
-      type="button"
-      data-active={active}
-      style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
-      {...press}
+    <div
+      ref={rowRef}
+      className="space-row-shell"
+      data-reorder-member={reorderMember ? "true" : undefined}
+      data-reorder-source={reorderSource ? "true" : undefined}
+      data-drop-before={dropBefore ? "true" : undefined}
+      data-drop-after={dropAfter ? "true" : undefined}
     >
-      <span className="dot" data-status={workspace.agent_status} />
-      <span className="space-body">
-        <span className="space-name">{workspace.label}</span>
-        <span className="space-sub mono">
-          {spaceSubtitle(workspace, bridgeLabel, agentCount)}
+      <button
+        ref={reorderCardRef}
+        className="space-row"
+        type="button"
+        data-active={active}
+        data-reorder-drag={reorderSource ? "true" : undefined}
+        disabled={reorderSource && reorderBusy}
+        aria-label={reorderSource ? `Move ${workspace.label}` : undefined}
+        style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
+        {...(reorderSource
+          ? {
+              onPointerDown: onReorderPointerDown,
+              onPointerMove: onReorderPointerMove,
+              onPointerUp: onReorderPointerUp,
+              onPointerCancel: onReorderPointerCancel,
+              onKeyDown: onReorderKeyDown,
+            }
+          : press)}
+      >
+        <span className="dot" data-status={workspace.agent_status} />
+        <span className="space-body">
+          <span className="space-name">{workspace.label}</span>
+          <span className="space-sub mono">
+            {spaceSubtitle(workspace, bridgeLabel, agentCount)}
+          </span>
         </span>
-      </span>
-      {attention > 0 ? <span className="attn">{attention}</span> : null}
-    </button>
+        {attention > 0 ? <span className="attn">{attention}</span> : null}
+      </button>
+      {reorderSource ? (
+        <span className="space-reorder-controls">
+          <button
+            className="space-reorder-cancel"
+            type="button"
+            disabled={reorderBusy}
+            aria-label="Cancel moving space"
+            title="Cancel"
+            onClick={onCancelReorder}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -8789,16 +9195,21 @@ export function menuItems(
   panePinned = false,
   pinLabel: "agent" | "pane" = "pane",
   notesSupported = false,
+  workspaceReorderSupported = false,
 ): MenuItem[] {
   if (kind === "space") {
     if (!commandsReady) {
       return [];
     }
-    return [
+    const items: MenuItem[] = [
       { key: "rename", label: "Rename" },
       { key: "newtab", label: "New tab" },
-      { key: "close", label: "Close space", danger: true },
     ];
+    if (workspaceReorderSupported) {
+      items.push({ key: "reorder", label: "Move space" });
+    }
+    items.push({ key: "close", label: "Close space", danger: true });
+    return items;
   }
   if (kind === "tab") {
     if (!commandsReady) {
