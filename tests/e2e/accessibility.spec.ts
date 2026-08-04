@@ -24,7 +24,7 @@ test("core controls are keyboard-visible, labelled, reduced-motion safe, and axe
     )
     .toBe(true);
   await expect(
-    page.getByRole("button", { name: "Same origin, compatible" }),
+    page.getByRole("button", { name: "localhost, compatible" }),
   ).toBeVisible();
 
   const accessibility = await new AxeBuilder({ page }).analyze();

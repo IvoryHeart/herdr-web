@@ -26,9 +26,9 @@ test("sustains the bounded 129-room fixture within the frame and memory budgets"
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/world");
   await waitForOffice(page);
-  await page.getByRole("button", { name: "All", exact: true }).click();
-  await expect(page.locator(".world-room-row")).toHaveCount(0);
-  await expect(page.getByText("No workspaces available", { exact: true })).toBeVisible();
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator(".space-row")).toHaveCount(0);
+  await expect(page.getByText("No spaces yet", { exact: true })).toBeVisible();
 
   const renderer = await webGlRenderer(page);
   test.skip(
@@ -56,13 +56,11 @@ test("sustains the bounded 129-room fixture within the frame and memory budgets"
     expect((await response.json()).sent).toBeGreaterThan(0);
   }
 
-  await expect(page.locator(".world-coverage-grid > div").nth(1)).toContainText("129");
-  await expect(page.locator(".world-coverage-grid > div").nth(1)).toContainText("spaces");
-  await expect(page.locator(".world-count")).toHaveText("283");
+  await expect(page.locator(".space-row")).toHaveCount(128);
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.layout?.rooms ?? 0))
     .toBe(128);
-  await expect(page.locator(".world-agent-row")).toHaveCount(16);
+  await expect(page.locator(".agent-row")).toHaveCount(16);
   await page.waitForTimeout(2_000);
 
   const start = await page.evaluate(() => ({

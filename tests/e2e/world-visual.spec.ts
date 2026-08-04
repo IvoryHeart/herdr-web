@@ -37,8 +37,11 @@ for (const viewport of [
       .click();
     await waitForLiveOffice(page);
     await expect(page.locator(".brand-sub")).toHaveText("3 blocked");
-    await page.locator(".world-agent-row").filter({ hasText: "Agent 11" }).click();
-    await expect(page.getByText("Open agent in Spaces", { exact: true })).toBeVisible();
+    const selectedAgent = page.locator(".agent-row").filter({ hasText: "Agent 11" });
+    await selectedAgent.click();
+    await expect(page.locator(".world-stage-notice")).toContainText(
+      "Double-click a room or agent to open it in Spaces",
+    );
     await page.screenshot({
       path: resolve(evidenceDir, `world-live-${viewport.width}x${viewport.height}.png`),
       animations: "disabled",
@@ -52,28 +55,21 @@ for (const viewport of [
   });
 }
 
-test("captures deterministic compact office and roster at 375x812", async ({ page }) => {
+test("captures deterministic compact Office with shared sidebar at 375x812", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/world");
   await waitForOffice(page);
   await waitForFrameFixtures(page);
-  await page.getByRole("button", { name: "Back to Office roster" }).click();
-  await page
-    .getByRole("group", { name: "Host" })
-    .getByRole("button", { name: "All", exact: true })
-    .click();
-  await waitForLiveOffice(page);
-  await expect(page.locator(".brand-sub")).toHaveText("3 blocked");
-  await page.getByRole("button", { name: "View office" }).click();
+  await expect(page.getByRole("button", { name: "Back to Herdr sidebar" })).toBeVisible();
   await page.screenshot({
     path: resolve(evidenceDir, "world-live-375x812-office.png"),
     animations: "disabled",
   });
 
-  await page.getByRole("button", { name: "Back to Office roster" }).click();
-  await expect(page.getByRole("button", { name: "View office" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
+  await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await page.screenshot({
-    path: resolve(evidenceDir, "world-live-375x812-roster.png"),
+    path: resolve(evidenceDir, "world-live-375x812-sidebar.png"),
     animations: "disabled",
   });
 });
@@ -93,6 +89,6 @@ async function waitForFrameFixtures(page: import("@playwright/test").Page) {
 }
 
 async function waitForLiveOffice(page: import("@playwright/test").Page) {
-  await expect(page.locator(".world-agent-row").filter({ hasText: "Agent 01" })).toBeAttached();
-  await expect(page.locator(".world-agent-row").filter({ hasText: "Agent 11" })).toBeAttached();
+  await expect(page.locator(".agent-row").filter({ hasText: "Agent 01" })).toBeAttached();
+  await expect(page.locator(".agent-row").filter({ hasText: "Agent 11" })).toBeAttached();
 }

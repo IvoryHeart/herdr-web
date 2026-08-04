@@ -30,7 +30,7 @@ test("one browser controls two operator-forwarded Herdr bridges", async ({
 
   await page.goto(bridgeA);
   await expect(
-    page.getByRole("button", { name: "Same origin, compatible" }),
+    page.getByRole("button", { name: "localhost, compatible" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "SSH Host B, compatible" }),

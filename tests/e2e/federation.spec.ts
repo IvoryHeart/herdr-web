@@ -15,7 +15,7 @@ test("one browser federates colliding native IDs and routes only to the owning b
   await page.goto("/");
 
   await expect(
-    page.getByRole("button", { name: "Same origin, compatible" }),
+    page.getByRole("button", { name: "localhost, compatible" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Remote B, compatible" }),
@@ -76,7 +76,7 @@ test("offline, incompatible, and malformed profiles stay isolated", async ({
     page.getByRole("button", { name: "Offline E, offline" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Same origin, compatible" }),
+    page.getByRole("button", { name: "localhost, compatible" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Offline E, offline" }).click();
@@ -86,7 +86,7 @@ test("offline, incompatible, and malformed profiles stay isolated", async ({
     page.getByText("Bridge disconnected", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Same origin, compatible" }).click();
+  await page.getByRole("button", { name: "localhost, compatible" }).click();
   await expect(page.getByRole("button", { name: "New tab" })).toBeEnabled();
   await expect(page.getByRole("button", { name: /^Codex A / })).toBeVisible();
 });
@@ -113,7 +113,7 @@ test("malformed snapshots are rejected without blanking another host", async ({
   await expect(page.getByRole("button", { name: "Remote B, offline" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Codex B / })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Codex A / })).toBeVisible();
-  await page.getByRole("button", { name: "Same origin, compatible" }).click();
+  await page.getByRole("button", { name: "localhost, compatible" }).click();
   await expect(page.getByRole("button", { name: "New tab" })).toBeEnabled();
   expect(pageErrors).toEqual([]);
 });
@@ -248,7 +248,7 @@ test("core surface capabilities are enforced per host", async ({ page, request }
   await page.goto("/");
 
   await expect(page.getByRole("button", { name: "Remote B, incompatible" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Same origin, compatible" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "localhost, compatible" })).toBeVisible();
   await page.getByRole("button", { name: "Remote B, incompatible" }).click();
   await expect(page.getByText("Missing terminal_attach capability", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "New tab" })).toHaveCount(0);
