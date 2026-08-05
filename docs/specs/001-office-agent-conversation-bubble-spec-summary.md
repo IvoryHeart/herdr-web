@@ -180,3 +180,18 @@
 - **Drift from approved spec:** None; this behavior is covered by extension
   008.
 - **Follow-up extension:** None.
+
+### 2026-08-05 — Full terminal surface after bubble expansion
+
+- **Implemented:** Removed the shared terminal host padding only inside the
+  Office conversation bubble, so the terminal begins at the full content edge
+  after opening and resizing.
+- **Implemented:** Continued the matching translucent terminal background
+  beneath Ghostty's whole-cell canvas remainder. The terminal remains
+  unscaled, with its configured font and cell metrics intact.
+- **Evidence:** Added browser coverage for zero bubble-terminal padding,
+  full-edge placement, and bounded canvas dimensions; the focused resize test
+  passes.
+- **Drift from approved spec:** None; this behavior is covered by extension
+  009.
+- **Follow-up extension:** None.

@@ -305,6 +305,20 @@ test("moves and resizes the Office conversation bubble without losing its live a
   await expect(bubble).toBeVisible();
   await expect(page.locator(".world-conversation-resize")).toBeVisible();
   await expect(bubble.locator(".terminal-stage")).toHaveAttribute("data-terminal-translucent", "true");
+  await expect.poll(async () => page.evaluate(() => {
+    const hostElement = document.querySelector(".world-conversation-terminal .terminal-host");
+    const host = hostElement?.getBoundingClientRect();
+    const canvas = document.querySelector(".world-conversation-terminal .terminal-host canvas")?.getBoundingClientRect();
+    if (!host || !canvas || !hostElement) {
+      return false;
+    }
+    return getComputedStyle(hostElement).padding === "0px" &&
+      getComputedStyle(hostElement).backgroundColor === "rgba(17, 17, 27, 0.88)" &&
+      Math.abs(host.left - canvas.left) <= 1 &&
+      Math.abs(host.top - canvas.top) <= 1 &&
+      canvas.right <= host.right + 1 &&
+      canvas.bottom <= host.bottom + 1;
+  })).toBe(true);
   const accessibility = await new AxeBuilder({ page }).include(".world-stage-shell").analyze();
   expect(
     accessibility.violations.filter((violation) =>

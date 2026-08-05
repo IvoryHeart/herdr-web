@@ -1058,6 +1058,11 @@ button {
   border-radius: 0 0 9px 9px;
 }
 
+.world-conversation-terminal .terminal-host {
+  padding: 0;
+  background: rgb(17 17 27 / 88%);
+}
+
 .world-conversation-terminal .terminal-stage[data-terminal-translucent="true"] {
   background: transparent;
 }
