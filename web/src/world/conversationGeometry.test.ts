@@ -25,9 +25,9 @@ describe("conversation geometry", () => {
       height: 10_000,
     }, 1120, 810)).toMatchObject({
       left: 12,
-      top: 238,
-      width: 960,
-      height: 560,
+      top: 12,
+      width: 1096,
+      height: 786,
     });
   });
 
@@ -45,8 +45,8 @@ describe("conversation geometry", () => {
     const resized = resizeConversationGeometry(initial, 120, 90, 1120, 810);
     expect(resized.left).toBe(initial.left);
     expect(resized.top).toBe(initial.top);
-    expect(resized.width).toBe(initial.width + 120);
-    expect(resized.height).toBe(560);
+    expect(resized.width).toBeCloseTo(initial.width + 120);
+    expect(resized.height).toBeCloseTo(initial.height + 90);
     const clamped = resizeConversationGeometry(resized, -10_000, -10_000, 1120, 810);
     expect(clamped.width).toBe(CONVERSATION_MIN_WIDTH);
     expect(clamped.height).toBe(CONVERSATION_MIN_HEIGHT);

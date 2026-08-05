@@ -8,8 +8,8 @@ export type ConversationGeometry = {
 export const CONVERSATION_STAGE_MARGIN = 12;
 export const CONVERSATION_MIN_WIDTH = 560;
 export const CONVERSATION_MIN_HEIGHT = 340;
-export const CONVERSATION_MAX_WIDTH = 960;
-export const CONVERSATION_MAX_HEIGHT = 560;
+export const CONVERSATION_DEFAULT_MAX_WIDTH = 960;
+export const CONVERSATION_DEFAULT_MAX_HEIGHT = 560;
 
 export function defaultConversationGeometry(
   viewportWidth: number,
@@ -18,13 +18,13 @@ export function defaultConversationGeometry(
   const width = boundedDimension(
     viewportWidth * 0.72,
     CONVERSATION_MIN_WIDTH,
-    CONVERSATION_MAX_WIDTH,
+    CONVERSATION_DEFAULT_MAX_WIDTH,
     viewportWidth,
   );
   const height = boundedDimension(
     viewportHeight * 0.6,
     CONVERSATION_MIN_HEIGHT,
-    CONVERSATION_MAX_HEIGHT,
+    CONVERSATION_DEFAULT_MAX_HEIGHT,
     viewportHeight,
   );
   return clampConversationGeometry({
@@ -47,12 +47,12 @@ export function clampConversationGeometry(
   const width = clamp(
     finiteOr(geometry.width, minWidth),
     minWidth,
-    Math.min(CONVERSATION_MAX_WIDTH, maxWidth),
+    maxWidth,
   );
   const height = clamp(
     finiteOr(geometry.height, minHeight),
     minHeight,
-    Math.min(CONVERSATION_MAX_HEIGHT, maxHeight),
+    maxHeight,
   );
   const maxLeft = Math.max(CONVERSATION_STAGE_MARGIN, viewportWidth - CONVERSATION_STAGE_MARGIN - width);
   const maxTop = Math.max(CONVERSATION_STAGE_MARGIN, viewportHeight - CONVERSATION_STAGE_MARGIN - height);

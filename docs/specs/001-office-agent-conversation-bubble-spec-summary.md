@@ -167,3 +167,16 @@
   included as an accessibility enhancement; mobile drag/resize and geometry
   persistence remain deferred.
 - **Follow-up extension:** None.
+
+### 2026-08-05 — Stage-bounded bubble growth
+
+- **Implemented:** Retained the existing preferred centered opening footprint
+  while removing the interactive resize ceiling at 960×560. The bubble can
+  now grow to the current usable Office stage dimensions, with the existing
+  margin, minimum size, refit, and connector behavior preserved.
+- **Evidence:** Updated geometry unit coverage to prove oversized dimensions
+  clamp to the stage rather than the former fixed ceiling. The resize browser
+  regression remains green, and the full repository check passes.
+- **Drift from approved spec:** None; this behavior is covered by extension
+  008.
+- **Follow-up extension:** None.

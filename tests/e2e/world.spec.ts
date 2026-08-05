@@ -293,6 +293,7 @@ test("opens one stable live conversation bubble for the selected Office agent", 
 test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/world");
   await waitForOffice(page);
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
@@ -348,8 +349,13 @@ test("moves and resizes the Office conversation bubble without losing its live a
   await expect.poll(async () => (await slot.boundingBox())?.width ?? 0).toBeGreaterThan(
     beforeResize?.width ?? 0,
   );
+  await resizeHandle.focus();
+  for (let index = 0; index < 5; index += 1) {
+    await page.keyboard.press("Shift+ArrowRight");
+  }
   const afterResize = await slot.boundingBox();
   expect(afterResize).not.toBeNull();
+  expect(afterResize?.width ?? 0).toBeGreaterThan(960);
   expect(afterResize?.height ?? 0).toBeGreaterThanOrEqual(beforeResize?.height ?? 0);
   await expect(slot).toHaveAttribute("data-positioned", "true");
 
