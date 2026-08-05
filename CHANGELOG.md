@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.1] - 2026-08-05
 
 ### Breaking Changes
 
@@ -38,8 +38,6 @@
 - Fixed built-in agent launches against Herdr `v0.8.0` by waiting for a newly created pane's shell
   to become available before starting the managed agent.
   [PR #48](https://github.com/kcosr/herdr-web/pull/48)
-
-### Removed
 
 ## [0.4.0] - 2026-07-30
 
