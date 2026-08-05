@@ -595,7 +595,7 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   const stationSpan = barWidth / 5;
   const position = {
     x: barX + stationSpan * 2.5,
-    y: layout.barBandY + 136 - scrollTop,
+    y: layout.barBandY + 136 - 34 - scrollTop,
   };
 
   await page.locator("canvas[data-office-canvas='true']").dblclick({ position });

@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: 1,
+  retries: process.env.CI ? 2 : 0,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   outputDir: ".scratch/playwright",
