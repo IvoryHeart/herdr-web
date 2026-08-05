@@ -247,7 +247,7 @@ function WorldStage({
     }
   }, [context.compact]);
 
-  const beginConversationInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const beginConversationInteraction = (event: ReactPointerEvent<HTMLElement>) => {
     if (context.compact || event.button !== 0) {
       return;
     }
@@ -261,7 +261,7 @@ function WorldStage({
       return;
     }
     const geometry = conversationGeometryRef.current ?? measuredConversationGeometry();
-    const slot = event.currentTarget;
+    const slot = conversationRef.current;
     if (!geometry || !slot) {
       return;
     }
@@ -512,6 +512,7 @@ function WorldStage({
               data-world-conversation-resize="true"
               aria-label="Resize agent conversation"
               title="Resize conversation"
+              onPointerDown={beginConversationInteraction}
             />
           ) : null}
         </div>

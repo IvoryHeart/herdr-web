@@ -1067,23 +1067,27 @@ button {
   right: -1px;
   bottom: -1px;
   z-index: 3;
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 0 0 10px 0;
-  background: transparent;
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    color-mix(in srgb, var(--accent) 13%, transparent) 55%
+  );
   cursor: nwse-resize;
   touch-action: none;
 }
 
 .world-conversation-resize::before {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 11px;
-  height: 11px;
-  border-right: 2px solid color-mix(in srgb, var(--accent) 82%, white);
-  border-bottom: 2px solid color-mix(in srgb, var(--accent) 82%, white);
+  right: 8px;
+  bottom: 8px;
+  width: 16px;
+  height: 16px;
+  border-right: 3px solid color-mix(in srgb, var(--accent) 82%, white);
+  border-bottom: 3px solid color-mix(in srgb, var(--accent) 82%, white);
   content: "";
   opacity: 0.72;
 }
