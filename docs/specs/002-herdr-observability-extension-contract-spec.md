@@ -1,17 +1,15 @@
 # Herdr observability extension contract
 
 - **Spec ID:** `002-herdr-observability-extension-contract`
-- **Status:** Draft
+- **Status:** Approved
 - **Created:** 2026-08-05
 - **Owner:** Herdr Office downstream project
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** IvoryHeart (repository owner)
+- **Approved at:** 2026-08-09
 
-> This document is a draft. It may be edited during review. Implementation is
-> not authorised until the status is changed to `Approved`. After approval,
-> the contract becomes immutable; implementation evidence belongs in the
-> paired summary and later intended changes require an extension.
+> This specification is approved and immutable. Implementation evidence belongs
+> in the paired summary; later intended changes require a numbered extension.
 
 ## 1. Purpose
 

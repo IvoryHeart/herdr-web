@@ -56,6 +56,17 @@ describe("Herdr Office projection", () => {
       .toEqual(["blocked"]);
     expect(projection.barAgents.map(({ semanticStatus }) => semanticStatus))
       .toEqual(["idle", "done"]);
+    const completedAgent = projection.roster.find(({ agent }) => agent.semanticStatus === "done")?.agent;
+    const completedDesk = projection.deskRoster.find(({ desk }) =>
+      completedAgent ? desk.completionAgentKeys.includes(completedAgent.key) : false,
+    )?.desk;
+    expect(completedAgent).toBeDefined();
+    expect(completedDesk?.completionAgentKeys).toEqual([completedAgent?.key]);
+    expect(projection.deskRoster.some(({ desk }) =>
+      desk.completionAgentKeys.some((key) =>
+        projection.roster.find(({ agent }) => agent.key === key)?.agent.semanticStatus === "blocked",
+      ),
+    )).toBe(false);
     expect(projection.roster.find(({ agent }) => agent.displayLabel === "claude")?.agent)
       .toMatchObject({
         destination: "bar",

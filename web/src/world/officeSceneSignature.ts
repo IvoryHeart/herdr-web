@@ -5,15 +5,18 @@ export function officeSceneSignature({
   layout,
   projection,
   selectedKey,
+  completionSeenKeys = new Set<string>(),
   visibleRoomIndices,
 }: {
   layout: OfficeLayout;
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
+  completionSeenKeys?: ReadonlySet<string>;
   visibleRoomIndices: readonly number[];
 }) {
   return JSON.stringify({
     selectedKey,
+    completionSeenKeys: [...completionSeenKeys].sort(),
     layout: {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,

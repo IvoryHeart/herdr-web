@@ -83,6 +83,7 @@ export type OfficeDesk = {
   stale: boolean;
   canOpenInSpaces: boolean;
   occupantAgentKey?: string;
+  completionAgentKeys: string[];
 };
 
 export type OfficeRoom = {
@@ -485,6 +486,10 @@ function projectRooms({ source, host }: ProjectedHost): ProjectedRoom[] {
       if (occupant) {
         desk.occupantAgentKey = occupant.key;
       }
+      desk.completionAgentKeys = agents
+        .filter((agent) => agent.semanticStatus === "done" && agent.deskKey === desk.key)
+        .map(({ key }) => key)
+        .sort();
     }
     return {
       sourceHost: source,
@@ -524,6 +529,7 @@ function projectDesk(
     order: tab.number,
     stale: host.stale,
     canOpenInSpaces,
+    completionAgentKeys: [],
   };
 }
 

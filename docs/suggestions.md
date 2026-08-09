@@ -400,23 +400,24 @@ of hidden requirements.
 
 ### SUG-024 — Visible completion rendezvous and acknowledgement
 
-- **Status:** candidate
+- **Status:** promoted
 - **Scope:** `office-view`, `herdr-web`, `observability`
 - **Value:** Make completion chimes actionable by showing exactly which agent
   or desk produced the event.
-- **Idea:** Keep a completed agent visibly associated with its desk long enough
-  to be identified, add a distinct completion animation or acknowledgement
-  cue, and offer a clear interaction that opens its terminal. After the user
-  inspects or acknowledges it, the agent may move to the bar or another
-  retained state. The presentation could use a restrained office metaphor—a
-  raised hand, completion flag, or short queue near the CEO—without implying
-  approval or automatic acceptance of the work.
+- **Idea:** Let the completed agent move to the Agent Bar as idle while leaving
+  a generic completed-work marker at the originating desk. Add a brief room or
+  desk highlight and a clear interaction that opens the exact terminal. The
+  marker can use document sheets lying on the desk or hanging/floating above
+  it as a generic office metaphor; it should not guess whether the work was a
+  document, package, pull request, or another artifact until harness-specific
+  reporting is understood.
 - **Dependencies:** Herdr completion/status events, event-to-agent identity,
-  notification correlation, distinct status animation, acknowledgement
-  semantics, idle/done state retention, multi-window terminal behaviour, and
+  notification correlation, distinct marker art, implicit inspection
+  semantics, idle/done state projection, multi-window terminal behaviour, and
   accessibility/reduced-motion support.
 - **Owner:** Open
 - **Added:** 2026-08-09
+- **Related:** [`003-office-completion-rendezvous-spec.md`](specs/003-office-completion-rendezvous-spec.md)
 
 ## Parked or declined
 

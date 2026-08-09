@@ -1082,6 +1082,9 @@ export function App() {
     },
   );
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
+  const [worldCompletionSeenKeys, setWorldCompletionSeenKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>([]);
   const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
   const worldConversationCacheRef = useRef<Map<string, WorldConversationView>>(new Map());
@@ -1093,6 +1096,14 @@ export function App() {
     }
   }, []);
   const [worldHandoffStatus, setWorldHandoffStatus] = useState<string | null>(null);
+  const markWorldCompletionSeen = (agentKey: string) => {
+    setWorldCompletionSeenKeys((current) => {
+      if (current.has(agentKey)) {
+        return current;
+      }
+      return new Set(current).add(agentKey);
+    });
+  };
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
@@ -1390,6 +1401,20 @@ export function App() {
     [worldSourcesInScope],
   );
   useEffect(() => {
+    const activeCompletionKeys = new Set(
+      worldProjection.roster
+        .filter(({ agent }) => agent.semanticStatus === "done")
+        .map(({ agent }) => agent.key),
+    );
+    setWorldCompletionSeenKeys((current) => {
+      const next = new Set([...current].filter((key) => activeCompletionKeys.has(key)));
+      if (next.size === current.size) {
+        return current;
+      }
+      return next;
+    });
+  }, [worldProjection]);
+  useEffect(() => {
     officeDebug("world:projection", {
       hosts: worldProjection.hosts.length,
       observedHosts: worldProjection.coverage.observedHosts,
@@ -1510,6 +1535,10 @@ export function App() {
     ) {
       return;
     }
+    const projectedAgent = worldProjection.roster.find(({ agent: entry }) => entry.key === agent.key)?.agent;
+    if (projectedAgent?.semanticStatus === "done") {
+      markWorldCompletionSeen(agent.key);
+    }
     selectWorldAgent({
       windowId: worldConversationWindowId(agent.hostKey, pane.pane_id),
       kind: "agent",
@@ -1527,6 +1556,7 @@ export function App() {
     observedGeneration: string;
     stale: boolean;
     occupantAgentKey?: string;
+    completionAgentKeys?: readonly string[];
   }) => {
     cancelWorldCanvasSelection();
     const runtime = bridge.getRuntime(desk.hostKey);
@@ -1538,7 +1568,9 @@ export function App() {
       : null;
     const occupant = desk.occupantAgentKey
       ? worldProjection.roster.find(({ agent }) => agent.key === desk.occupantAgentKey)?.agent ?? null
-      : null;
+      : desk.completionAgentKeys?.map((key) =>
+          worldProjection.roster.find(({ agent }) => agent.key === key)?.agent ?? null,
+        ).find((agent): agent is OfficeAgent => agent !== null) ?? null;
     const panes = source?.snapshot?.panes.filter(
       ({ tab_id }) => tab_id === desk.tabRef.nativeTargetId,
     ) ?? [];
@@ -1575,6 +1607,9 @@ export function App() {
       (!admissionReady && !admissionPending)
     ) {
       return;
+    }
+    if (occupant?.semanticStatus === "done") {
+      markWorldCompletionSeen(occupant.key);
     }
     selectWorldAgent({
       windowId: worldConversationWindowId(desk.hostKey, pane.pane_id),
@@ -1761,7 +1796,10 @@ export function App() {
     const deskEntry = worldProjection.deskRoster.find(({ desk }) => desk.key === key);
     if (deskEntry) {
       setSelectedBridgeId(deskEntry.desk.hostKey);
-      setWorldSelectedKey(deskEntry.desk.occupantAgentKey ?? deskEntry.desk.key);
+      const completionAgentKey = deskEntry.desk.completionAgentKeys[0] ?? null;
+      setWorldSelectedKey(
+        deskEntry.desk.occupantAgentKey ?? completionAgentKey ?? deskEntry.desk.key,
+      );
       setWorldHandoffStatus(null);
       worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
         worldCanvasSelectionTimerRef.current = null;
@@ -4531,6 +4569,7 @@ export function App() {
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
     selectedKey: worldSelectedKey,
+    completionSeenKeys: worldCompletionSeenKeys,
     onSelect: selectWorldKey,
     compact: isCompactLayout,
     onBackToSidebar: closeMobileDetail,

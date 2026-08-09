@@ -331,6 +331,9 @@ test("keeps the live connector visible when the selected agent moves below the v
   expect((await eventResponse.json()).sent).toBeGreaterThan(0);
 
   await expect(page.locator(".agent-row").filter({ hasText: "Codex A" })).toContainText("Ready for review");
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
+    .toBeGreaterThan(0);
   await expect(bubble).toBeVisible();
   await expect(agentPath).toHaveCount(1);
   await expect(agentPath).toHaveAttribute("data-offscreen", "bottom");

@@ -27,6 +27,7 @@ export type OfficeConversationAnchors = Record<string, OfficeCanvasAnchors>;
 export function PixelOfficeCanvas({
   projection,
   selectedKey,
+  completionSeenKeys,
   conversationTargets,
   onSelect,
   onActivateAgent,
@@ -35,6 +36,7 @@ export function PixelOfficeCanvas({
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
+  completionSeenKeys: ReadonlySet<string>;
   conversationTargets: readonly OfficeConversationAnchorTarget[];
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
@@ -46,6 +48,7 @@ export function PixelOfficeCanvas({
   const latestRef = useRef({
     projection,
     selectedKey,
+    completionSeenKeys,
     conversationTargets,
     onSelect,
     onActivateAgent,
@@ -56,6 +59,7 @@ export function PixelOfficeCanvas({
   latestRef.current = {
     projection,
     selectedKey,
+    completionSeenKeys,
     conversationTargets,
     onSelect,
     onActivateAgent,
@@ -153,6 +157,7 @@ export function PixelOfficeCanvas({
       element,
       latestRef.current.projection,
       latestRef.current.selectedKey,
+      latestRef.current.completionSeenKeys,
       (key) => latestRef.current.onSelect(key),
       (key) => latestRef.current.onActivateAgent(key),
       (key) => latestRef.current.onActivateRoom(key),
@@ -169,7 +174,7 @@ export function PixelOfficeCanvas({
           desks: latestRef.current.projection.deskRoster.length,
         });
         const latest = latestRef.current;
-        controller.update(latest.projection, latest.selectedKey);
+        controller.update(latest.projection, latest.selectedKey, latest.completionSeenKeys);
         window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
       .catch((error: unknown) => {
@@ -193,9 +198,9 @@ export function PixelOfficeCanvas({
   }, []);
 
   useEffect(() => {
-    controllerRef.current?.update(projection, selectedKey);
+    controllerRef.current?.update(projection, selectedKey, completionSeenKeys);
     window.requestAnimationFrame(() => reportAnchorsRef.current());
-  }, [conversationTargets, projection, selectedKey]);
+  }, [completionSeenKeys, conversationTargets, projection, selectedKey]);
 
   useEffect(() => {
     const host = hostRef.current;

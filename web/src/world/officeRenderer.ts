@@ -115,6 +115,7 @@ export type OfficeRendererDiagnostics = {
     barBandHeight: number;
     viewportHeight: number;
   };
+  completionMarkers: number;
 };
 
 declare global {
@@ -125,7 +126,11 @@ declare global {
 }
 
 export type OfficeRendererController = {
-  update: (projection: HerdrOfficeProjection, selectedKey: string | null) => void;
+  update: (
+    projection: HerdrOfficeProjection,
+    selectedKey: string | null,
+    completionSeenKeys?: ReadonlySet<string>,
+  ) => void;
   getAnchors: (
     selectedKey: string | null,
     conversationTargetKey: string | null,
@@ -147,6 +152,7 @@ export async function createOfficeRenderer(
   element: HTMLElement,
   projection: HerdrOfficeProjection,
   selectedKey: string | null,
+  completionSeenKeys: ReadonlySet<string>,
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
@@ -169,6 +175,7 @@ export async function createOfficeRenderer(
   let disposed = false;
   let currentProjection = projection;
   let currentSelectedKey = selectedKey;
+  let currentCompletionSeenKeys = completionSeenKeys;
   let currentLayout: OfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
@@ -280,6 +287,7 @@ export async function createOfficeRenderer(
       layout,
       projection: currentProjection,
       selectedKey: currentSelectedKey,
+      completionSeenKeys: currentCompletionSeenKeys,
       visibleRoomIndices: visibleRooms.map(({ index }) => index),
     });
     if (sceneSignature === lastSceneSignature) {
@@ -312,6 +320,7 @@ export async function createOfficeRenderer(
           rect,
           currentProjection,
           currentSelectedKey,
+          currentCompletionSeenKeys,
           textures,
           animated,
           select,
@@ -343,6 +352,14 @@ export async function createOfficeRenderer(
       monitors: animated.filter(({ kind }) => kind === "monitor").length,
       statuses: animated.filter(({ kind }) => kind === "status").length,
     };
+    diagnostics.completionMarkers = currentProjection.rooms.reduce(
+      (count, room) => count + room.desks.reduce((deskCount, desk) =>
+        deskCount + desk.completionAgentKeys.filter(
+          (key) => !currentCompletionSeenKeys.has(key),
+        ).length,
+      0),
+      0,
+    );
   };
 
   const syncScrollPosition = () => {
@@ -472,9 +489,10 @@ export async function createOfficeRenderer(
   }
 
   return {
-    update(nextProjection, nextSelectedKey) {
+    update(nextProjection, nextSelectedKey, nextCompletionSeenKeys = currentCompletionSeenKeys) {
       currentProjection = nextProjection;
       currentSelectedKey = nextSelectedKey;
+      currentCompletionSeenKeys = nextCompletionSeenKeys;
       build(lastWidth || element.clientWidth);
     },
     getAnchors(selectedKey, conversationTargetKey) {
@@ -1035,6 +1053,7 @@ function drawRoom(
   rect: OfficeRoomRect,
   projection: HerdrOfficeProjection,
   selectedKey: string | null,
+  completionSeenKeys: ReadonlySet<string>,
   textures: readonly Texture[],
   animated: AnimatedItem[],
   onSelect: (key: string) => void,
@@ -1047,6 +1066,13 @@ function drawRoom(
   }
   const theme = THEMES[host.deterministicSkin.themeIndex % THEMES.length];
   const active = roomHasActivity(room);
+  const hasUnseenCompletion = room.desks.some((desk) =>
+    desk.completionAgentKeys.some((key) => !completionSeenKeys.has(key)),
+  );
+  const hasSelectedCompletion = room.desks.some((desk) =>
+    desk.completionAgentKeys.includes(selectedKey ?? ""),
+  );
+  const roomSelected = selectedKey === room.key || hasSelectedCompletion;
   const parent = new Container();
   const floor = new Graphics();
   const floorA = active ? blendColor(theme.floorA, 0x5d5138, 0.34) : theme.floorA;
@@ -1054,9 +1080,13 @@ function drawRoom(
   drawTiledFloor(floor, rect.x, rect.y, rect.width, rect.height, floorA, floorB);
   floor.rect(rect.x, rect.y, rect.width, 34).fill({ color: theme.wall, alpha: 0.76 });
   floor.roundRect(rect.x, rect.y, rect.width, rect.height, 4).stroke({
-    width: selectedKey === room.key ? 4 : 2,
-    color: selectedKey === room.key ? 0xffffff : theme.accent,
-    alpha: selectedKey === room.key ? 0.92 : 0.78,
+    width: roomSelected ? 4 : hasUnseenCompletion ? 3 : 2,
+    color: roomSelected
+      ? 0xffffff
+      : hasUnseenCompletion
+        ? 0xf0c878
+        : theme.accent,
+    alpha: roomSelected ? 0.92 : hasUnseenCompletion ? 0.92 : 0.78,
   });
   makeInteractive(floor, room.key, onSelect, onActivateRoom);
   parent.addChild(floor);
@@ -1076,6 +1106,7 @@ function drawRoom(
       index,
       theme.accent,
       selectedKey,
+      completionSeenKeys,
       textures,
       animated,
       onSelect,
@@ -1131,13 +1162,16 @@ function drawTabDesk(
   index: number,
   accent: number,
   selectedKey: string | null,
+  completionSeenKeys: ReadonlySet<string>,
   textures: readonly Texture[],
   animated: AnimatedItem[],
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
 ) {
   const anchor = deskAnchor(rect, index);
-  const deskSelected = selectedKey === desk.key || selectedKey === occupant?.key;
+  const deskSelected = selectedKey === desk.key ||
+    selectedKey === occupant?.key ||
+    desk.completionAgentKeys.includes(selectedKey ?? "");
   const tabName = label(shortLabel(desk.displayLabel, 18), {
     size: 9,
     color: deskSelected ? 0xffffff : 0xdce6f3,
@@ -1207,6 +1241,55 @@ function drawTabDesk(
     deskSelected,
   );
   makeInteractive(deskNode, desk.key, onSelect);
+  if (desk.completionAgentKeys.some((key) => !completionSeenKeys.has(key))) {
+    drawCompletionMarker(
+      parent,
+      desk,
+      anchor,
+      completionSeenKeys,
+      onSelect,
+      onActivateAgent,
+    );
+  }
+}
+
+function drawCompletionMarker(
+  parent: Container,
+  desk: OfficeDesk,
+  anchor: ReturnType<typeof deskAnchor>,
+  completionSeenKeys: ReadonlySet<string>,
+  onSelect: (key: string) => void,
+  onActivateAgent: (key: string) => void,
+) {
+  const unseenKeys = desk.completionAgentKeys.filter((key) => !completionSeenKeys.has(key));
+  const primaryKey = unseenKeys[0];
+  if (!primaryKey) {
+    return;
+  }
+  const unseenCount = unseenKeys.length;
+  const marker = new Container();
+  marker.position.set(anchor.x + 17, anchor.deskY - 16);
+  marker.alpha = unseenCount > 0 ? 1 : 0.48;
+  const sheets = new Graphics();
+  sheets.roundRect(-10, -7, 18, 13, 2).fill(0xf2e3bd);
+  sheets.roundRect(-7, -10, 18, 13, 2).fill(0xfff4d0);
+  sheets.rect(-3, -6, 9, 1).fill(0xb28d58);
+  sheets.rect(-3, -3, 7, 1).fill(0xb28d58);
+  sheets.rect(-3, 0, 9, 1).fill(0xb28d58);
+  sheets.poly([4, 3, 8, 0, 8, 4]).fill(0x77b889);
+  sheets.moveTo(4, 2).lineTo(5.5, 3.5).lineTo(8, 0.5)
+    .stroke({ width: 1.6, color: 0x2f704b, alpha: 1 });
+  marker.addChild(sheets);
+  if (unseenCount > 1) {
+    const count = label(`+${unseenCount - 1}`, { size: 7, color: 0x251c12, anchor: 0.5 });
+    const countPlate = new Graphics();
+    countPlate.circle(11, -9, 7).fill(0xf0c878);
+    marker.addChild(countPlate);
+    count.position.set(11, -9);
+    marker.addChild(count);
+  }
+  makeInteractive(marker, primaryKey, onSelect, onActivateAgent);
+  parent.addChild(marker);
 }
 
 function drawStandingAgent(
@@ -1716,6 +1799,7 @@ function ensureDiagnostics(): OfficeRendererDiagnostics {
       lastError: null,
       animation: { characters: 0, monitors: 0, statuses: 0 },
       layout: null,
+      completionMarkers: 0,
     };
   }
   return window.__HERDR_WORLD_RENDERER__;

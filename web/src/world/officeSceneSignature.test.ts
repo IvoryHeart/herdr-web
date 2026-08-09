@@ -89,4 +89,23 @@ describe("officeSceneSignature", () => {
 
     expect(second).not.toBe(first);
   });
+
+  it("changes when completion markers become seen", () => {
+    const first = officeSceneSignature({
+      layout,
+      projection: projection(1, 1),
+      selectedKey: null,
+      completionSeenKeys: new Set(),
+      visibleRoomIndices: [],
+    });
+    const second = officeSceneSignature({
+      layout,
+      projection: projection(1, 1),
+      selectedKey: null,
+      completionSeenKeys: new Set(["terminal-done"]),
+      visibleRoomIndices: [],
+    });
+
+    expect(second).not.toBe(first);
+  });
 });

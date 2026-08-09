@@ -31,6 +31,7 @@ import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
+  completionSeenKeys: ReadonlySet<string>;
   onSelect: (key: string | null) => void;
   compact: boolean;
   onBackToSidebar: () => void;
@@ -97,6 +98,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
     },
   },
   selectedKey: null,
+  completionSeenKeys: new Set(),
   onSelect: () => {},
   compact: false,
   onBackToSidebar: () => {},
@@ -613,6 +615,7 @@ function WorldStage({
         <PixelOfficeCanvas
           projection={projection}
           selectedKey={context.selectedKey}
+          completionSeenKeys={context.completionSeenKeys}
           conversationTargets={context.conversationBubbles.map((panel): OfficeConversationAnchorTarget => ({
             id: panel.id,
             selectedKey: panel.selectedKey,
