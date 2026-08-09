@@ -1,0 +1,424 @@
+# Suggestions and idea register
+
+This is a lightweight, non-binding list of possible improvements, experiments,
+and product ideas for the Herdr Office project and its packages.
+
+Suggestions are deliberately not specifications. They capture useful
+possibilities without committing the project to a design, implementation, or
+timeline. Once an idea is selected for implementation, it MUST be clarified in
+an approved specification when it is non-trivial.
+
+## How to use this list
+
+- Anyone may add a suggestion.
+- Give each suggestion a stable `SUG-NNN` identifier. Do not renumber or reuse
+  identifiers.
+- Keep the first entry short: the problem or opportunity matters more than a
+  complete design.
+- Name the package or packages that may own the work.
+- Use `open` while an idea is worth considering, `candidate` when it is being
+  actively evaluated, `promoted` when it has moved into a specification or
+  issue, `parked` when it is intentionally deferred, and `declined` when the
+  project has decided not to pursue it.
+- Link a promoted suggestion to its specification. The suggestion remains as
+  historical context; the specification becomes the implementation contract.
+- Prefer updating an existing suggestion over adding a near-duplicate.
+
+## Package vocabulary
+
+Use the smallest useful scope. These names are labels, not repository mandates.
+
+| Scope | Meaning |
+| --- | --- |
+| `herdr-server` | Herdr runtime, server API, lifecycle, or extension seam |
+| `herdr-web` | Browser workspace, bridge, transport, and shared web surfaces |
+| `bridge` | Host-local Herdr Web bridge and browser-facing protocol |
+| `office-view` | Pixel Office presentation and Office interactions |
+| `observability` | Shared contract, OTEL adapter, provider, and correlation |
+| `packaging` | Installers, release assembly, version manifests, and services |
+| `mobile` | Android or future mobile shells and narrow layouts |
+| `devex` | Documentation, testing, diagnostics, and contributor workflow |
+| `cross-cutting` | Work that intentionally spans multiple scopes |
+
+## Suggestion template
+
+```markdown
+### SUG-NNN — Short idea name
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** What user or project problem this could improve.
+- **Idea:** One or two sentences describing the possibility.
+- **Dependencies:** Optional packages, capabilities, or upstream work.
+- **Owner:** Open | person/team
+- **Added:** YYYY-MM-DD
+- **Related:** Optional issue, spec, discussion, or design link.
+```
+
+## Promotion path
+
+```text
+suggestion
+  → candidate review
+  → approved specification
+  → implementation
+  → implementation summary
+```
+
+Small maintenance changes may go directly to an issue or task. The suggestion
+register should not become a second issue tracker, project plan, or collection
+of hidden requirements.
+
+## Open suggestions
+
+### SUG-001 — Generic Herdr Web extension registry
+
+- **Status:** candidate
+- **Scope:** `herdr-web`, `bridge`, `herdr-server`
+- **Value:** Allow future OTEL, Git, CI, and other extensions to advertise
+  capabilities and data without adding one-off bridge routes for every feature.
+- **Idea:** Define a generic extension discovery, snapshot, event, health, and
+  capability path that can initially be implemented downstream and later
+  proposed to Herdr or Herdr Web.
+- **Dependencies:** SUG-002; approved observability contract specification.
+- **Owner:** Open
+- **Added:** 2026-08-06
+- **Related:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
+
+### SUG-002 — OTEL-backed Office observability boards
+
+- **Status:** open
+- **Scope:** `observability`, `office-view`
+- **Value:** Make agent activity, traces, logs, metrics, and later derived
+  signals useful from the same Office context as the live terminal.
+- **Idea:** Add optional Office boards and agent detail views backed by a
+  versioned observability provider, with graceful absence when OTEL is not
+  configured.
+- **Dependencies:** Shared observability contract, target correlation, and a
+  provider or OTEL adapter.
+- **Owner:** Open
+- **Added:** 2026-08-06
+- **Related:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
+
+### SUG-003 — Unified Herdr Office distribution
+
+- **Status:** open
+- **Scope:** `packaging`, `herdr-web`, `office-view`
+- **Value:** Let users install and run the compatible Herdr runtime, web
+  experience, bridge, Office view, and optional extensions as one product.
+- **Idea:** Publish a version-pinned manifest, platform launchers, checksums,
+  upgrade path, and a single user-facing command while preserving upstream
+  component boundaries.
+- **Dependencies:** Compatibility matrix, release automation, and upstream
+  licensing/trademark review.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-004 — Multi-server bridge or connection coordinator
+
+- **Status:** parked
+- **Scope:** `bridge`, `herdr-web`, `packaging`
+- **Value:** Make several Herdr servers feel like one usable Office deployment
+  without requiring users to manually manage multiple bridge processes.
+- **Idea:** Add a connector or gateway that uses operator-managed SSH, VPN, or
+  another approved transport to discover and maintain multiple qualified Herdr
+  runtimes.
+- **Dependencies:** Remote transport decision, identity qualification,
+  authentication, failure isolation, and a dedicated architecture spec.
+- **Owner:** Open
+- **Added:** 2026-08-06
+- **Related:** [Federation guidance](federation.md)
+
+### SUG-005 — Office provider and host health panel
+
+- **Status:** open
+- **Scope:** `office-view`, `observability`
+- **Value:** Make stale, disconnected, incompatible, or degraded data sources
+  understandable without inspecting browser logs.
+- **Idea:** Add a compact status surface showing Herdr bridge health,
+  observability provider health, freshness, and the reason a capability is
+  unavailable.
+- **Dependencies:** Capability and health contract.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-006 — Agent activity timeline
+
+- **Status:** open
+- **Scope:** `office-view`, `observability`
+- **Value:** Give users a concise history of what an agent has been doing,
+  beyond its current animated state.
+- **Idea:** Show bounded, correlated events such as state changes, tool calls,
+  approvals, errors, and completed work next to the live terminal.
+- **Dependencies:** Event ordering, retention limits, privacy review, and an
+  observability provider.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-007 — Saved Office layouts and views
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Let users return to a useful arrangement of terminal windows,
+  boards, filters, and host scope.
+- **Idea:** Save named Office view presets without persisting terminal content
+  or silently changing Herdr runtime state.
+- **Dependencies:** Multi-window lifecycle, responsive-layout decision, and
+  explicit persistence/privacy rules.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-008 — Office accessibility and presentation modes
+
+- **Status:** open
+- **Scope:** `office-view`, `mobile`
+- **Value:** Make the visual Office useful for more users and environments.
+- **Idea:** Add high-contrast, reduced-motion, larger-label, colour-blind-safe,
+  keyboard-navigation, and screen-reader-friendly modes while retaining the
+  pixel-art presentation.
+- **Dependencies:** Accessibility audit and visual token cleanup.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-009 — Office navigation aids
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Reduce effort when the Office grows beyond a single screen.
+- **Idea:** Add optional zoom, minimap, room/host search, focus navigation, and
+  a compact overview of open terminal windows.
+- **Dependencies:** Responsive-layout decision, interaction design, and
+  performance measurements for large rosters.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-010 — Contributor and extension development kit
+
+- **Status:** open
+- **Scope:** `devex`, `herdr-web`, `observability`
+- **Value:** Allow future contributors to add providers or Office surfaces
+  without learning every internal implementation detail.
+- **Idea:** Provide fixtures, contract examples, local mock providers, test
+  harnesses, extension authoring guidance, and a small set of supported hooks.
+- **Dependencies:** Stable extension contract and evidence that repeated
+  extension work justifies a developer kit.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-011 — Scoped Office and Herdr Web settings
+
+- **Status:** open
+- **Scope:** `office-view`, `herdr-web`
+- **Value:** Let users tune the experience without mixing product preferences
+  with Herdr runtime configuration.
+- **Idea:** Define which settings belong to shared Herdr Web and which belong
+  only to Office, then provide a discoverable settings surface with clear
+  defaults and per-device persistence.
+- **Dependencies:** Settings ownership model, packaging defaults, and mobile
+  persistence decisions.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-012 — Theme and terminal appearance presets
+
+- **Status:** open
+- **Scope:** `office-view`, `herdr-web`
+- **Value:** Improve readability and let users choose a comfortable visual
+  environment.
+- **Idea:** Add light/dark or system appearance modes, Office palette presets,
+  and terminal colour presets without changing Herdr terminal semantics.
+- **Dependencies:** Shared design tokens, terminal theme ownership, and
+  accessibility contrast checks.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-013 — Configurable terminal opening policy
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Let users decide whether passive agents should immediately become
+  interactive terminals.
+- **Idea:** Add toggles for automatically opening or only offering a terminal
+  for agents in reception, agents in the bar, idle agents, or other selected
+  states.
+- **Dependencies:** Multi-window lifecycle, notification behaviour, and a
+  non-disruptive default policy.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-014 — Short agent activity callouts
+
+- **Status:** open
+- **Scope:** `office-view`, `observability`
+- **Value:** Give the Office scene a concise, human-readable explanation of
+  what an agent has completed or is waiting for.
+- **Idea:** Show an optional five-to-eight-word callout for reception or bar
+  agents, such as “I just wrote a new spec” or “I delivered PR-256”. The
+  source, freshness, truncation, and fallback text should be explicit.
+- **Dependencies:** Agent activity/observability contract, privacy rules, and
+  bounded text generation or source metadata.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-015 — Harness-provided agent avatars
+
+- **Status:** open
+- **Scope:** `office-view`, `observability`
+- **Value:** Make agents recognisable and preserve useful identity cues from
+  the harnesses already running them.
+- **Idea:** Prefer a harness-provided avatar when available, fall back to the
+  current Office character set, and support basic animation first with richer
+  avatar capabilities added only when the source contract supports them.
+- **Dependencies:** Avatar metadata contract, asset licensing, image loading,
+  privacy, accessibility, and animation performance.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-016 — Agent Bar art and atmosphere pass
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Make the bar feel like a coherent shared space rather than a
+  collection of separate sprites.
+- **Idea:** Rework the bar composition, counter, stools, bottles, board,
+  lighting/floor treatment, spacing, and decorative details as one art pass.
+- **Dependencies:** Existing art licensing, pixel-art asset workflow, and a
+  visual review session.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-017 — Continuous agent movement animation
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Make state changes easier to follow and reduce the feeling that
+  agents teleport between reception, rooms, and the bar.
+- **Idea:** Animate an agent's movement between stable scene anchors, with a
+  sensible fallback for off-screen, stale, or rapidly changing destinations.
+- **Dependencies:** Stable scene identity, renderer lifecycle, connector
+  continuity, reduced-motion support, and performance testing.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-018 — CEO and reception spacing refinement
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Use the CEO band more efficiently while preserving legible blocks
+  and clear click targets.
+- **Idea:** Reduce the spacing between the CEO table, board, and reception
+  tables—potentially by approximately 50%—then rebalance labels, chairs, and
+  connector clearance as one layout adjustment.
+- **Dependencies:** Visual review, minimum viewport widths, host-count
+  overflow behaviour, and accessibility hit targets.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-019 — Dedicated mobile Office composition
+
+- **Status:** open
+- **Scope:** `office-view`, `mobile`
+- **Value:** Make the Office useful on a phone instead of shrinking the desktop
+  scene until it becomes difficult to navigate.
+- **Idea:** Provide a mobile-specific composition with the CEO board and
+  reception queue as the first screen, represent the CEO table as an icon,
+  remove or reduce reception furniture, and present agents as a directly
+  selectable queue.
+- **Dependencies:** Mobile navigation model, saved view state, touch target
+  rules, terminal presentation, and a separate mobile visual spec.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-020 — Large semantic mobile hit targets
+
+- **Status:** open
+- **Scope:** `office-view`, `mobile`
+- **Value:** Make desks, agents, and rooms reliably selectable on touch screens
+  even when their art remains compact.
+- **Idea:** Give each desk or desk-agent grouping a generous semantic hit area,
+  preserve exact target identity, and expose an accessible list or queue when
+  the pixel art cannot provide enough space.
+- **Dependencies:** Mobile composition, target qualification, touch feedback,
+  keyboard accessibility, and duplicate-selection handling.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-021 — Agent, room, and Office cost attribution
+
+- **Status:** open
+- **Scope:** `observability`, `office-view`
+- **Value:** Make resource usage visible where users already understand agent
+  activity and ownership.
+- **Idea:** Once observability integration is available, show the cost spent
+  or currently accumulating for each agent, aggregate costs for each room, and
+  provide a CEO-office board with overall totals and useful time-window
+  comparisons.
+- **Dependencies:** Provider cost data, agent/session attribution, room and
+  host aggregation, currency and time-window settings, estimated-versus-final
+  status, privacy rules, and bounded board presentation.
+- **Owner:** Open
+- **Added:** 2026-08-06
+
+### SUG-022 — Contextual agent and desk hover callouts
+
+- **Status:** open
+- **Scope:** `office-view`, `herdr-web`, `observability`
+- **Value:** Let users understand what an agent or desk represents without
+  opening a terminal or leaving the Office view.
+- **Idea:** Hovering an agent should show a compact, non-interactive callout
+  such as “Codex is idle for 12 minutes”, “I completed the task”, or “I am
+  busy with <task>”. Hovering an empty desk should explain the attached shell
+  and current status, for example “Shell is idle”. The callout should prefer
+  authoritative state labels and summaries, then fall back to agent identity,
+  status, terminal title, workspace, or current directory.
+- **Dependencies:** Existing pane status/title/cwd fields, status-change timing
+  for duration text, future task summaries or observability data, bounded text
+  and privacy rules, touch/keyboard alternatives, and tooltip placement around
+  movable Office terminals.
+- **Owner:** Open
+- **Added:** 2026-08-09
+
+### SUG-023 — Harness-reported task summaries
+
+- **Status:** candidate
+- **Scope:** `herdr-server`, `herdr-web`, `observability`, `office-view`
+- **Value:** Show what an agent is actually doing or has just completed using
+  information reported by the harness, rather than guessing from screen text.
+- **Idea:** Extend or reuse Herdr's agent metadata/reporting path so a harness
+  can provide a short, bounded summary associated with the exact agent session
+  and pane. Herdr Web should forward the trusted metadata and Office should
+  prefer it for hover callouts, reception/bar announcements, and later agent
+  timelines. The current status, state label, terminal title, and directory
+  remain fallbacks when a harness does not provide a summary.
+- **Dependencies:** Existing harness/session identity, Herdr agent metadata
+  reporting, bridge/web schema exposure, summary source and freshness, expiry
+  or TTL, privacy filtering, prompt/log redaction, and upstream agreement on a
+  stable field or extension hook.
+- **Owner:** Open
+- **Added:** 2026-08-09
+- **Related:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
+
+### SUG-024 — Visible completion rendezvous and acknowledgement
+
+- **Status:** candidate
+- **Scope:** `office-view`, `herdr-web`, `observability`
+- **Value:** Make completion chimes actionable by showing exactly which agent
+  or desk produced the event.
+- **Idea:** Keep a completed agent visibly associated with its desk long enough
+  to be identified, add a distinct completion animation or acknowledgement
+  cue, and offer a clear interaction that opens its terminal. After the user
+  inspects or acknowledges it, the agent may move to the bar or another
+  retained state. The presentation could use a restrained office metaphor—a
+  raised hand, completion flag, or short queue near the CEO—without implying
+  approval or automatic acceptance of the work.
+- **Dependencies:** Herdr completion/status events, event-to-agent identity,
+  notification correlation, distinct status animation, acknowledgement
+  semantics, idle/done state retention, multi-window terminal behaviour, and
+  accessibility/reduced-motion support.
+- **Owner:** Open
+- **Added:** 2026-08-09
+
+## Parked or declined
+
+Move suggestions here when they are intentionally deferred or rejected, while
+preserving the original identifier and the reason for the decision.

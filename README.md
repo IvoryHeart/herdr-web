@@ -61,6 +61,7 @@ docs/android.md
 docs/vendoring.md
 docs/packaging.md
 docs/release.md
+docs/suggestions.md
 ```
 
 The bridge is compiled as a repo-owned executable and run with:

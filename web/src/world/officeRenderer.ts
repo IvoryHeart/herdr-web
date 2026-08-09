@@ -34,6 +34,7 @@ import type {
   OfficeRoomRect,
 } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
+import { officeSceneSignature } from "./officeSceneSignature";
 
 const CHARACTER_URLS = Array.from(
   { length: 12 },
@@ -95,6 +96,8 @@ export type OfficeRendererDiagnostics = {
   activeListeners: number;
   canvases: number;
   frames: number;
+  sceneRenders: number;
+  sceneSkips: number;
   ready: boolean;
   reducedMotion: boolean;
   lastError: string | null;
@@ -167,9 +170,10 @@ export async function createOfficeRenderer(
   let currentProjection = projection;
   let currentSelectedKey = selectedKey;
   let currentLayout: OfficeLayout | null = null;
-  let visibleWindowKey: string | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
+  let lastRendererSize = { width: 0, height: 0 };
+  let lastSceneSignature: string | null = null;
   let tick = 0;
   const animated: AnimatedItem[] = [];
   const scrollElement = element.closest<HTMLElement>(".world-stage-scroll");
@@ -253,7 +257,7 @@ export async function createOfficeRenderer(
   app.canvas.addEventListener("dblclick", onCanvasDoubleClick);
   diagnostics.activeListeners += 1;
 
-  const renderScene = (layout: OfficeLayout, force = false) => {
+  const renderScene = (layout: OfficeLayout) => {
     if (disposed) {
       return;
     }
@@ -272,13 +276,18 @@ export async function createOfficeRenderer(
       (room) => room.y + room.height >= scrollTop - overscan
         && room.y <= scrollTop + viewportHeight + overscan,
     );
-    const nextWindowKey = visibleRooms.length > 0
-      ? `${visibleRooms[0].index}:${visibleRooms[visibleRooms.length - 1].index}`
-      : "none";
-    if (!force && nextWindowKey === visibleWindowKey) {
+    const sceneSignature = officeSceneSignature({
+      layout,
+      projection: currentProjection,
+      selectedKey: currentSelectedKey,
+      visibleRoomIndices: visibleRooms.map(({ index }) => index),
+    });
+    if (sceneSignature === lastSceneSignature) {
+      diagnostics.sceneSkips += 1;
       return;
     }
-    visibleWindowKey = nextWindowKey;
+    lastSceneSignature = sceneSignature;
+    diagnostics.sceneRenders += 1;
     animated.splice(0);
     const children = app.stage.removeChildren();
     children.forEach((child) => child.destroy({ children: true }));
@@ -368,11 +377,17 @@ export async function createOfficeRenderer(
     );
     currentLayout = layout;
     lastWidth = layout.officeWidth;
-    app.renderer.resize(layout.officeWidth, viewportHeight);
+    if (
+      lastRendererSize.width !== layout.officeWidth ||
+      lastRendererSize.height !== viewportHeight
+    ) {
+      app.renderer.resize(layout.officeWidth, viewportHeight);
+      lastRendererSize = { width: layout.officeWidth, height: viewportHeight };
+    }
     element.style.width = `${layout.officeWidth}px`;
     element.style.height = `${layout.totalHeight}px`;
     app.stage.position.y = -(scrollElement?.scrollTop ?? 0);
-    renderScene(layout, true);
+    renderScene(layout);
     diagnostics.layout = {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,
@@ -1694,6 +1709,8 @@ function ensureDiagnostics(): OfficeRendererDiagnostics {
       activeListeners: 0,
       canvases: 0,
       frames: 0,
+      sceneRenders: 0,
+      sceneSkips: 0,
       ready: false,
       reducedMotion: false,
       lastError: null,

@@ -195,3 +195,53 @@
 - **Drift from approved spec:** None; this behavior is covered by extension
   009.
 - **Follow-up extension:** None.
+
+### 2026-08-05 — Connector continuity and centered terminal surface correction
+
+- **Implemented:** Kept the live-agent connector present when its agent moves
+  beyond the current Office scroll viewport. The connector now terminates at
+  the nearest viewport edge with a small off-screen marker, so a move to the
+  Agent Bar remains visually associated without moving the conversation bubble
+  or changing the Office scroll position.
+- **Implemented:** Centered the Office terminal's rendered whole-cell canvas
+  within its host so fractional unused space is balanced across both sides and
+  top/bottom rather than appearing as a one-sided right gap.
+- **Evidence:** `npm run test:web` — 303 passed; `npm run build:web` — passed;
+  `npx playwright test tests/e2e/world.spec.ts` — 19 passed. Added browser
+  coverage for the working-to-bar connector transition and symmetric terminal
+  canvas spacing.
+- **Drift from approved spec:** The earlier connector extension specified
+  hiding endpoints outside the viewport. User testing showed that behavior was
+  confusing, so the live endpoint now uses an edge marker instead.
+- **Follow-up extension:** None; retain this behavior unless a later approved
+  connector extension replaces it.
+
+### 2026-08-05 — Bounded multi-window Office terminals
+
+- **Implemented:** Added extension 010, allowing up to five simultaneous Office
+  terminal windows. Each window keeps independent geometry, z-order, terminal
+  session, and workbench/live-agent connectors.
+- **Implemented:** Qualified bridge/pane identity deduplicates selections made
+  through an agent, occupied desk, or shared sidebar entry. Selecting an
+  existing terminal focuses it instead of opening another renderer or
+  transport session.
+- **Implemented:** A sixth distinct terminal is rejected with a visible status
+  message; Escape and close actions remove only the focused/requested window.
+  Compact layouts retain one active presentation.
+- **Evidence:** `npm run lint --prefix web`, `npm run build:web`,
+  `npm run test:web` — 303 passed, and
+  `npx playwright test tests/e2e/world.spec.ts` — 20 passed. Browser coverage
+  includes duplicate suppression, the five-window cap, independent geometry,
+  connector continuity, handoff, mobile fallback, and stale-host behavior.
+- **Bug fix:** Office canvas selection now preserves already-open windows when
+  selecting another agent or desk. Previously, the canvas selection path
+  cleared the existing conversation set before opening the newly selected
+  target; sidebar selection remains independently routed through its qualified
+  pane target.
+- **Verification:** The rebuilt local bridge was exercised against the live
+  runtime with distinct sidebar agents; two independent Office windows opened
+  and retained their qualified window IDs. Web lint, build, 303 web tests, and
+  the five-window E2E test remain green.
+- **Drift from approved spec:** None; behavior is covered by extension 010.
+- **Follow-up:** Window-limit configuration, persisted layouts, and mobile
+  multi-window presentation remain deferred.

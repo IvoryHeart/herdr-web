@@ -169,6 +169,7 @@ import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
 import type { OfficeAgent } from "./world/herdrOfficeProjection";
 import { WorldConversationBubble } from "./world/WorldConversationBubble";
+import type { WorldConversationBubblePanel } from "./world/WorldSurface";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
@@ -226,6 +227,7 @@ type AgentGroup = "none" | "host" | "workspace" | "hostWorkspace";
 type SpaceGroup = "none" | "host";
 type MenuKind = "space" | "tab" | "pane";
 type WorldConversationTarget = {
+  windowId: string;
   kind: "agent" | "desk";
   targetKey: string;
   agentKey: string | null;
@@ -239,6 +241,7 @@ type PendingWorldPaneSelection = {
   tabId: string;
 };
 type WorldConversationView = {
+  windowId: string;
   agent: OfficeAgent | null;
   targetLabel: string;
   hostLabel: string;
@@ -247,6 +250,12 @@ type WorldConversationView = {
   session: TerminalSessionDescriptor;
   targetKey: string;
 };
+
+const MAX_WORLD_CONVERSATIONS = 5;
+
+function worldConversationWindowId(bridgeId: BridgeId, paneId: string) {
+  return `${bridgeId}:${paneId}`;
+}
 
 function worldConversationAdmissionPending(
   runtime: BridgeRuntime | null,
@@ -1073,10 +1082,9 @@ export function App() {
     },
   );
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
-  const [worldConversationTarget, setWorldConversationTarget] =
-    useState<WorldConversationTarget | null>(null);
+  const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>([]);
   const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
-  const worldConversationCacheRef = useRef<WorldConversationView | null>(null);
+  const worldConversationCacheRef = useRef<Map<string, WorldConversationView>>(new Map());
   const worldCanvasSelectionTimerRef = useRef<number | null>(null);
   const worldSelectionSeedPendingRef = useRef(false);
   useEffect(() => () => {
@@ -1413,13 +1421,46 @@ export function App() {
         : null,
     });
     if (!agent) {
-      setWorldConversationTarget(null);
+      setWorldConversationTargets([]);
+      worldConversationCacheRef.current.clear();
+      return;
+    }
+    const windowId = worldConversationWindowId(agent.bridgeId, agent.paneId);
+    const target = { ...agent, windowId };
+    const existing = worldConversationTargets.some(({ windowId: id }) => id === windowId);
+    if (!existing && !isCompactLayout && worldConversationTargets.length >= MAX_WORLD_CONVERSATIONS) {
+      setWorldHandoffStatus("Five Office terminals are open. Close one before opening another.");
       return;
     }
     setSelectedBridgeId(agent.bridgeId);
     setWorldSelectedKey(agent.agentKey ?? agent.targetKey);
     setWorldHandoffStatus(null);
-    setWorldConversationTarget(agent);
+    setWorldConversationTargets((current) => {
+      const index = current.findIndex(({ windowId: id }) => id === windowId);
+      if (index < 0) {
+        return isCompactLayout ? [target] : [...current, target];
+      }
+      return current.map((currentTarget, currentIndex) =>
+        currentIndex === index ? target : currentTarget,
+      );
+    });
+  };
+  const closeWorldConversation = (windowId: string) => {
+    worldConversationCacheRef.current.delete(windowId);
+    setWorldConversationTargets((current) => current.filter(({ windowId: id }) => id !== windowId));
+  };
+  const clearWorldConversations = () => {
+    setWorldConversationTargets([]);
+    worldConversationCacheRef.current.clear();
+  };
+  const focusWorldConversation = (windowId: string) => {
+    const target = worldConversationTargets.find(({ windowId: id }) => id === windowId);
+    if (!target) {
+      return;
+    }
+    setWorldSelectedKey(target.agentKey ?? target.targetKey);
+    setSelectedBridgeId(target.bridgeId);
+    setWorldHandoffStatus(null);
   };
   const selectWorldProjectedAgent = (agent: {
     key: string;
@@ -1467,10 +1508,10 @@ export function App() {
       agent.observedGeneration !== runtime.generationKey ||
       (!admissionReady && !admissionPending)
     ) {
-      setWorldConversationTarget(null);
       return;
     }
     selectWorldAgent({
+      windowId: worldConversationWindowId(agent.hostKey, pane.pane_id),
       kind: "agent",
       targetKey: agent.key,
       agentKey: agent.key,
@@ -1533,10 +1574,10 @@ export function App() {
       desk.observedGeneration !== runtime.generationKey ||
       (!admissionReady && !admissionPending)
     ) {
-      setWorldConversationTarget(null);
       return;
     }
     selectWorldAgent({
+      windowId: worldConversationWindowId(desk.hostKey, pane.pane_id),
       kind: "desk",
       targetKey: desk.key,
       agentKey: occupant?.key ?? null,
@@ -1649,7 +1690,7 @@ export function App() {
     setSelectedBridgeId(bridgeId);
     setWorldSelectedKey(null);
     setWorldHandoffStatus(null);
-    setWorldConversationTarget(null);
+    clearWorldConversations();
   };
 
   useEffect(() => {
@@ -1701,7 +1742,7 @@ export function App() {
     });
     if (!key) {
       setWorldSelectedKey(null);
-      setWorldConversationTarget(null);
+      clearWorldConversations();
       setWorldHandoffStatus(null);
       return;
     }
@@ -1710,7 +1751,6 @@ export function App() {
       setSelectedBridgeId(agentEntry.agent.hostKey);
       setWorldSelectedKey(agentEntry.agent.key);
       setWorldHandoffStatus(null);
-      setWorldConversationTarget(null);
       worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
         worldCanvasSelectionTimerRef.current = null;
         officeDebug("selection:world-key-timer-fired", { key, kind: "agent" });
@@ -1723,7 +1763,6 @@ export function App() {
       setSelectedBridgeId(deskEntry.desk.hostKey);
       setWorldSelectedKey(deskEntry.desk.occupantAgentKey ?? deskEntry.desk.key);
       setWorldHandoffStatus(null);
-      setWorldConversationTarget(null);
       worldCanvasSelectionTimerRef.current = window.setTimeout(() => {
         worldCanvasSelectionTimerRef.current = null;
         officeDebug("selection:world-key-timer-fired", { key, kind: "desk" });
@@ -1732,7 +1771,7 @@ export function App() {
       return;
     }
     setWorldSelectedKey(key);
-    setWorldConversationTarget(null);
+    clearWorldConversations();
     setWorldHandoffStatus(null);
   };
   const openWorldTabInSpaces = (bridgeId: BridgeId, tabId: string) => {
@@ -1774,7 +1813,7 @@ export function App() {
     }
     openWorldTabInSpaces(bridgeId, pane.tab_id);
   };
-  const openWorldConversationInSpaces = (bridgeId: BridgeId, pane: PaneInfo) => {
+  const openWorldConversationInSpaces = (windowId: string, bridgeId: BridgeId, pane: PaneInfo) => {
     cancelWorldCanvasSelection();
     const runtime = bridge.getRuntime(bridgeId);
     const state = runtime && connectionStates[runtime.id]?.connectionKey === runtime.generationKey
@@ -1790,7 +1829,7 @@ export function App() {
       return;
     }
     setWorldHandoffStatus(null);
-    setWorldConversationTarget(null);
+    closeWorldConversation(windowId);
     navigatePrimaryView("spaces");
     openPane(bridgeId, currentPane);
     requestTerminalFocus();
@@ -3045,7 +3084,7 @@ export function App() {
     }
 
     setWorldHandoffStatus(null);
-    setWorldConversationTarget(null);
+    clearWorldConversations();
     navigatePrimaryView("spaces");
     if (resolution.kind === "agent") {
       openPane(resolution.runtime.id, resolution.pane);
@@ -4313,120 +4352,180 @@ export function App() {
     activeSurface.requiredCapabilities,
   );
   const renderTerminal = !isCompactLayout || showDetail;
-  const worldConversation = useMemo(() => {
-    if (activeSurface.id !== "world" || !worldConversationTarget) {
-      return null;
+  const worldConversations = useMemo(() => {
+    if (activeSurface.id !== "world") {
+      return [] as WorldConversationView[];
     }
-    const agentEntry = worldConversationTarget.agentKey
-      ? worldProjection.roster.find(
-          ({ agent }) => agent.key === worldConversationTarget.agentKey,
-        ) ?? null
-      : null;
-    const deskEntry = worldConversationTarget.kind === "desk"
-      ? worldProjection.deskRoster.find(
-          ({ desk }) => desk.key === worldConversationTarget.targetKey,
-        ) ?? null
-      : null;
-    const runtime = bridge.getRuntime(worldConversationTarget.bridgeId);
-    const state = runtime &&
-        connectionStates[runtime.id]?.connectionKey === runtime.generationKey
-      ? connectionStates[runtime.id]
-      : null;
-    const pane = state?.snapshot?.panes.find(
-      ({ pane_id }) => pane_id === worldConversationTarget.paneId,
-    ) ?? null;
-    const agent = agentEntry?.agent ?? null;
-    const runtimeMatchesTarget = Boolean(
-      runtime && runtime.generationKey === worldConversationTarget.generationKey,
-    );
-    if (
-      runtimeMatchesTarget &&
-      runtime &&
-      state &&
-      pane &&
-      runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
-    ) {
-      const session = terminalSessionDescriptor(runtime, pane, state, ["snapshot"]);
-      if (session?.attachEnabled) {
-        const next: WorldConversationView = {
-          agent,
-          targetLabel:
-            agent?.displayLabel ??
-            pane.display_agent ??
-            pane.label ??
-            pane.title ??
-            pane.terminal_title ??
-            "Shell",
-          hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? "Host",
-          pane,
-          runtime,
-          session,
-          targetKey: worldConversationTarget.targetKey,
-        };
-        // Keep the last admitted terminal view across a transient observation
-        // refresh. The terminal identity is the selected pane, not the
-        // agent's animated destination or the desk's current occupant.
-        worldConversationCacheRef.current = next;
-        return next;
+    return worldConversationTargets.flatMap((worldConversationTarget) => {
+      const agentEntry = worldConversationTarget.agentKey
+        ? worldProjection.roster.find(
+            ({ agent }) => agent.key === worldConversationTarget.agentKey,
+          ) ?? null
+        : null;
+      const deskEntry = worldConversationTarget.kind === "desk"
+        ? worldProjection.deskRoster.find(
+            ({ desk }) => desk.key === worldConversationTarget.targetKey,
+          ) ?? null
+        : null;
+      const runtime = bridge.getRuntime(worldConversationTarget.bridgeId);
+      const state = runtime &&
+          connectionStates[runtime.id]?.connectionKey === runtime.generationKey
+        ? connectionStates[runtime.id]
+        : null;
+      const pane = state?.snapshot?.panes.find(
+        ({ pane_id }) => pane_id === worldConversationTarget.paneId,
+      ) ?? null;
+      const agent = agentEntry?.agent ?? null;
+      const runtimeMatchesTarget = Boolean(
+        runtime && runtime.generationKey === worldConversationTarget.generationKey,
+      );
+      if (
+        runtimeMatchesTarget &&
+        runtime &&
+        state &&
+        pane &&
+        runtimeAdmissionReady(runtime, state, ["snapshot", "terminal_attach"])
+      ) {
+        const session = terminalSessionDescriptor(runtime, pane, state, ["snapshot"]);
+        if (session?.attachEnabled) {
+          const next: WorldConversationView = {
+            windowId: worldConversationTarget.windowId,
+            agent,
+            targetLabel:
+              agent?.displayLabel ??
+              pane.display_agent ??
+              pane.label ??
+              pane.title ??
+              pane.terminal_title ??
+              "Shell",
+            hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? "Host",
+            pane,
+            runtime,
+            session,
+            targetKey: worldConversationTarget.targetKey,
+          };
+          // Keep the last admitted terminal view across a transient observation
+          // refresh. The terminal identity is the selected pane, not the
+          // agent's animated destination or the desk's current occupant.
+          worldConversationCacheRef.current.set(worldConversationTarget.windowId, next);
+          return [next];
+        }
       }
-    }
 
-    const cached = worldConversationCacheRef.current;
-    if (
-      runtimeMatchesTarget &&
-      cached?.targetKey === worldConversationTarget.targetKey &&
-      (!state || state.snapshot === null || state.loadState !== "ready")
-    ) {
-      return {
-        ...cached,
-        agent: agent ?? cached.agent,
-        targetLabel: agent?.displayLabel ?? cached.targetLabel,
-        hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? cached.hostLabel,
-      };
-    }
-    return null;
+      const cached = worldConversationCacheRef.current.get(worldConversationTarget.windowId);
+      if (
+        runtimeMatchesTarget &&
+        cached?.targetKey === worldConversationTarget.targetKey &&
+        (!state || state.snapshot === null || state.loadState !== "ready")
+      ) {
+        return [{
+          ...cached,
+          agent: agent ?? cached.agent,
+          targetLabel: agent?.displayLabel ?? cached.targetLabel,
+          hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? cached.hostLabel,
+        }];
+      }
+      return [];
+    });
   }, [
     activeSurface.id,
     bridge,
     connectionStates,
-    worldConversationTarget,
+    worldConversationTargets,
     worldProjection,
   ]);
   useEffect(() => {
-    officeDebug("conversation:view", {
-      visible: Boolean(worldConversation),
-      targetKey: worldConversation?.targetKey ?? worldConversationTarget?.targetKey ?? null,
-      sessionKey: worldConversation?.session.sessionKey ?? null,
-      paneId: worldConversation?.pane.pane_id ?? worldConversationTarget?.paneId ?? null,
+    officeDebug("conversation:views", {
+      visible: worldConversations.length,
+      targets: worldConversationTargets.length,
+      windows: worldConversations.map(({ windowId, targetKey, session }) => ({
+        windowId,
+        targetKey,
+        sessionKey: session.sessionKey,
+      })),
       activeSurface: activeSurface.id,
     });
-  }, [
-    activeSurface.id,
-    worldConversation?.pane.pane_id,
-    worldConversation?.session.sessionKey,
-    worldConversation?.targetKey,
-    worldConversationTarget?.paneId,
-    worldConversationTarget?.targetKey,
-  ]);
+  }, [activeSurface.id, worldConversationTargets.length, worldConversations]);
   useEffect(() => {
-    if (worldConversationTarget && !worldConversation) {
-      officeDebug("conversation:cleanup-check", {
-        targetKey: worldConversationTarget.targetKey,
-        activeSurface: activeSurface.id,
-      });
-      const runtime = bridge.getRuntime(worldConversationTarget.bridgeId);
+    if (activeSurface.id !== "world") {
+      return;
+    }
+    const visibleIds = new Set(worldConversations.map(({ windowId }) => windowId));
+    for (const target of worldConversationTargets) {
+      if (visibleIds.has(target.windowId)) {
+        continue;
+      }
+      const runtime = bridge.getRuntime(target.bridgeId);
       if (
         worldConversationAdmissionPending(
           runtime,
           runtime ? connectionStates[runtime.id] : null,
-          worldConversationTarget.generationKey,
+          target.generationKey,
         )
       ) {
-        return;
+        continue;
       }
-      setWorldConversationTarget(null);
+      officeDebug("conversation:cleanup-check", {
+        windowId: target.windowId,
+        targetKey: target.targetKey,
+        activeSurface: activeSurface.id,
+      });
+      closeWorldConversation(target.windowId);
     }
-  }, [bridge, connectionStates, worldConversation, worldConversationTarget]);
+  }, [activeSurface.id, bridge, connectionStates, worldConversationTargets, worldConversations]);
+  const worldConversationPanels = useMemo<WorldConversationBubblePanel[]>(
+    () => worldConversations.map((worldConversation) => ({
+      id: worldConversation.windowId,
+      targetKey: worldConversation.targetKey,
+      selectedKey: worldConversation.agent?.key ?? null,
+      content: (
+        <WorldConversationBubble
+          key={`${worldConversation.windowId}:${worldConversation.session.sessionKey}`}
+          agent={worldConversation.agent}
+          targetLabel={worldConversation.targetLabel}
+          hostLabel={worldConversation.hostLabel}
+          pane={worldConversation.pane}
+          runtime={worldConversation.runtime}
+          session={worldConversation.session}
+          onClose={() => closeWorldConversation(worldConversation.windowId)}
+          onOpenInSpaces={() =>
+            openWorldConversationInSpaces(
+              worldConversation.windowId,
+              worldConversation.runtime.id,
+              worldConversation.pane,
+            )
+          }
+          touchInput={isTouchInput}
+          terminalFontSizePx={terminalFontSizePx}
+          mobileControlsScalePercent={mobileControlsScalePercent}
+          mobileTapTarget={mobileTerminalTapTarget}
+          mobileLongPressBehavior={mobileLongPressBehavior}
+          mobileTouchSelectionEndpointTimeoutMs={mobileTouchSelectionEndpointTimeoutMs}
+          mobileCommandExpandingInput={mobileCommandExpandingInput}
+          mobileCommandEnterNewline={mobileCommandEnterNewline}
+          terminalInputTransport={terminalInputTransport}
+          terminalInputBatchDelayMs={terminalInputBatchDelayMs}
+          terminalOutputCoalesceMs={terminalOutputCoalesceMs}
+        />
+      ),
+    })),
+    [
+      closeWorldConversation,
+      isTouchInput,
+      mobileCommandEnterNewline,
+      mobileCommandExpandingInput,
+      mobileControlsScalePercent,
+      mobileLongPressBehavior,
+      mobileTerminalTapTarget,
+      mobileTouchSelectionEndpointTimeoutMs,
+      openWorldConversationInSpaces,
+      terminalInputBatchDelayMs,
+      terminalInputTransport,
+      terminalOutputCoalesceMs,
+      terminalFontSizePx,
+      worldConversations,
+    ],
+  );
   const WorldSurface =
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
   const worldSurfaceContext: WorldSurfaceContext = {
@@ -4438,33 +4537,9 @@ export function App() {
     onToggleSidebar: () => setSidebarOpen((open) => !open),
     onOpenInSpaces: openWorldTargetInSpaces,
     handoffStatus: worldHandoffStatus,
-    conversationTargetKey: worldConversation?.targetKey ?? null,
-    conversationBubble: worldConversation ? (
-      <WorldConversationBubble
-        key={`${worldConversation.targetKey}:${worldConversation.session.sessionKey}`}
-        agent={worldConversation.agent}
-        targetLabel={worldConversation.targetLabel}
-        hostLabel={worldConversation.hostLabel}
-        pane={worldConversation.pane}
-        runtime={worldConversation.runtime}
-        session={worldConversation.session}
-        onClose={() => setWorldConversationTarget(null)}
-        onOpenInSpaces={() =>
-          openWorldConversationInSpaces(worldConversation.runtime.id, worldConversation.pane)
-        }
-        touchInput={isTouchInput}
-        terminalFontSizePx={terminalFontSizePx}
-        mobileControlsScalePercent={mobileControlsScalePercent}
-        mobileTapTarget={mobileTerminalTapTarget}
-        mobileLongPressBehavior={mobileLongPressBehavior}
-        mobileTouchSelectionEndpointTimeoutMs={mobileTouchSelectionEndpointTimeoutMs}
-        mobileCommandExpandingInput={mobileCommandExpandingInput}
-        mobileCommandEnterNewline={mobileCommandEnterNewline}
-        terminalInputTransport={terminalInputTransport}
-        terminalInputBatchDelayMs={terminalInputBatchDelayMs}
-        terminalOutputCoalesceMs={terminalOutputCoalesceMs}
-      />
-    ) : null,
+    conversationBubbles: worldConversationPanels,
+    onCloseConversation: closeWorldConversation,
+    onFocusConversation: focusWorldConversation,
   };
   const worldStage = WorldSurface ? (
     <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>

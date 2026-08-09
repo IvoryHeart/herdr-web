@@ -8,6 +8,7 @@ export type OfficeCanvasAnchor = {
   x: number;
   y: number;
   visible: boolean;
+  edge: "top" | "right" | "bottom" | "left" | null;
 };
 
 export type OfficeCanvasAnchors = {
@@ -15,10 +16,18 @@ export type OfficeCanvasAnchors = {
   workbench: OfficeCanvasAnchor | null;
 };
 
+export type OfficeConversationAnchorTarget = {
+  id: string;
+  selectedKey: string | null;
+  targetKey: string;
+};
+
+export type OfficeConversationAnchors = Record<string, OfficeCanvasAnchors>;
+
 export function PixelOfficeCanvas({
   projection,
   selectedKey,
-  conversationTargetKey,
+  conversationTargets,
   onSelect,
   onActivateAgent,
   onActivateRoom,
@@ -26,18 +35,18 @@ export function PixelOfficeCanvas({
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
-  conversationTargetKey: string | null;
+  conversationTargets: readonly OfficeConversationAnchorTarget[];
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
-  onAnchorChange?: (anchors: OfficeCanvasAnchors | null) => void;
+  onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
   const latestRef = useRef({
     projection,
     selectedKey,
-    conversationTargetKey,
+    conversationTargets,
     onSelect,
     onActivateAgent,
     onActivateRoom,
@@ -47,7 +56,7 @@ export function PixelOfficeCanvas({
   latestRef.current = {
     projection,
     selectedKey,
-    conversationTargetKey,
+    conversationTargets,
     onSelect,
     onActivateAgent,
     onActivateRoom,
@@ -63,36 +72,68 @@ export function PixelOfficeCanvas({
     const host = hostRef.current;
     const scroll = host?.closest<HTMLElement>(".world-stage-scroll");
     const canvas = host?.querySelector<HTMLCanvasElement>("canvas[data-office-canvas='true']");
-    const sceneAnchors = controller?.getAnchors(
-      latestRef.current.selectedKey,
-      latestRef.current.conversationTargetKey,
-    );
-    if (!scroll || !canvas || !sceneAnchors) {
+    if (!scroll || !canvas || !controller) {
       callback(null);
       return;
     }
     const canvasRect = canvas.getBoundingClientRect();
     const scrollRect = scroll.getBoundingClientRect();
-    const toViewportAnchor = (sceneAnchor: { x: number; y: number } | null) => {
+    const toViewportAnchor = (
+      sceneAnchor: { x: number; y: number } | null,
+    ): OfficeCanvasAnchor | null => {
       if (!sceneAnchor) {
         return null;
       }
       const x = canvasRect.left + sceneAnchor.x;
       const y = canvasRect.top + sceneAnchor.y - scroll.scrollTop;
+      const visible =
+        x >= scrollRect.left &&
+        x <= scrollRect.right &&
+        y >= scrollRect.top &&
+        y <= scrollRect.bottom;
+      const horizontalDistance = x < scrollRect.left
+        ? scrollRect.left - x
+        : x > scrollRect.right
+          ? x - scrollRect.right
+          : 0;
+      const verticalDistance = y < scrollRect.top
+        ? scrollRect.top - y
+        : y > scrollRect.bottom
+          ? y - scrollRect.bottom
+          : 0;
+      const edge: OfficeCanvasAnchor["edge"] = visible
+        ? null
+        : horizontalDistance > verticalDistance
+          ? x < scrollRect.left ? "left" : "right"
+          : y < scrollRect.top ? "top" : "bottom";
+      const edgeInset = 10;
       return {
-        x,
-        y,
-        visible:
-          x >= scrollRect.left &&
-          x <= scrollRect.right &&
-          y >= scrollRect.top &&
-          y <= scrollRect.bottom,
+        x: edge === "left"
+          ? scrollRect.left + edgeInset
+          : edge === "right"
+            ? scrollRect.right - edgeInset
+            : x,
+        y: edge === "top"
+          ? scrollRect.top + edgeInset
+          : edge === "bottom"
+            ? scrollRect.bottom - edgeInset
+            : y,
+        visible,
+        edge,
       };
     };
-    callback({
-      agent: toViewportAnchor(sceneAnchors.agent),
-      workbench: toViewportAnchor(sceneAnchors.workbench),
-    });
+    const anchors: OfficeConversationAnchors = {};
+    for (const target of latestRef.current.conversationTargets) {
+      const sceneAnchors = controller.getAnchors(target.selectedKey, target.targetKey);
+      if (!sceneAnchors) {
+        continue;
+      }
+      anchors[target.id] = {
+        agent: toViewportAnchor(sceneAnchors.agent),
+        workbench: toViewportAnchor(sceneAnchors.workbench),
+      };
+    }
+    callback(anchors);
   };
   const reportAnchorsRef = useRef(reportAnchors);
   reportAnchorsRef.current = reportAnchors;
@@ -154,7 +195,7 @@ export function PixelOfficeCanvas({
   useEffect(() => {
     controllerRef.current?.update(projection, selectedKey);
     window.requestAnimationFrame(() => reportAnchorsRef.current());
-  }, [conversationTargetKey, projection, selectedKey]);
+  }, [conversationTargets, projection, selectedKey]);
 
   useEffect(() => {
     const host = hostRef.current;

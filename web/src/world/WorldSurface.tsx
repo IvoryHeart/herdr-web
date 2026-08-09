@@ -9,9 +9,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
-import type { OfficeCanvasAnchor, OfficeCanvasAnchors } from "./PixelOfficeCanvas";
+import type {
+  OfficeConversationAnchors,
+  OfficeConversationAnchorTarget,
+} from "./PixelOfficeCanvas";
 import {
   clampConversationGeometry,
+  defaultConversationGeometry,
   moveConversationGeometry,
   resizeConversationGeometry,
 } from "./conversationGeometry";
@@ -33,8 +37,16 @@ export type WorldSurfaceContext = {
   onToggleSidebar: () => void;
   onOpenInSpaces: (request: OfficeHandoffRequest) => void;
   handoffStatus: string | null;
-  conversationBubble: ReactNode | null;
-  conversationTargetKey: string | null;
+  conversationBubbles: readonly WorldConversationBubblePanel[];
+  onCloseConversation: (id: string) => void;
+  onFocusConversation: (id: string) => void;
+};
+
+export type WorldConversationBubblePanel = {
+  id: string;
+  targetKey: string;
+  selectedKey: string | null;
+  content: ReactNode;
 };
 
 const FALLBACK_CONTEXT: WorldSurfaceContext = {
@@ -91,8 +103,9 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onToggleSidebar: () => {},
   onOpenInSpaces: () => {},
   handoffStatus: null,
-  conversationBubble: null,
-  conversationTargetKey: null,
+  conversationBubbles: [],
+  onCloseConversation: () => {},
+  onFocusConversation: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -138,14 +151,19 @@ function WorldStage({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const conversationRef = useRef<HTMLDivElement | null>(null);
-  const [conversationAnchors, setConversationAnchors] = useState<OfficeCanvasAnchors | null>(null);
+  const conversationRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
-  const [conversationRect, setConversationRect] = useState<DOMRect | null>(null);
-  const [conversationGeometry, setConversationGeometry] = useState<ConversationGeometry | null>(null);
-  const [conversationInteraction, setConversationInteraction] = useState<"moving" | "resizing" | null>(null);
-  const conversationGeometryRef = useRef<ConversationGeometry | null>(null);
+  const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
+  const [conversationGeometry, setConversationGeometry] = useState<Record<string, ConversationGeometry>>({});
+  const [conversationInteraction, setConversationInteraction] = useState<{
+    id: string;
+    mode: "moving" | "resizing";
+  } | null>(null);
+  const [conversationOrder, setConversationOrder] = useState<string[]>([]);
+  const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
   const conversationInteractionRef = useRef<{
+    id: string;
     mode: "moving" | "resizing";
     pointerId: number;
     startX: number;
@@ -153,13 +171,16 @@ function WorldStage({
     geometry: ConversationGeometry;
   } | null>(null);
 
-  const updateConversationGeometry = (next: ConversationGeometry) => {
+  const panelIds = context.conversationBubbles.map(({ id }) => id);
+  const panelIdsKey = panelIds.join("|");
+
+  const updateConversationGeometry = (id: string, next: ConversationGeometry) => {
     const shell = shellRef.current;
     if (!shell || context.compact) {
       return;
     }
     const geometry = clampConversationGeometry(next, shell.clientWidth, shell.clientHeight);
-    const current = conversationGeometryRef.current;
+    const current = conversationGeometryRef.current[id];
     if (
       current &&
       current.left === geometry.left &&
@@ -169,13 +190,13 @@ function WorldStage({
     ) {
       return;
     }
-    conversationGeometryRef.current = geometry;
-    setConversationGeometry(geometry);
+    conversationGeometryRef.current = { ...conversationGeometryRef.current, [id]: geometry };
+    setConversationGeometry(conversationGeometryRef.current);
   };
 
-  const measuredConversationGeometry = () => {
+  const measuredConversationGeometry = (id: string) => {
     const shell = shellRef.current;
-    const conversation = conversationRef.current;
+    const conversation = conversationRefs.current[id];
     if (!shell || !conversation) {
       return null;
     }
@@ -189,6 +210,54 @@ function WorldStage({
     }, shell.clientWidth, shell.clientHeight);
   };
 
+  const setConversationRef = (id: string, element: HTMLDivElement | null) => {
+    if (element) {
+      conversationRefs.current[id] = element;
+    } else {
+      delete conversationRefs.current[id];
+    }
+  };
+
+  const syncConversationGeometry = () => {
+    const shell = shellRef.current;
+    if (!shell || context.compact || shell.clientWidth <= 0 || shell.clientHeight <= 0) {
+      return;
+    }
+    const next: Record<string, ConversationGeometry> = {};
+    for (const [index, panel] of context.conversationBubbles.entries()) {
+      const current = conversationGeometryRef.current[panel.id];
+      if (current) {
+        next[panel.id] = clampConversationGeometry(
+          current,
+          shell.clientWidth,
+          shell.clientHeight,
+        );
+        continue;
+      }
+      const base = defaultConversationGeometry(shell.clientWidth, shell.clientHeight);
+      next[panel.id] = clampConversationGeometry(
+        { ...base, left: base.left + index * 34, top: base.top + index * 28 },
+        shell.clientWidth,
+        shell.clientHeight,
+      );
+    }
+    const currentKeys = Object.keys(conversationGeometryRef.current);
+    const changed =
+      currentKeys.length !== Object.keys(next).length ||
+      Object.entries(next).some(([id, geometry]) => {
+        const current = conversationGeometryRef.current[id];
+        return !current ||
+          current.left !== geometry.left ||
+          current.top !== geometry.top ||
+          current.width !== geometry.width ||
+          current.height !== geometry.height;
+      });
+    if (changed) {
+      conversationGeometryRef.current = next;
+      setConversationGeometry(next);
+    }
+  };
+
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) {
@@ -200,57 +269,101 @@ function WorldStage({
       setShellSize((current) =>
         current.width === nextSize.width && current.height === nextSize.height ? current : nextSize,
       );
-      const bubble = conversationRef.current;
-      setConversationRect(bubble ? bubble.getBoundingClientRect() : null);
-      if (!context.compact && conversationGeometryRef.current) {
-        updateConversationGeometry(conversationGeometryRef.current);
+      syncConversationGeometry();
+      const nextRects: Record<string, DOMRect> = {};
+      for (const panel of context.conversationBubbles) {
+        const bubble = conversationRefs.current[panel.id];
+        if (bubble) {
+          nextRects[panel.id] = bubble.getBoundingClientRect();
+        }
       }
-      if (!bubble || shellRect.width <= 0 || shellRect.height <= 0) {
+      setConversationRects(nextRects);
+      if (shellRect.width <= 0 || shellRect.height <= 0) {
         return;
       }
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(shell);
-    if (conversationRef.current) {
-      observer.observe(conversationRef.current);
+    for (const panel of context.conversationBubbles) {
+      const conversation = conversationRefs.current[panel.id];
+      if (conversation) {
+        observer.observe(conversation);
+      }
     }
     window.addEventListener("resize", measure);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [context.conversationBubble]);
+  }, [context.compact, panelIdsKey]);
 
   useLayoutEffect(() => {
-    const bubble = conversationRef.current;
-    if (bubble && conversationGeometry) {
-      setConversationRect(bubble.getBoundingClientRect());
+    const nextRects: Record<string, DOMRect> = {};
+    for (const panel of context.conversationBubbles) {
+      const bubble = conversationRefs.current[panel.id];
+      if (bubble) {
+        nextRects[panel.id] = bubble.getBoundingClientRect();
+      }
     }
-  }, [conversationGeometry]);
+    setConversationRects(nextRects);
+  }, [context.conversationBubbles, conversationGeometry]);
 
   useEffect(() => {
-    if (!context.conversationBubble) {
-      setConversationAnchors(null);
-      setConversationRect(null);
-      conversationGeometryRef.current = null;
+    const ids = new Set(panelIds);
+    if (context.compact) {
+      conversationGeometryRef.current = {};
+      setConversationGeometry({});
+    } else {
+      const nextGeometry = Object.fromEntries(
+        Object.entries(conversationGeometryRef.current).filter(([id]) => ids.has(id)),
+      );
+      conversationGeometryRef.current = nextGeometry;
+      setConversationGeometry(nextGeometry);
+    }
+    setConversationAnchors((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => ids.has(id)),
+    ));
+    setConversationRects((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => ids.has(id)),
+    ));
+    setConversationOrder((current) => [
+      ...current.filter((id) => ids.has(id)),
+      ...panelIds.filter((id) => !current.includes(id)),
+    ]);
+    if (panelIds.length === 0) {
       conversationInteractionRef.current = null;
-      setConversationGeometry(null);
       setConversationInteraction(null);
     }
-  }, [context.compact, context.conversationBubble]);
+  }, [context.compact, panelIdsKey]);
 
   useEffect(() => {
-    if (context.compact) {
-      conversationGeometryRef.current = null;
-      setConversationGeometry(null);
-    }
-  }, [context.compact]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      const focusedId = [...conversationOrder].reverse().find((id) => panelIds.includes(id));
+      if (!focusedId) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      context.onCloseConversation(focusedId);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [context, conversationOrder, panelIdsKey]);
 
-  const beginConversationInteraction = (event: ReactPointerEvent<HTMLElement>) => {
+  const focusConversation = (id: string) => {
+    setConversationOrder((current) => [...current.filter((value) => value !== id), id]);
+    context.onFocusConversation(id);
+  };
+
+  const beginConversationInteraction = (id: string, event: ReactPointerEvent<HTMLElement>) => {
     if (context.compact || event.button !== 0) {
       return;
     }
+    focusConversation(id);
     const target = event.target instanceof Element ? event.target : null;
     const resizeHandle = target?.closest("[data-world-conversation-resize='true']");
     const header = target?.closest(".world-conversation-header");
@@ -260,8 +373,8 @@ function WorldStage({
     if (header && target?.closest("button, a, input, textarea, select")) {
       return;
     }
-    const geometry = conversationGeometryRef.current ?? measuredConversationGeometry();
-    const slot = conversationRef.current;
+    const geometry = conversationGeometryRef.current[id] ?? measuredConversationGeometry(id);
+    const slot = conversationRefs.current[id];
     if (!geometry || !slot) {
       return;
     }
@@ -269,13 +382,14 @@ function WorldStage({
     event.stopPropagation();
     slot.setPointerCapture(event.pointerId);
     conversationInteractionRef.current = {
+      id,
       mode: resizeHandle ? "resizing" : "moving",
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       geometry,
     };
-    setConversationInteraction(resizeHandle ? "resizing" : "moving");
+    setConversationInteraction({ id, mode: resizeHandle ? "resizing" : "moving" });
   };
 
   const moveConversationInteraction = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -292,6 +406,7 @@ function WorldStage({
     const deltaX = event.clientX - interaction.startX;
     const deltaY = event.clientY - interaction.startY;
     updateConversationGeometry(
+      interaction.id,
       interaction.mode === "moving"
         ? moveConversationGeometry(
             interaction.geometry,
@@ -325,7 +440,7 @@ function WorldStage({
     setConversationInteraction(null);
   };
 
-  const moveConversationWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const moveConversationWithKeyboard = (id: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (context.compact || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       return;
     }
@@ -339,7 +454,8 @@ function WorldStage({
       return;
     }
     const shell = shellRef.current;
-    const geometry = conversationGeometryRef.current ?? measuredConversationGeometry();
+    focusConversation(id);
+    const geometry = conversationGeometryRef.current[id] ?? measuredConversationGeometry(id);
     if (!shell || !geometry) {
       return;
     }
@@ -348,6 +464,7 @@ function WorldStage({
     const deltaX = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
     const deltaY = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
     updateConversationGeometry(
+      id,
       isResize
         ? resizeConversationGeometry(geometry, deltaX, deltaY, shell.clientWidth, shell.clientHeight)
         : moveConversationGeometry(geometry, deltaX, deltaY, shell.clientWidth, shell.clientHeight),
@@ -358,43 +475,50 @@ function WorldStage({
     const shell = shellRef.current;
     if (
       !shell ||
-      !context.conversationBubble ||
-      !context.conversationTargetKey ||
-      !conversationRect ||
+      context.conversationBubbles.length === 0 ||
       shellSize.width <= 0 ||
       shellSize.height <= 0
     ) {
       return null;
     }
-    const endpoints: Array<{
-      kind: "workbench" | "agent";
-      anchor: OfficeCanvasAnchor;
-    }> = [];
-    for (const kind of ["workbench", "agent"] as const) {
-      const anchor = conversationAnchors?.[kind];
-      if (anchor?.visible) {
-        endpoints.push({ kind, anchor });
+    const shellRect = shell.getBoundingClientRect();
+    const paths = context.conversationBubbles.flatMap((panel) => {
+      const conversationRect = conversationRects[panel.id];
+      const anchors = conversationAnchors[panel.id];
+      if (!conversationRect || !anchors) {
+        return [];
       }
-    }
-    if (endpoints.length === 0) {
+      const bubbleLeft = conversationRect.left - shellRect.left;
+      const bubbleRight = conversationRect.right - shellRect.left;
+      const bubbleTop = conversationRect.top - shellRect.top;
+      const bubbleBottom = conversationRect.bottom - shellRect.top;
+      const bubbleCenterX = (bubbleLeft + bubbleRight) / 2;
+      return (["workbench", "agent"] as const).flatMap((kind) => {
+        const anchor = anchors[kind];
+        if (!anchor) {
+          return [];
+        }
+        const targetX = anchor.x - shellRect.left;
+        const targetY = anchor.y - shellRect.top;
+        const edgeX = targetX <= bubbleCenterX ? bubbleLeft : bubbleRight;
+        const preferredEdgeY = targetY + (kind === "workbench" ? -10 : 10);
+        const edgeY = Math.max(bubbleTop + 22, Math.min(bubbleBottom - 22, preferredEdgeY));
+        const bendX = targetX + (edgeX - targetX) * 0.55;
+        const path = `M ${targetX.toFixed(1)} ${targetY.toFixed(1)} C ${bendX.toFixed(1)} ${targetY.toFixed(1)}, ${bendX.toFixed(1)} ${edgeY.toFixed(1)}, ${edgeX.toFixed(1)} ${edgeY.toFixed(1)}`;
+        return [{
+          id: `${panel.id}:${kind}`,
+          windowId: panel.id,
+          kind,
+          path,
+          targetX,
+          targetY,
+          offscreen: anchor.edge,
+        }];
+      });
+    });
+    if (paths.length === 0) {
       return null;
     }
-    const shellRect = shell.getBoundingClientRect();
-    const bubbleLeft = conversationRect.left - shellRect.left;
-    const bubbleRight = conversationRect.right - shellRect.left;
-    const bubbleTop = conversationRect.top - shellRect.top;
-    const bubbleBottom = conversationRect.bottom - shellRect.top;
-    const bubbleCenterX = (bubbleLeft + bubbleRight) / 2;
-    const paths = endpoints.map(({ kind, anchor }) => {
-      const targetX = anchor.x - shellRect.left;
-      const targetY = anchor.y - shellRect.top;
-      const edgeX = targetX <= bubbleCenterX ? bubbleLeft : bubbleRight;
-      const preferredEdgeY = targetY + (kind === "workbench" ? -10 : 10);
-      const edgeY = Math.max(bubbleTop + 22, Math.min(bubbleBottom - 22, preferredEdgeY));
-      const bendX = targetX + (edgeX - targetX) * 0.55;
-      const path = `M ${targetX.toFixed(1)} ${targetY.toFixed(1)} C ${bendX.toFixed(1)} ${targetY.toFixed(1)}, ${bendX.toFixed(1)} ${edgeY.toFixed(1)}, ${edgeX.toFixed(1)} ${edgeY.toFixed(1)}`;
-      return { kind, path, targetX, targetY };
-    });
     return (
       <svg
         className="world-conversation-connector"
@@ -404,10 +528,22 @@ function WorldStage({
         viewBox={`0 0 ${shellSize.width} ${shellSize.height}`}
         preserveAspectRatio="none"
       >
-        {paths.map(({ kind, path, targetX, targetY }) => (
-          <g key={kind}>
-            <path data-anchor={kind} d={path} />
-            <circle data-anchor={kind} cx={targetX} cy={targetY} r="4" />
+        {paths.map(({ id, windowId, kind, path, targetX, targetY, offscreen }) => (
+          <g key={id} data-anchor={kind} data-window-id={windowId} data-offscreen={offscreen ?? undefined}>
+            <path
+              data-anchor={kind}
+              data-window-id={windowId}
+              data-offscreen={offscreen ?? undefined}
+              d={path}
+            />
+            <circle
+              data-anchor={kind}
+              data-window-id={windowId}
+              data-offscreen={offscreen ?? undefined}
+              cx={targetX}
+              cy={targetY}
+              r="4"
+            />
           </g>
         ))}
       </svg>
@@ -477,46 +613,64 @@ function WorldStage({
         <PixelOfficeCanvas
           projection={projection}
           selectedKey={context.selectedKey}
-          conversationTargetKey={context.conversationTargetKey}
+          conversationTargets={context.conversationBubbles.map((panel): OfficeConversationAnchorTarget => ({
+            id: panel.id,
+            selectedKey: panel.selectedKey,
+            targetKey: panel.targetKey,
+          }))}
           onSelect={context.onSelect}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
-          onAnchorChange={setConversationAnchors}
+          onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
         />
       </div>
       {connector}
-      {context.conversationBubble ? (
-        <div
-          ref={conversationRef}
-          className="world-conversation-slot"
-          data-positioned={conversationGeometry ? "true" : "false"}
-          data-interaction={conversationInteraction ?? undefined}
-          aria-busy={conversationInteraction !== null}
-          style={conversationGeometry && !context.compact ? {
-            left: `${conversationGeometry.left}px`,
-            top: `${conversationGeometry.top}px`,
-            width: `${conversationGeometry.width}px`,
-            height: `${conversationGeometry.height}px`,
-          } : undefined}
-          onPointerDown={beginConversationInteraction}
-          onPointerMove={moveConversationInteraction}
-          onPointerUp={endConversationInteraction}
-          onPointerCancel={endConversationInteraction}
-          onKeyDown={moveConversationWithKeyboard}
-        >
-          {context.conversationBubble}
-          {!context.compact ? (
-            <button
-              type="button"
-              className="world-conversation-resize"
-              data-world-conversation-resize="true"
-              aria-label="Resize agent conversation"
-              title="Resize conversation"
-              onPointerDown={beginConversationInteraction}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      {context.conversationBubbles.map((panel) => {
+        const geometry = conversationGeometry[panel.id];
+        const orderIndex = conversationOrder.indexOf(panel.id);
+        const interaction = conversationInteraction?.id === panel.id
+          ? conversationInteraction.mode
+          : undefined;
+        return (
+          <div
+            key={panel.id}
+            ref={(element) => setConversationRef(panel.id, element)}
+            className="world-conversation-slot"
+            data-window-id={panel.id}
+            data-positioned={geometry ? "true" : "false"}
+            data-active={orderIndex === conversationOrder.length - 1 ? "true" : undefined}
+            data-interaction={interaction}
+            aria-busy={interaction !== undefined}
+            style={geometry && !context.compact ? {
+              left: `${geometry.left}px`,
+              top: `${geometry.top}px`,
+              width: `${geometry.width}px`,
+              height: `${geometry.height}px`,
+              zIndex: 20 + Math.max(0, orderIndex),
+            } : undefined}
+            onPointerDown={(event) => {
+              focusConversation(panel.id);
+              beginConversationInteraction(panel.id, event);
+            }}
+            onPointerMove={moveConversationInteraction}
+            onPointerUp={endConversationInteraction}
+            onPointerCancel={endConversationInteraction}
+            onKeyDown={(event) => moveConversationWithKeyboard(panel.id, event)}
+          >
+            {panel.content}
+            {!context.compact ? (
+              <button
+                type="button"
+                className="world-conversation-resize"
+                data-world-conversation-resize="true"
+                aria-label="Resize agent conversation"
+                title="Resize conversation"
+                onPointerDown={(event) => beginConversationInteraction(panel.id, event)}
+              />
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

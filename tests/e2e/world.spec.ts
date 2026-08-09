@@ -257,7 +257,7 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(1);
   await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(1);
 
-  const slot = page.locator(".world-conversation-slot");
+  const slot = page.locator(".world-conversation-slot").first();
   const before = await slot.boundingBox();
   expect(before).not.toBeNull();
   const stageBox = await page.locator(".world-stage-shell").boundingBox();
@@ -282,12 +282,87 @@ test("opens one stable live conversation bubble for the selected Office agent", 
 
   const secondAgent = page.locator(".agent-row").filter({ hasText: "Codex B" });
   await secondAgent.click();
-  await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
-  await expect(bubble).toContainText("Codex B");
-  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(1);
+  const openBubbles = page.locator("[data-world-conversation='open']");
+  await expect(openBubbles).toHaveCount(2);
+  await expect(page.getByRole("dialog", { name: "Codex A" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Codex B" })).toBeVisible();
+  await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(2);
+  await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(2);
 
   await page.keyboard.press("Escape");
-  await expect(bubble).toHaveCount(0);
+  await expect(openBubbles).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Codex A" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(openBubbles).toHaveCount(0);
+});
+
+test("keeps the live connector visible when the selected agent moves below the viewport", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 640 });
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await waitForLiveOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  const bubble = page.locator("[data-world-conversation='open']");
+  const agentPath = page.locator("path[data-anchor='agent']");
+  await expect(agentPath).toHaveCount(1);
+  await expect(agentPath).not.toHaveAttribute("data-offscreen");
+
+  const eventResponse = await request.post("http://127.0.0.1:4173/__fixture/ws-event", {
+    data: {
+      hostId: "host-a",
+      path: "/ws/activity",
+      event: {
+        type: "pane.agent_status_changed",
+        pane_id: "p1",
+        workspace_id: "main",
+        agent_status: "done",
+        agent: "codex",
+        title: null,
+        display_agent: "Codex A",
+        state_labels: { done: "Ready for review" },
+      },
+    },
+  });
+  expect((await eventResponse.json()).sent).toBeGreaterThan(0);
+
+  await expect(page.locator(".agent-row").filter({ hasText: "Codex A" })).toContainText("Ready for review");
+  await expect(bubble).toBeVisible();
+  await expect(agentPath).toHaveCount(1);
+  await expect(agentPath).toHaveAttribute("data-offscreen", "bottom");
+});
+
+test("deduplicates terminal windows and stops at the five-window Office cap", async ({
+  page,
+  request,
+}) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", snapshotVariant: "large" },
+  });
+  await page.goto("/world");
+  await waitForOffice(page);
+  const firstAgent = page.locator(".agent-row").filter({ hasText: "Agent 01" }).first();
+  await expect(firstAgent).toBeVisible();
+
+  await firstAgent.click();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(1);
+  await firstAgent.click();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(1);
+
+  for (const label of ["Agent 02", "Agent 03", "Agent 04", "Agent 05"]) {
+    await page.locator(".agent-row").filter({ hasText: label }).first().click();
+  }
+  const openBubbles = page.locator("[data-world-conversation='open']");
+  await expect(openBubbles).toHaveCount(5);
+  await expect(page.getByRole("dialog", { name: "Agent 05" })).toBeVisible();
+
+  await page.locator(".agent-row").filter({ hasText: "Agent 06" }).first().click();
+  await expect(openBubbles).toHaveCount(5);
+  await expect(page.locator(".world-notice-handoff")).toContainText("Five Office terminals are open");
 });
 
 test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
@@ -301,7 +376,7 @@ test("moves and resizes the Office conversation bubble without losing its live a
 
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   const bubble = page.locator("[data-world-conversation='open']");
-  const slot = page.locator(".world-conversation-slot");
+  const slot = page.locator(".world-conversation-slot").first();
   await expect(bubble).toBeVisible();
   await expect(page.locator(".world-conversation-resize")).toBeVisible();
   await expect(bubble.locator(".terminal-stage")).toHaveAttribute("data-terminal-translucent", "true");
@@ -314,10 +389,12 @@ test("moves and resizes the Office conversation bubble without losing its live a
     }
     return getComputedStyle(hostElement).padding === "0px" &&
       getComputedStyle(hostElement).backgroundColor === "rgba(17, 17, 27, 0.88)" &&
-      Math.abs(host.left - canvas.left) <= 1 &&
-      Math.abs(host.top - canvas.top) <= 1 &&
+      canvas.left >= host.left - 1 &&
+      canvas.top >= host.top - 1 &&
       canvas.right <= host.right + 1 &&
-      canvas.bottom <= host.bottom + 1;
+      canvas.bottom <= host.bottom + 1 &&
+      Math.abs((canvas.left - host.left) - (host.right - canvas.right)) <= 1 &&
+      Math.abs((canvas.top - host.top) - (host.bottom - canvas.bottom)) <= 1;
   })).toBe(true);
   const accessibility = await new AxeBuilder({ page }).include(".world-stage-shell").analyze();
   expect(
@@ -374,13 +451,14 @@ test("moves and resizes the Office conversation bubble without losing its live a
   await expect(slot).toHaveAttribute("data-positioned", "true");
 
   await page.locator(".agent-row").filter({ hasText: "Codex B" }).click();
-  await expect(bubble).toContainText("Codex B");
-  const afterTargetSwitch = await slot.boundingBox();
-  expect(afterTargetSwitch).not.toBeNull();
-  expect(Math.abs((afterTargetSwitch?.x ?? 0) - (afterResize?.x ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((afterTargetSwitch?.y ?? 0) - (afterResize?.y ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((afterTargetSwitch?.width ?? 0) - (afterResize?.width ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((afterTargetSwitch?.height ?? 0) - (afterResize?.height ?? 0))).toBeLessThanOrEqual(1);
+  await expect(page.getByRole("dialog", { name: "Codex B" })).toBeVisible();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(2);
+  const firstWindowAfterSecondOpen = await slot.boundingBox();
+  expect(firstWindowAfterSecondOpen).not.toBeNull();
+  expect(Math.abs((firstWindowAfterSecondOpen?.x ?? 0) - (afterResize?.x ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((firstWindowAfterSecondOpen?.y ?? 0) - (afterResize?.y ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((firstWindowAfterSecondOpen?.width ?? 0) - (afterResize?.width ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((firstWindowAfterSecondOpen?.height ?? 0) - (afterResize?.height ?? 0))).toBeLessThanOrEqual(1);
 });
 
 test("uses the fixed mobile conversation layout without exposing desktop resize controls", async ({
@@ -511,6 +589,37 @@ test("shows perceptible working animation when motion is allowed", async ({ page
   expect(diagnostics?.reducedMotion).toBe(false);
   expect(diagnostics?.animation).toEqual({ characters: 1, monitors: 1, statuses: 1 });
   expect((diagnostics?.frames ?? 0) - start).toBeGreaterThan(2);
+});
+
+test("does not rebuild the Pixi scene for an unchanged periodic snapshot", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  const beforeLog = await fixtureLog(request);
+  const before = await page.evaluate(() => {
+    const diagnostics = window.__HERDR_WORLD_RENDERER__;
+    return {
+      sceneRenders: diagnostics?.sceneRenders ?? 0,
+      sceneSkips: diagnostics?.sceneSkips ?? 0,
+    };
+  });
+  expect(before.sceneRenders).toBeGreaterThan(0);
+
+  await expect
+    .poll(
+      async () => (await fixtureLog(request)).snapshotRequests,
+      { timeout: CORE_SNAPSHOT_REFRESH_INTERVAL_MS + 5_000 },
+    )
+    .toBeGreaterThan(beforeLog.snapshotRequests);
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.sceneSkips ?? 0))
+    .toBeGreaterThan(before.sceneSkips);
+
+  const after = await page.evaluate(() => window.__HERDR_WORLD_RENDERER__);
+  expect(after?.sceneRenders).toBe(before.sceneRenders);
+  expect(after?.activeApplications).toBe(1);
 });
 
 test("keeps single-click and empty-desk gestures read-only, then opens a canvas agent on double-click", async ({

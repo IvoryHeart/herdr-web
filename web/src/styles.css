@@ -1059,8 +1059,21 @@ button {
 }
 
 .world-conversation-terminal .terminal-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   background: rgb(17 17 27 / 88%);
+}
+
+.world-conversation-terminal .terminal-host > .xterm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.world-conversation-terminal .terminal-host > .xterm .xterm-screen {
+  margin: auto;
 }
 
 .world-conversation-terminal .terminal-stage[data-terminal-translucent="true"] {
@@ -1135,6 +1148,11 @@ button {
   opacity: 0.86;
 }
 
+.world-conversation-connector path[data-offscreen] {
+  stroke-dasharray: 2 6;
+  opacity: 0.72;
+}
+
 .world-conversation-connector circle {
   fill: var(--accent);
   stroke: var(--base);
@@ -1143,6 +1161,10 @@ button {
 
 .world-conversation-connector circle[data-anchor="workbench"] {
   fill: var(--peach);
+}
+
+.world-conversation-connector circle[data-offscreen] {
+  fill: var(--yellow);
 }
 
 .world-renderer-fallback {

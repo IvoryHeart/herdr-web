@@ -72,19 +72,6 @@ export function WorldConversationBubble({
     });
   }, [agent?.key, pane.pane_id, pane.terminal_id, runtime.id, session.sessionKey, targetLabel]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
-
   return (
     <section
       ref={bubbleRef}
