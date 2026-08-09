@@ -296,7 +296,7 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(openBubbles).toHaveCount(0);
 });
 
-test("keeps the live connector visible when the selected agent moves below the viewport", async ({
+test("keeps the live connector visible when the selected agent moves to the Agent Bar", async ({
   page,
   request,
 }) => {
@@ -311,6 +311,7 @@ test("keeps the live connector visible when the selected agent moves below the v
   const agentPath = page.locator("path[data-anchor='agent']");
   await expect(agentPath).toHaveCount(1);
   await expect(agentPath).not.toHaveAttribute("data-offscreen");
+  const beforeAgentPath = await agentPath.getAttribute("d");
 
   const eventResponse = await request.post("http://127.0.0.1:4173/__fixture/ws-event", {
     data: {
@@ -336,7 +337,49 @@ test("keeps the live connector visible when the selected agent moves below the v
     .toBeGreaterThan(0);
   await expect(bubble).toBeVisible();
   await expect(agentPath).toHaveCount(1);
-  await expect(agentPath).toHaveAttribute("data-offscreen", "bottom");
+  const afterAgentPath = await agentPath.getAttribute("d");
+  expect(afterAgentPath).not.toBeNull();
+  expect(afterAgentPath).not.toBe(beforeAgentPath);
+  const offscreenEdge = await agentPath.getAttribute("data-offscreen");
+  expect(offscreenEdge === null || offscreenEdge === "bottom").toBe(true);
+});
+
+test("inspects completed work from the shared sidebar and clears its unseen marker", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  const eventResponse = await request.post("http://127.0.0.1:4173/__fixture/ws-event", {
+    data: {
+      hostId: "host-a",
+      path: "/ws/activity",
+      event: {
+        type: "pane.agent_status_changed",
+        pane_id: "p1",
+        workspace_id: "main",
+        agent_status: "done",
+        agent: "codex",
+        title: null,
+        display_agent: "Codex A",
+        state_labels: { done: "Ready for review" },
+      },
+    },
+  });
+  expect((await eventResponse.json()).sent).toBeGreaterThan(0);
+
+  const agentRow = page.locator(".agent-row").filter({ hasText: "Codex A" });
+  await expect(agentRow).toContainText("Ready for review");
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
+    .toBeGreaterThan(0);
+
+  await agentRow.click();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(1);
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
+    .toBe(0);
 });
 
 test("deduplicates terminal windows and stops at the five-window Office cap", async ({
