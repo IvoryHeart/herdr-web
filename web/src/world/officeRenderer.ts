@@ -218,10 +218,11 @@ export async function createOfficeRenderer(
     throw new Error("renderer disposed");
   }
   officeDebug("renderer:pixi-ready");
-  element.replaceChildren(app.canvas);
-  app.canvas.setAttribute("aria-hidden", "true");
-  app.canvas.setAttribute("data-office-canvas", "true");
-  app.canvas.style.imageRendering = "auto";
+  const canvas = app.canvas;
+  element.replaceChildren(canvas);
+  canvas.setAttribute("aria-hidden", "true");
+  canvas.setAttribute("data-office-canvas", "true");
+  canvas.style.imageRendering = "auto";
   diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
   diagnostics.lastError = null;
 
@@ -528,6 +529,7 @@ export async function createOfficeRenderer(
         return;
       }
       disposed = true;
+      const ownsCanvas = element.contains(canvas);
       if (resizeTimer !== null) {
         window.clearTimeout(resizeTimer);
       }
@@ -540,7 +542,9 @@ export async function createOfficeRenderer(
       app.ticker.remove(ticker);
       app.destroy(true, { children: true });
       destroyTextures(textures);
-      element.replaceChildren();
+      if (ownsCanvas) {
+        element.replaceChildren();
+      }
       element.style.removeProperty("width");
       element.style.removeProperty("height");
       diagnostics.destroys += 1;

@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added a documented `npm run dev:local` workflow that checks the Herdr socket,
+  reuses or starts the bridge, and launches the web client with the correct
+  development proxy.
 - Added exact double-click shortcuts for current Pixel Office rooms and agents across the canvas
   and semantic roster. Direct double-click works without prior selection and reuses the guarded
   Spaces handoff while retaining single-click inspection and accessible inspector controls.
@@ -51,6 +54,9 @@
   host and workspace headers. [PR #47](https://github.com/kcosr/herdr-web/pull/47)
 
 ### Fixed
+
+- Fixed development-mode Office renderer cleanup so an older asynchronous Pixi
+  initialization cannot remove the active canvas created by a newer initialization.
 
 ### Removed
 

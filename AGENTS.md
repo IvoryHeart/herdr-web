@@ -24,6 +24,10 @@ This is a lightweight internal onboarding note for agents working in this repo.
 
 ## Start Here
 
+- Work from the `herdr-web/` repository root. The canonical local startup command is
+  `npm run dev:local`; its full-app URL is `http://127.0.0.1:8787`. See
+  [`docs/development.md`](docs/development.md) for the Herdr, bridge, Vite, and optional OTEL
+  startup layers.
 - Read `README.md` for the product shape, bridge runtime model, and local run commands.
 - Read `web/README.md` before changing the React/Vite app.
 - Read `docs/vendoring.md` before touching `vendor/herdr-compat/`.

@@ -247,21 +247,33 @@ an agent command. This preserves wrappers, SSH commands, containers, and other e
 
 ## Run Locally
 
-Start or attach a normal Herdr `v0.8.0` or newer session with terminal protocol `19` first:
+The canonical working directory is this repository root. For the complete local stack, start or
+attach a normal Herdr `v0.8.0` or newer session with terminal protocol `19` first, then run:
 
 ```bash
-herdr
+herdr status server
+herdr session list
+npm run dev:local
 ```
 
-Build the web app and bridge:
+Open the full app at:
+
+```text
+http://127.0.0.1:8787
+```
+
+`dev:local` starts or reuses the bridge and starts Vite for frontend hot reload. The bridge URL is
+the canonical URL because it serves the complete built app and connects directly to Herdr. Vite
+normally uses `http://127.0.0.1:5173`; if that port is occupied, it reports the next available
+port. Stop the foreground process with `Ctrl-C`.
+
+For the detailed layer checklist, optional OTEL setup, manual two-terminal startup, and diagnosis,
+see [docs/development.md](docs/development.md).
+
+The equivalent manual production-style startup is:
 
 ```bash
 npm run build
-```
-
-Run the bridge:
-
-```bash
 scripts/run-bridge.sh
 ```
 

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev:local": "scripts/dev-local.sh",
     "dev:web": "npm run dev --prefix web",
+    "dev:bridge": "scripts/run-bridge.sh",
     "build:web": "npm run build --prefix web",
     "test:web": "npm run test --prefix web",
     "test:observability": "npm run test --prefix web -- observability.test.ts && cargo test --manifest-path bridge/Cargo.toml --bin herdr-web-bridge observability",
