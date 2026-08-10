@@ -103,6 +103,18 @@ describe("host connection state", () => {
       ),
     ).toBe(false);
   });
+
+  it("keeps core runtime admission independent from optional observability", () => {
+    const runtime = readyRuntime();
+    expect(runtime.capabilities?.observability).toBeUndefined();
+    expect(
+      runtimeAdmissionReady(
+        runtime,
+        { connectionKey: runtime.generationKey, snapshot: {}, loadState: "ready" },
+        ["snapshot"],
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("snapshot admission contract", () => {

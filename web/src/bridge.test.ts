@@ -359,6 +359,37 @@ describe("capabilities", () => {
     });
   });
 
+  it("admits observability as an optional capability with its own contract version", () => {
+    expect(
+      parseCapabilities({
+        ...compatibleCapabilities(),
+        features: ["snapshot", "observability_extension"],
+        observability: {
+          version: 1,
+          contract_version: { major: 1, minor: 0 },
+          health: "unavailable",
+        },
+      }).observability,
+    ).toEqual({
+      version: 1,
+      contract_version: { major: 1, minor: 0 },
+      health: "unavailable",
+    });
+  });
+
+  it("blocks malformed observability capability versions without blocking legacy parsing", () => {
+    expect(() =>
+      parseCapabilities({
+        ...compatibleCapabilities(),
+        observability: {
+          version: 2,
+          contract_version: { major: 1, minor: 0 },
+          health: "available",
+        },
+      }),
+    ).toThrow("Bridge observability capability is malformed");
+  });
+
   it("rejects capabilities that omit the feature contract", () => {
     const missingFeatures = compatibleCapabilities();
     Reflect.deleteProperty(missingFeatures, "features");

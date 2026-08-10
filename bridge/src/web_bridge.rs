@@ -55,6 +55,10 @@ use crate::notes::{
     AttachNoteRequest, CreateNoteRequest, NoteResponse, NotesError, NotesListQuery,
     NotesListResponse, NotesManager, RevisionRequest, UpdateNoteRequest,
 };
+use crate::observability::{
+    ObservabilityContractVersion, ObservabilityDescriptor, ObservabilityHealth, ObservabilityState,
+    ObservabilityTransportMessage,
+};
 
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8787;
@@ -111,6 +115,7 @@ struct BridgeState {
     agent_pins: Arc<AgentPinsManager>,
     launcher_presets: Arc<LauncherPresetStore>,
     notes: Arc<NotesManager>,
+    observability: ObservabilityState,
     ui_event_tx: tokio::sync::broadcast::Sender<String>,
     activity_tx: tokio::sync::broadcast::Sender<ActivityMessage>,
     upload_dir: PathBuf,
@@ -165,6 +170,7 @@ struct Capabilities {
     agent_pins: AgentPinsCapability,
     launcher_presets: LauncherPresetsCapability,
     notes: NotesCapability,
+    observability: ObservabilityCapability,
 }
 
 #[derive(Debug, Serialize)]
@@ -185,6 +191,13 @@ struct LauncherPresetsCapability {
 #[derive(Debug, Serialize)]
 struct NotesCapability {
     version: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct ObservabilityCapability {
+    version: u32,
+    contract_version: ObservabilityContractVersion,
+    health: ObservabilityHealth,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +225,11 @@ struct TerminalQuery {
     coalesce_ms: Option<u64>,
     #[serde(default)]
     takeover: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservabilityEventsQuery {
+    after_sequence: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -1001,6 +1019,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         agent_pins,
         launcher_presets,
         notes,
+        observability: ObservabilityState::unavailable(),
         ui_event_tx: tokio::sync::broadcast::channel(256).0,
         activity_tx: tokio::sync::broadcast::channel(512).0,
         upload_dir: options.upload_dir.clone(),
@@ -1067,12 +1086,22 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
             "/api/launcher-presets/launch",
             post(launcher_preset_launch_handler).options(preflight_handler),
         );
+    let observability_routes = Router::new()
+        .route(
+            "/api/extensions/observability",
+            get(observability_descriptor_handler).options(preflight_handler),
+        )
+        .route(
+            "/api/extensions/observability/snapshot",
+            get(observability_snapshot_handler).options(preflight_handler),
+        );
     let world_entry = options.static_dir.join("index.html");
     let app = Router::new()
         .merge(agent_activity_routes)
         .merge(agent_pins_routes)
         .merge(notes_routes)
         .merge(launcher_preset_routes)
+        .merge(observability_routes)
         .route(
             "/api/snapshot",
             get(snapshot_handler).options(preflight_handler),
@@ -1096,6 +1125,10 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         .route("/ws/events", get(events_ws_handler))
         .route("/ws/activity", get(activity_ws_handler))
         .route("/ws/ui-events", get(ui_events_ws_handler))
+        .route(
+            "/ws/extensions/observability",
+            get(observability_ws_handler),
+        )
         .route("/ws/terminal", get(terminal_ws_handler))
         .route_service("/world", ServeFile::new(world_entry.clone()))
         .route_service("/world/", ServeFile::new(world_entry))
@@ -1350,6 +1383,7 @@ const CAPABILITY_FEATURES: &[&str] = &[
     "terminal_resize",
     "terminal_scroll",
     "terminal_shared_fanout",
+    "observability_extension",
 ];
 
 fn ensure_allowed_request(headers: &HeaderMap, policy: &RequestPolicy) -> Result<(), BridgeError> {
@@ -2860,6 +2894,10 @@ async fn capabilities_handler(
     headers: HeaderMap,
 ) -> Result<Json<Capabilities>, BridgeError> {
     ensure_allowed_request(&headers, &state.request_policy)?;
+    let observability = state
+        .observability
+        .descriptor()
+        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
     Ok(Json(Capabilities {
         bridge_api_version: BRIDGE_API_VERSION,
         bridge_version: env!("CARGO_PKG_VERSION"),
@@ -2873,7 +2911,36 @@ async fn capabilities_handler(
         agent_pins: AgentPinsCapability { version: 1 },
         launcher_presets: LauncherPresetsCapability { version: 1 },
         notes: NotesCapability { version: 1 },
+        observability: ObservabilityCapability {
+            version: crate::observability::OBSERVABILITY_BRIDGE_CAPABILITY_VERSION,
+            contract_version: observability.contract_version,
+            health: observability.health,
+        },
     }))
+}
+
+async fn observability_descriptor_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+) -> Result<Json<ObservabilityDescriptor>, BridgeError> {
+    ensure_allowed_request(&headers, &state.request_policy)?;
+    let descriptor = state
+        .observability
+        .descriptor()
+        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
+    Ok(Json(descriptor))
+}
+
+async fn observability_snapshot_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+) -> Result<Json<crate::observability::ObservabilityExtensionResponse>, BridgeError> {
+    ensure_allowed_request(&headers, &state.request_policy)?;
+    let snapshot = state
+        .observability
+        .snapshot()
+        .map_err(|err| BridgeError::Protocol(err.to_string()))?;
+    Ok(Json(snapshot))
 }
 
 async fn agent_activity_list_handler(
@@ -3199,6 +3266,19 @@ async fn ui_events_ws_handler(
         .into_response()
 }
 
+async fn observability_ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<BridgeState>,
+    Query(query): Query<ObservabilityEventsQuery>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(err) = ensure_allowed_request(&headers, &state.request_policy) {
+        return err.into_response();
+    }
+    ws.on_upgrade(move |socket| handle_observability_socket(socket, state, query.after_sequence))
+        .into_response()
+}
+
 async fn handle_events_socket(socket: WebSocket, state: BridgeState) {
     let api = state.api.clone();
     let mut ui_event_rx = state.ui_event_tx.subscribe();
@@ -3318,6 +3398,72 @@ async fn handle_ui_events_socket(socket: WebSocket, state: BridgeState) {
             else => break,
         }
     }
+}
+
+async fn handle_observability_socket(
+    socket: WebSocket,
+    state: BridgeState,
+    after_sequence: Option<u64>,
+) {
+    let mut observability_rx = state.observability.subscribe();
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+    if after_sequence.is_some()
+        && send_observability_message(
+            &mut ws_sender,
+            &ObservabilityTransportMessage::ResyncRequired {
+                reason: "event replay is not retained by this provider".to_string(),
+                after_sequence,
+            },
+        )
+        .await
+        .is_err()
+    {
+        return;
+    }
+    loop {
+        tokio::select! {
+            event = observability_rx.recv() => {
+                match event {
+                    Ok(event) => {
+                        if send_observability_message(&mut ws_sender, &event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        let _ = send_observability_message(
+                            &mut ws_sender,
+                            &ObservabilityTransportMessage::ResyncRequired {
+                                reason: "observability receiver lagged".to_string(),
+                                after_sequence: None,
+                            },
+                        ).await;
+                        break;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            Some(message) = ws_receiver.next() => {
+                match message {
+                    Ok(Message::Close(_)) | Err(_) => break,
+                    Ok(Message::Text(_))
+                    | Ok(Message::Binary(_))
+                    | Ok(Message::Ping(_))
+                    | Ok(Message::Pong(_)) => {}
+                }
+            }
+            else => break,
+        }
+    }
+}
+
+async fn send_observability_message(
+    ws_sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    message: &ObservabilityTransportMessage,
+) -> Result<(), axum::Error> {
+    let text = serde_json::to_string(message).unwrap_or_else(|_| {
+        r#"{"type":"resync_required","reason":"observability serialization failed","after_sequence":null}"#.to_string()
+    });
+    ws_sender.send(Message::Text(text.into())).await
 }
 
 async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: TerminalQuery) {
