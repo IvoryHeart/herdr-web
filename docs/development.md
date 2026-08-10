@@ -153,5 +153,6 @@ been identified and the skip must not be treated as a permanent pass.
 
 Re-enable the test after a reproducible CI trace identifies and fixes the
 ResizeObserver, animation-frame, pointer/keyboard, viewport, or terminal-canvas
-timing issue involved. GitHub Issues are currently disabled for the repository,
-so this warning is the repository's tracking record for now.
+timing issue involved. Track the investigation and exit criteria in
+[Issue #7](https://github.com/IvoryHeart/herdr-web/issues/7); this note keeps
+the containment visible next to the local test workflow.
