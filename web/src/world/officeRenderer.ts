@@ -35,6 +35,13 @@ import type {
 } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
 import { officeSceneSignature } from "./officeSceneSignature";
+import type { OfficeObservability } from "./officeObservability";
+import {
+  formatOfficeCost,
+  formatOfficeModelName,
+  officeModelUsageTotal,
+  formatOfficeUsage,
+} from "./officeObservability";
 
 const CHARACTER_URLS = Array.from(
   { length: 12 },
@@ -130,6 +137,7 @@ export type OfficeRendererController = {
     projection: HerdrOfficeProjection,
     selectedKey: string | null,
     completionSeenKeys?: ReadonlySet<string>,
+    observability?: OfficeObservability,
   ) => void;
   getAnchors: (
     selectedKey: string | null,
@@ -153,6 +161,7 @@ export async function createOfficeRenderer(
   projection: HerdrOfficeProjection,
   selectedKey: string | null,
   completionSeenKeys: ReadonlySet<string>,
+  observability: OfficeObservability,
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
@@ -176,6 +185,7 @@ export async function createOfficeRenderer(
   let currentProjection = projection;
   let currentSelectedKey = selectedKey;
   let currentCompletionSeenKeys = completionSeenKeys;
+  let currentObservability = observability;
   let currentLayout: OfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
@@ -288,6 +298,7 @@ export async function createOfficeRenderer(
       projection: currentProjection,
       selectedKey: currentSelectedKey,
       completionSeenKeys: currentCompletionSeenKeys,
+      observability: currentObservability,
       visibleRoomIndices: visibleRooms.map(({ index }) => index),
     });
     if (sceneSignature === lastSceneSignature) {
@@ -304,6 +315,7 @@ export async function createOfficeRenderer(
       app.stage,
       layout,
       currentProjection,
+      currentObservability,
       currentSelectedKey,
       textures,
       animated,
@@ -489,10 +501,16 @@ export async function createOfficeRenderer(
   }
 
   return {
-    update(nextProjection, nextSelectedKey, nextCompletionSeenKeys = currentCompletionSeenKeys) {
+    update(
+      nextProjection,
+      nextSelectedKey,
+      nextCompletionSeenKeys = currentCompletionSeenKeys,
+      nextObservability = currentObservability,
+    ) {
       currentProjection = nextProjection;
       currentSelectedKey = nextSelectedKey;
       currentCompletionSeenKeys = nextCompletionSeenKeys;
+      currentObservability = nextObservability;
       build(lastWidth || element.clientWidth);
     },
     getAnchors(selectedKey, conversationTargetKey) {
@@ -673,6 +691,7 @@ function drawCeoReception(
   stage: Container,
   layout: OfficeLayout,
   projection: HerdrOfficeProjection,
+  observability: OfficeObservability,
   selectedKey: string | null,
   textures: readonly Texture[],
   animated: AnimatedItem[],
@@ -712,6 +731,7 @@ function drawCeoReception(
     projection.receptions.length,
   );
   drawCeo(band, textures, ceoBlocks.ceoX);
+  drawOtelCostBoard(band, observability, ceoBlocks.otelBoardX);
   drawLiveStateBlackboard(band, projection, ceoBlocks.boardX);
   const receptionRects = ceoBlocks.receptions;
   projection.receptions.forEach((reception, index) => {
@@ -792,14 +812,14 @@ function drawLiveStateBlackboard(
   heading.position.set(x + width / 2, y + 12);
   parent.addChild(heading);
 
-  const metrics = [
+  const metrics: Array<[string, number | string]> = [
     ["HOSTS", projection.coverage.observedHosts],
     ["SPACES", projection.coverage.observedWorkspaces],
     ["AGENTS", projection.coverage.observedAgents],
     ["WORKING", projection.coverage.status.working],
     ["INPUT", projection.coverage.status.blocked],
     ["STALE", projection.coverage.staleHosts],
-  ] as const;
+  ];
   const columnWidth = (width - 20) / 3;
   metrics.forEach(([metric, value], index) => {
     const column = index % 3;
@@ -808,7 +828,9 @@ function drawLiveStateBlackboard(
     const centerY = y + 52 + row * 44;
     const valueLabel = label(String(value), {
       size: 20,
-      color: metric === "STALE" && value > 0 ? 0xffb0ba : 0xf1e9bd,
+      color: metric === "STALE" && typeof value === "number" && value > 0
+        ? 0xffb0ba
+        : 0xf1e9bd,
       anchor: 0.5,
     });
     valueLabel.position.set(centerX, centerY);
@@ -822,6 +844,123 @@ function drawLiveStateBlackboard(
     parent.addChild(metricLabel);
   });
 
+}
+
+function drawOtelCostBoard(
+  parent: Container,
+  observability: OfficeObservability,
+  x: number,
+) {
+  const {
+    ceoBoardY: y,
+    ceoOtelBoardWidth: width,
+    ceoBoardHeight: height,
+  } = OFFICE_GEOMETRY;
+  const board = new Graphics();
+  board.roundRect(x + 4, y + 5, width, height, 5).fill({ color: 0x000000, alpha: 0.34 });
+  board.roundRect(x, y, width, height, 5).fill(0x553b25);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 3).fill(0x17251f);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 3)
+    .stroke({ width: 1, color: 0x9b7542, alpha: 0.78 });
+  board.rect(x + 10, y + 34, width - 20, 1).fill({ color: 0xd8e8c8, alpha: 0.2 });
+  board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
+  parent.addChild(board);
+
+  const heading = label("OTEL · LAST 24H", {
+    size: 12,
+    color: 0xe2f1d1,
+    anchor: 0.5,
+  });
+  heading.position.set(x + width / 2, y + 12);
+  parent.addChild(heading);
+
+  const modelHeader = label("MODEL", {
+    size: 10,
+    color: 0xa9c8a4,
+    anchor: { x: 0, y: 0.5 },
+    weight: "700",
+  });
+  modelHeader.position.set(x + 12, y + 26);
+  parent.addChild(modelHeader);
+  const tokenColumnX = x + 100;
+  const tokenIcon = new Graphics();
+  tokenIcon.roundRect(tokenColumnX - 8, y + 20, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.62 });
+  tokenIcon.roundRect(tokenColumnX - 8, y + 23, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.82 });
+  tokenIcon.roundRect(tokenColumnX - 8, y + 26, 16, 4, 1).fill(0xf1e9bd);
+  tokenIcon.rect(tokenColumnX - 5, y + 27, 2, 2).fill({ color: 0x8a6b3d, alpha: 0.8 });
+  parent.addChild(tokenIcon);
+  const costHeader = label("$", {
+    size: 12,
+    color: 0xa9c8a4,
+    anchor: { x: 1, y: 0.5 },
+    weight: "700",
+  });
+  costHeader.position.set(x + width - 12, y + 26);
+  parent.addChild(costHeader);
+
+  if (observability.health !== "available" || observability.models.length === 0) {
+    const status = label(
+      observability.health === "degraded" ? "DEGRADED" : "NO DATA",
+      { size: 14, color: observability.health === "degraded" ? 0xffb0ba : 0xd7c394, anchor: 0.5 },
+    );
+    status.position.set(x + width / 2, y + 78);
+    parent.addChild(status);
+    return;
+  }
+
+  observability.models.slice(0, 4).forEach((model, index) => {
+    const rowY = y + 48 + index * 22;
+    const modelLabel = label(formatOfficeModelName(model.model), {
+      size: 10,
+      color: 0xf0ece5,
+      anchor: { x: 0, y: 0.5 },
+    });
+    modelLabel.position.set(x + 12, rowY);
+    parent.addChild(modelLabel);
+    const tokenLabel = label(formatOfficeUsage(officeModelUsageTotal(model.usage)), {
+      size: 11,
+      color: 0xf1e9bd,
+      anchor: 0.5,
+    });
+    tokenLabel.position.set(tokenColumnX, rowY);
+    parent.addChild(tokenLabel);
+    const costLabel = label(formatOfficeCost(model.costUsd, model.costKind), {
+      size: 11,
+      color: 0xf1e9bd,
+      anchor: { x: 1, y: 0.5 },
+    });
+    costLabel.position.set(x + width - 12, rowY);
+    parent.addChild(costLabel);
+  });
+
+  board.rect(x + 10, y + height - 31, width - 20, 1).fill({ color: 0xd8e8c8, alpha: 0.2 });
+  const totalLabel = label("TOTAL", {
+    size: 10,
+    color: 0xa9c8a4,
+    anchor: { x: 0, y: 0.5 },
+    weight: "700",
+  });
+  totalLabel.position.set(x + 12, y + height - 20);
+  parent.addChild(totalLabel);
+  const totalTokens = label(formatOfficeUsage(observability.totalUsage), {
+    size: 12,
+    color: 0xf1e9bd,
+    anchor: 0.5,
+    weight: "700",
+  });
+  totalTokens.position.set(tokenColumnX, y + height - 20);
+  parent.addChild(totalTokens);
+  const totalCostKind = observability.models.some(({ costKind }) =>
+    costKind !== null && costKind !== "reported"
+  ) ? "estimated" as const : null;
+  const totalCost = label(formatOfficeCost(observability.totalCostUsd, totalCostKind), {
+    size: 12,
+    color: 0xf1e9bd,
+    anchor: { x: 1, y: 0.5 },
+    weight: "700",
+  });
+  totalCost.position.set(x + width - 12, y + height - 20);
+  parent.addChild(totalCost);
 }
 
 function drawReceptionDesk(
@@ -1736,6 +1875,7 @@ function label(
     size?: number;
     color?: number;
     anchor?: number | { x: number; y: number };
+    weight?: "600" | "700";
   } = {},
 ) {
   const text = new Text({
@@ -1744,7 +1884,7 @@ function label(
     style: new TextStyle({
       fontSize: options.size ?? 9,
       fill: options.color ?? 0xffffff,
-      fontWeight: "600",
+      fontWeight: options.weight ?? "600",
       fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
       dropShadow: { alpha: 0.24, distance: 1, color: 0x000000 },
     }),

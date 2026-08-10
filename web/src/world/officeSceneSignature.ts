@@ -1,17 +1,20 @@
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import type { OfficeLayout } from "./officeGeometry";
+import type { OfficeObservability } from "./officeObservability";
 
 export function officeSceneSignature({
   layout,
   projection,
   selectedKey,
   completionSeenKeys = new Set<string>(),
+  observability,
   visibleRoomIndices,
 }: {
   layout: OfficeLayout;
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
   completionSeenKeys?: ReadonlySet<string>;
+  observability?: OfficeObservability;
   visibleRoomIndices: readonly number[];
 }) {
   return JSON.stringify({
@@ -28,5 +31,15 @@ export function officeSceneSignature({
     receptions: projection.receptions,
     barAgents: projection.barAgents,
     coverage: projection.coverage,
+    observability: observability
+      ? {
+          health: observability.health,
+          observedAt: observability.observedAt,
+          windowSeconds: observability.windowSeconds,
+          models: observability.models,
+          totalCostUsd: observability.totalCostUsd,
+          totalUsage: observability.totalUsage,
+        }
+      : null,
   });
 }

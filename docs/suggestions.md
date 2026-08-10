@@ -116,15 +116,21 @@ of hidden requirements.
 
 ### SUG-004 — Multi-server bridge or connection coordinator
 
-- **Status:** parked
-- **Scope:** `bridge`, `herdr-web`, `packaging`
+- **Status:** candidate
+- **Scope:** `bridge`, `herdr-web`, `herdr-server`, `packaging`
 - **Value:** Make several Herdr servers feel like one usable Office deployment
-  without requiring users to manually manage multiple bridge processes.
-- **Idea:** Add a connector or gateway that uses operator-managed SSH, VPN, or
-  another approved transport to discover and maintain multiple qualified Herdr
-  runtimes.
-- **Dependencies:** Remote transport decision, identity qualification,
-  authentication, failure isolation, and a dedicated architecture spec.
+  without requiring users to manually understand bridge origins, tunnels, and
+  authentication boundaries.
+- **Idea:** Herdr Web already supports multiple independently qualified bridge
+  profiles and operator-managed SSH forwarding. Improve the onboarding and
+  packaging around that capability, and evaluate an authenticated connection
+  model or Herdr-provided auth when one exists. The browser should never manage
+  or persist SSH private keys; SSH, VPN, or an authenticated reverse proxy can
+  remain an operator responsibility unless an upstream contract provides a
+  safer supported alternative.
+- **Dependencies:** Herdr authentication capabilities, host identity and
+  discovery, secure transport choice, origin/CSP policy, failure isolation,
+  per-host permissions, and a dedicated architecture spec.
 - **Owner:** Open
 - **Added:** 2026-08-06
 - **Related:** [Federation guidance](federation.md)
@@ -418,6 +424,60 @@ of hidden requirements.
 - **Owner:** Open
 - **Added:** 2026-08-09
 - **Related:** [`003-office-completion-rendezvous-spec.md`](specs/003-office-completion-rendezvous-spec.md)
+
+### SUG-025 — Fluid unit-based Office rooms
+
+- **Status:** open
+- **Scope:** `office-view`
+- **Value:** Make room composition scale with the number of desks and chairs
+  instead of forcing every room into the same rigid footprint.
+- **Idea:** Define a standard room/tile unit, then compose two-chair, four-chair,
+  and larger rooms from those units. Preserve readable art, semantic hit areas,
+  connector anchors, and sensible minimum sizes; defer the work if fluid
+  geometry makes the scene materially harder to understand or maintain.
+- **Dependencies:** Scene layout model, stable anchor coordinates, connector
+  routing, room overflow rules, visual review, and later responsive-layout
+  decisions.
+- **Owner:** Open
+- **Added:** 2026-08-10
+
+### SUG-026 — Add-seat and new Herdr session action
+
+- **Status:** open
+- **Scope:** `office-view`, `herdr-web`, `bridge`
+- **Value:** Let a user create another interactive shell directly from the
+  Office instead of first leaving the visual workspace.
+- **Idea:** Add a clearly discoverable `+` action that requests a new Herdr
+  session or pane, creates a corresponding seat/desk when the runtime accepts
+  it, and opens the new terminal. The UI should report unsupported permissions
+  or unavailable session creation rather than displaying a seat that is not
+  backed by a real runtime session.
+- **Dependencies:** Bridge/session-creation protocol, Herdr permissions,
+  host/profile ownership, terminal-window limits, room allocation, lifecycle
+  reconciliation, and accessible action feedback.
+- **Owner:** Open
+- **Added:** 2026-08-10
+
+### SUG-027 — Restore open terminal windows after refresh
+
+- **Status:** open
+- **Scope:** `herdr-web`, `office-view`
+- **Value:** Prevent a browser refresh from losing the user's active terminal
+  workspace and forcing them to rediscover each session.
+- **Idea:** Persist only lightweight, browser-local window descriptors—such as
+  qualified host/profile, pane or session identity, geometry, and visibility—
+  then revalidate every descriptor against the bridge after reload. Restore
+  only sessions that are still reachable and authorized, and discard stale
+  descriptors cleanly. A short-lived `sessionStorage` model could cover tab
+  refreshes; durable `localStorage` or IndexedDB should be an explicit opt-in
+  if restoration across browser restarts is later wanted.
+- **Dependencies:** Stable qualified session identity, bridge revalidation,
+  multi-window lifecycle, close/expiry handling, clear/reset controls, and
+  privacy/security review. Do not persist terminal buffers, command content,
+  authentication tokens, or SSH private keys; cookies are not the right storage
+  mechanism for this UI state.
+- **Owner:** Open
+- **Added:** 2026-08-10
 
 ## Parked or declined
 

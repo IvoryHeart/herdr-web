@@ -22,6 +22,7 @@ import {
 import type { ConversationGeometry } from "./conversationGeometry";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
+import type { OfficeObservability } from "./officeObservability";
 import {
   officeAgentHandoffRequest,
   officeRoomHandoffRequest,
@@ -30,6 +31,7 @@ import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
 
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
+  observability: OfficeObservability;
   selectedKey: string | null;
   completionSeenKeys: ReadonlySet<string>;
   onSelect: (key: string | null) => void;
@@ -98,6 +100,14 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
     },
   },
   selectedKey: null,
+  observability: {
+    health: "unavailable",
+    observedAt: 0,
+    windowSeconds: null,
+    models: [],
+    totalCostUsd: null,
+    totalUsage: 0,
+  },
   completionSeenKeys: new Set(),
   onSelect: () => {},
   compact: false,
@@ -614,6 +624,7 @@ function WorldStage({
       >
         <PixelOfficeCanvas
           projection={projection}
+          observability={context.observability}
           selectedKey={context.selectedKey}
           completionSeenKeys={context.completionSeenKeys}
           conversationTargets={context.conversationBubbles.map((panel): OfficeConversationAnchorTarget => ({

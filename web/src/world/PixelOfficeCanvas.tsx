@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
+import type { OfficeObservability } from "./officeObservability";
 import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
@@ -28,6 +29,7 @@ export function PixelOfficeCanvas({
   projection,
   selectedKey,
   completionSeenKeys,
+  observability,
   conversationTargets,
   onSelect,
   onActivateAgent,
@@ -37,6 +39,7 @@ export function PixelOfficeCanvas({
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
   completionSeenKeys: ReadonlySet<string>;
+  observability: OfficeObservability;
   conversationTargets: readonly OfficeConversationAnchorTarget[];
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
@@ -49,6 +52,7 @@ export function PixelOfficeCanvas({
     projection,
     selectedKey,
     completionSeenKeys,
+    observability,
     conversationTargets,
     onSelect,
     onActivateAgent,
@@ -60,6 +64,7 @@ export function PixelOfficeCanvas({
     projection,
     selectedKey,
     completionSeenKeys,
+    observability,
     conversationTargets,
     onSelect,
     onActivateAgent,
@@ -158,6 +163,7 @@ export function PixelOfficeCanvas({
       latestRef.current.projection,
       latestRef.current.selectedKey,
       latestRef.current.completionSeenKeys,
+      latestRef.current.observability,
       (key) => latestRef.current.onSelect(key),
       (key) => latestRef.current.onActivateAgent(key),
       (key) => latestRef.current.onActivateRoom(key),
@@ -174,7 +180,12 @@ export function PixelOfficeCanvas({
           desks: latestRef.current.projection.deskRoster.length,
         });
         const latest = latestRef.current;
-        controller.update(latest.projection, latest.selectedKey, latest.completionSeenKeys);
+        controller.update(
+          latest.projection,
+          latest.selectedKey,
+          latest.completionSeenKeys,
+          latest.observability,
+        );
         window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
       .catch((error: unknown) => {
@@ -198,9 +209,9 @@ export function PixelOfficeCanvas({
   }, []);
 
   useEffect(() => {
-    controllerRef.current?.update(projection, selectedKey, completionSeenKeys);
+    controllerRef.current?.update(projection, selectedKey, completionSeenKeys, observability);
     window.requestAnimationFrame(() => reportAnchorsRef.current());
-  }, [completionSeenKeys, conversationTargets, projection, selectedKey]);
+  }, [completionSeenKeys, conversationTargets, observability, projection, selectedKey]);
 
   useEffect(() => {
     const host = hostRef.current;

@@ -380,6 +380,12 @@ test("inspects completed work from the shared sidebar and clears its unseen mark
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
     .toBe(0);
+
+  await page.reload();
+  await waitForOffice(page);
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
+    .toBe(0);
 });
 
 test("deduplicates terminal windows and stops at the five-window Office cap", async ({
