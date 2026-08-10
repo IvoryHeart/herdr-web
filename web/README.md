@@ -12,6 +12,16 @@ npm run test
 npm run build
 ```
 
+For a complete local Herdr Web run, use the repository root instead:
+
+```bash
+cd ..
+npm run dev:local
+```
+
+Open `http://127.0.0.1:8787` for the full app. The Vite URL printed by the command is the
+frontend hot-reload endpoint and proxies API/WebSocket traffic to the bridge.
+
 The production build is written to `web/dist/` and served by `herdr-web-bridge` through
 `scripts/run-bridge.sh`.
 

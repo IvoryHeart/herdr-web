@@ -222,6 +222,10 @@ of hidden requirements.
   defaults and per-device persistence.
 - **Dependencies:** Settings ownership model, packaging defaults, and mobile
   persistence decisions.
+- **Current refinement:** The first concrete candidate is an optional
+  Prometheus URL for the Office observability provider, with health feedback
+  and explicit bridge-boundary/security rules. See the draft
+  [`006-office-observability-settings-spec.md`](specs/006-office-observability-settings-spec.md).
 - **Owner:** Open
 - **Added:** 2026-08-06
 
