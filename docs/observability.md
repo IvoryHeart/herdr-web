@@ -87,9 +87,9 @@ they are not attributed to Herdr agents until an exact Herdr-to-telemetry
 correlation key is available. Backend URLs, credentials, raw labels, session
 IDs, and user identity fields never cross the bridge.
 
-Office renders these aggregates on a separate `OTEL · LAST 24H` board beside
-the CEO desk, with model, tokens, and cost columns. The live admitted-state
-board remains separate beside the reception desks.
+Office renders these aggregates on a separate `Usage` board beside the CEO
+desk, with model, tokens, and cost columns. The `Workforce` board remains
+separate beside the reception desks.
 
 ## Ownership and upstream PR seams
 

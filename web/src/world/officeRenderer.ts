@@ -808,7 +808,7 @@ function drawLiveStateBlackboard(
   board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
   parent.addChild(board);
 
-  const heading = label("LIVE ADMITTED STATE", {
+  const heading = label("WORKFORCE", {
     size: 10,
     color: 0xe2f1d1,
     anchor: 0.5,
@@ -870,7 +870,7 @@ function drawOtelCostBoard(
   board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
   parent.addChild(board);
 
-  const heading = label("OTEL · LAST 24H", {
+  const heading = label("USAGE", {
     size: 12,
     color: 0xe2f1d1,
     anchor: 0.5,

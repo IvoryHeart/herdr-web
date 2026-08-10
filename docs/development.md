@@ -61,7 +61,7 @@ Stop the foreground Vite process with `Ctrl-C`; a bridge started by
 | Herdr server/session | Yes | Owns workspaces, tabs, panes, agents, and terminals | `~/.config/herdr/herdr.sock` |
 | `herdr-web-bridge` | Yes | Converts browser HTTP/WebSocket traffic to Herdr protocol traffic | `http://127.0.0.1:8787` |
 | Vite frontend | Only for HMR | Serves current React/TypeScript source during development | `http://127.0.0.1:5173` or next free port |
-| OTEL/Prometheus stack | Optional | Supplies the Office `OTEL · LAST 24H` metrics board | Prometheus `http://127.0.0.1:9101` |
+| OTEL/Prometheus stack | Optional | Supplies the Office `Usage` metrics board | Prometheus `http://127.0.0.1:9101` |
 
 Herdr session data and the live Office roster do not depend on OTEL. If the
 telemetry stack is absent, the Office metrics board reports unavailable while
