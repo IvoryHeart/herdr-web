@@ -52,6 +52,26 @@ describe("command helpers", () => {
     ]);
   });
 
+  it("moves workspace blocks through the atomic Herdr command", async () => {
+    const requests: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ type: "ok" }), { status: 200 });
+    });
+
+    await commands.moveWorkspaceBlock(["space-root", "space-child"], "space-before");
+
+    expect(requests).toEqual([
+      {
+        method: "workspace.move_block",
+        params: {
+          workspace_ids: ["space-root", "space-child"],
+          before_workspace_id: "space-before",
+        },
+      },
+    ]);
+  });
+
   it("launches presets through the bridge-owned launch endpoint", async () => {
     const requests: unknown[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {

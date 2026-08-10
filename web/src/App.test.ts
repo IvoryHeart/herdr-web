@@ -1014,6 +1014,19 @@ describe("App multi-bridge helpers", () => {
     ]);
   });
 
+  it("offers contextual workspace moving only when the bridge supports it", () => {
+    expect(menuItems("space", false, true, false, false, "pane", false, true)).toEqual([
+      { key: "rename", label: "Rename" },
+      { key: "newtab", label: "New tab" },
+      { key: "reorder", label: "Move space" },
+      { key: "close", label: "Close space", danger: true },
+    ]);
+    expect(menuItems("space", false, true)).not.toContainEqual({
+      key: "reorder",
+      label: "Move space",
+    });
+  });
+
   it("requires a current note-capable pane before showing add-note", () => {
     const eligible = {
       kind: "pane" as const,

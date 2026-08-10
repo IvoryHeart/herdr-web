@@ -10,6 +10,13 @@ export type WorkspaceInfo = {
   active_tab_id: string;
   agent_status: AgentStatus;
   can_clear_name?: boolean;
+  worktree?: {
+    repo_key: string;
+    repo_name: string;
+    repo_root: string;
+    checkout_path: string;
+    is_linked_worktree: boolean;
+  };
 };
 
 export type TabInfo = {

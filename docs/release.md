@@ -134,7 +134,7 @@ npm run check:acceptance
 ```
 
 Repeat the startup, terminal attach, and launcher checks with an unpacked desktop tarball before
-uploading it. Confirm the bridge rejects protocol `16` and unreviewed protocols newer than `17`
+uploading it. Confirm the bridge rejects every protocol other than `19`
 instead of serving a partially compatible UI.
 
 ## Cut
