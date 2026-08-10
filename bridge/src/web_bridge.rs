@@ -59,6 +59,7 @@ use crate::observability::{
     ObservabilityContractVersion, ObservabilityDescriptor, ObservabilityHealth, ObservabilityState,
     ObservabilityTransportMessage,
 };
+use crate::observability_prometheus::{PrometheusConfig, PrometheusObservabilityProvider};
 
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8787;
@@ -972,6 +973,25 @@ Use --launcher-presets PATH or HERDR_WEB_LAUNCHER_PRESETS to load custom launch 
 Uploads default to HERDR_WEB_UPLOAD_DIR, XDG_DATA_HOME/herdr-web/uploads, or ~/.local/share/herdr-web/uploads."
 }
 
+fn observability_state_from_environment() -> ObservabilityState {
+    match PrometheusConfig::from_env() {
+        Ok(Some(config)) => {
+            info!(
+                provider = "prometheus.otel",
+                window_seconds = config.window_seconds,
+                refresh_seconds = config.refresh_seconds,
+                "Prometheus observability provider enabled"
+            );
+            ObservabilityState::with_provider(PrometheusObservabilityProvider::start(config))
+        }
+        Ok(None) => ObservabilityState::unavailable(),
+        Err(error) => {
+            warn!(error = %error, "Prometheus observability provider configuration rejected");
+            ObservabilityState::unavailable()
+        }
+    }
+}
+
 async fn run_server(options: BridgeOptions) -> io::Result<()> {
     if !is_loopback_bind_host(&options.host) {
         warn!(
@@ -1019,7 +1039,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         agent_pins,
         launcher_presets,
         notes,
-        observability: ObservabilityState::unavailable(),
+        observability: observability_state_from_environment(),
         ui_event_tx: tokio::sync::broadcast::channel(256).0,
         activity_tx: tokio::sync::broadcast::channel(512).0,
         upload_dir: options.upload_dir.clone(),

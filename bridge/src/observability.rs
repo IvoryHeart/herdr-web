@@ -532,7 +532,7 @@ fn validate_safe_id(value: &str, field: &str) -> Result<(), ObservabilityValidat
     Ok(())
 }
 
-fn now_millis() -> u64 {
+pub(crate) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)

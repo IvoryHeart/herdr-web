@@ -9,8 +9,9 @@ Herdr Web rendering, and any particular telemetry backend.
 ```text
 contracts/observability/       schema, versioning, fixtures, compatibility rules
 bridge/src/observability.rs    downstream provider seam and browser transport
+bridge/src/observability_prometheus.rs optional existing-sink adapter
 web/src/observability.ts       browser types, validation, and transport client
-office-view                    future presentation consumer
+web/src/world/officeObservability.ts provider-neutral Office projection data
 ```
 
 The bridge owns access control, provider capability admission, bounded
@@ -40,5 +41,6 @@ resync notice and must request a fresh snapshot.
 
 The default provider is an explicit `unavailable` provider. This keeps normal
 Herdr Web operation independent from observability and gives a downstream
-adapter or a later Herdr Server provider a stable seam without adding backend
-credentials or OTEL dependencies to this repository.
+adapter or a later Herdr Server provider a stable seam. The current optional
+Prometheus adapter is configured separately and never exposes its backend
+credentials or connection details to the browser.

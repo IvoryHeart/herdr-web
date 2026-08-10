@@ -22,6 +22,7 @@ import {
 import type { ConversationGeometry } from "./conversationGeometry";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
+import type { OfficeObservability } from "./officeObservability";
 import {
   officeAgentHandoffRequest,
   officeRoomHandoffRequest,
@@ -30,6 +31,7 @@ import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
 
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
+  observability: OfficeObservability;
   selectedKey: string | null;
   completionSeenKeys: ReadonlySet<string>;
   onSelect: (key: string | null) => void;
@@ -98,6 +100,14 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
     },
   },
   selectedKey: null,
+  observability: {
+    health: "unavailable",
+    observedAt: 0,
+    windowSeconds: null,
+    models: [],
+    totalCostUsd: null,
+    totalUsage: 0,
+  },
   completionSeenKeys: new Set(),
   onSelect: () => {},
   compact: false,
@@ -164,6 +174,7 @@ function WorldStage({
   } | null>(null);
   const [conversationOrder, setConversationOrder] = useState<string[]>([]);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
+  const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
     id: string;
     mode: "moving" | "resizing";
@@ -175,6 +186,23 @@ function WorldStage({
 
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
+
+  useEffect(() => () => {
+    if (conversationGeometryFrameRef.current !== null) {
+      window.cancelAnimationFrame(conversationGeometryFrameRef.current);
+      conversationGeometryFrameRef.current = null;
+    }
+  }, []);
+
+  const scheduleConversationGeometryRender = () => {
+    if (conversationGeometryFrameRef.current !== null) {
+      return;
+    }
+    conversationGeometryFrameRef.current = window.requestAnimationFrame(() => {
+      conversationGeometryFrameRef.current = null;
+      setConversationGeometry({ ...conversationGeometryRef.current });
+    });
+  };
 
   const updateConversationGeometry = (id: string, next: ConversationGeometry) => {
     const shell = shellRef.current;
@@ -193,7 +221,7 @@ function WorldStage({
       return;
     }
     conversationGeometryRef.current = { ...conversationGeometryRef.current, [id]: geometry };
-    setConversationGeometry(conversationGeometryRef.current);
+    scheduleConversationGeometryRender();
   };
 
   const measuredConversationGeometry = (id: string) => {
@@ -456,7 +484,9 @@ function WorldStage({
       return;
     }
     const shell = shellRef.current;
-    focusConversation(id);
+    if (conversationOrder[conversationOrder.length - 1] !== id) {
+      focusConversation(id);
+    }
     const geometry = conversationGeometryRef.current[id] ?? measuredConversationGeometry(id);
     if (!shell || !geometry) {
       return;
@@ -614,6 +644,7 @@ function WorldStage({
       >
         <PixelOfficeCanvas
           projection={projection}
+          observability={context.observability}
           selectedKey={context.selectedKey}
           completionSeenKeys={context.completionSeenKeys}
           conversationTargets={context.conversationBubbles.map((panel): OfficeConversationAnchorTarget => ({

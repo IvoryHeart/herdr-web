@@ -49,8 +49,11 @@ describe("Pixel Office geometry", () => {
     expect(officeWidth).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minOfficeWidth);
     expect(receptions).toHaveLength(6);
     expect(blocks.ceoX).toBe(OFFICE_GEOMETRY.ceoEdgePadding);
-    expect(blocks.boardX).toBe(
+    expect(blocks.otelBoardX).toBe(
       blocks.ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
+    );
+    expect(blocks.boardX).toBe(
+      blocks.otelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blocks.blockGap,
     );
     expect(receptions[0].x).toBe(
       blocks.boardX + OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,

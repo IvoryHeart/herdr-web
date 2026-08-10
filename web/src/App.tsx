@@ -169,8 +169,17 @@ import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
 import type { OfficeAgent } from "./world/herdrOfficeProjection";
 import { WorldConversationBubble } from "./world/WorldConversationBubble";
+import {
+  readWorldCompletionSeenKeys,
+  writeWorldCompletionSeenKeys,
+} from "./world/completionSeenState";
 import type { WorldConversationBubblePanel } from "./world/WorldSurface";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
+import {
+  EMPTY_OFFICE_OBSERVABILITY,
+  fetchOfficeObservability,
+} from "./world/officeObservability";
+import type { OfficeObservability } from "./world/officeObservability";
 import {
   DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
   DEFAULT_TERMINAL_INPUT_TRANSPORT,
@@ -1083,7 +1092,10 @@ export function App() {
   );
   const [worldSelectedKey, setWorldSelectedKey] = useState<string | null>(null);
   const [worldCompletionSeenKeys, setWorldCompletionSeenKeys] = useState<Set<string>>(
-    () => new Set(),
+    () => readWorldCompletionSeenKeys(),
+  );
+  const [worldObservability, setWorldObservability] = useState<OfficeObservability>(
+    EMPTY_OFFICE_OBSERVABILITY,
   );
   const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>([]);
   const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
@@ -1101,7 +1113,9 @@ export function App() {
       if (current.has(agentKey)) {
         return current;
       }
-      return new Set(current).add(agentKey);
+      const next = new Set(current).add(agentKey);
+      writeWorldCompletionSeenKeys(next);
+      return next;
     });
   };
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -1396,24 +1410,31 @@ export function App() {
       : worldSources,
     [hostScope, selectedBridgeId, worldSources],
   );
+  useEffect(() => {
+    if (activeSurface.id !== "world") {
+      return;
+    }
+    let disposed = false;
+    const refresh = async () => {
+      const next = await fetchOfficeObservability(bridge.enabledRuntimes).catch(() => ({
+        ...EMPTY_OFFICE_OBSERVABILITY,
+        health: "degraded" as const,
+      }));
+      if (!disposed) {
+        setWorldObservability(next);
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [activeSurface.id, bridge.enabledRuntimes]);
   const worldProjection = useMemo(
     () => projectHerdrOffice(worldSourcesInScope, Date.now()),
     [worldSourcesInScope],
   );
-  useEffect(() => {
-    const activeCompletionKeys = new Set(
-      worldProjection.roster
-        .filter(({ agent }) => agent.semanticStatus === "done")
-        .map(({ agent }) => agent.key),
-    );
-    setWorldCompletionSeenKeys((current) => {
-      const next = new Set([...current].filter((key) => activeCompletionKeys.has(key)));
-      if (next.size === current.size) {
-        return current;
-      }
-      return next;
-    });
-  }, [worldProjection]);
   useEffect(() => {
     officeDebug("world:projection", {
       hosts: worldProjection.hosts.length,
@@ -4568,6 +4589,7 @@ export function App() {
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
+    observability: worldObservability,
     selectedKey: worldSelectedKey,
     completionSeenKeys: worldCompletionSeenKeys,
     onSelect: selectWorldKey,

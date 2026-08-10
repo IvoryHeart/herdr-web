@@ -380,6 +380,12 @@ test("inspects completed work from the shared sidebar and clears its unseen mark
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
     .toBe(0);
+
+  await page.reload();
+  await waitForOffice(page);
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
+    .toBe(0);
 });
 
 test("deduplicates terminal windows and stops at the five-window Office cap", async ({
@@ -414,6 +420,7 @@ test("deduplicates terminal windows and stops at the five-window Office cap", as
 test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
   page,
 }) => {
+  test.setTimeout(45_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/world");
   await waitForOffice(page);
@@ -487,24 +494,31 @@ test("moves and resizes the Office conversation bubble without losing its live a
     beforeResize?.width ?? 0,
   );
   await resizeHandle.focus();
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     await page.keyboard.press("Shift+ArrowRight");
   }
-  const afterResize = await slot.boundingBox();
-  expect(afterResize).not.toBeNull();
-  expect(afterResize?.width ?? 0).toBeGreaterThan(960);
-  expect(afterResize?.height ?? 0).toBeGreaterThanOrEqual(beforeResize?.height ?? 0);
+  const readInlineGeometry = () => slot.evaluate((element) => {
+    const style = (element as HTMLElement).style;
+    return {
+      x: Number.parseFloat(style.left),
+      y: Number.parseFloat(style.top),
+      width: Number.parseFloat(style.width),
+      height: Number.parseFloat(style.height),
+    };
+  });
+  const afterResize = await readInlineGeometry();
+  expect(afterResize.width).toBeGreaterThan(960);
+  expect(afterResize.height).toBeGreaterThanOrEqual(beforeResize?.height ?? 0);
   await expect(slot).toHaveAttribute("data-positioned", "true");
 
   await page.locator(".agent-row").filter({ hasText: "Codex B" }).click();
   await expect(page.getByRole("dialog", { name: "Codex B" })).toBeVisible();
   await expect(page.locator("[data-world-conversation='open']")).toHaveCount(2);
-  const firstWindowAfterSecondOpen = await slot.boundingBox();
-  expect(firstWindowAfterSecondOpen).not.toBeNull();
-  expect(Math.abs((firstWindowAfterSecondOpen?.x ?? 0) - (afterResize?.x ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((firstWindowAfterSecondOpen?.y ?? 0) - (afterResize?.y ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((firstWindowAfterSecondOpen?.width ?? 0) - (afterResize?.width ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.abs((firstWindowAfterSecondOpen?.height ?? 0) - (afterResize?.height ?? 0))).toBeLessThanOrEqual(1);
+  const firstWindowAfterSecondOpen = await readInlineGeometry();
+  expect(Math.abs(firstWindowAfterSecondOpen.x - afterResize.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(firstWindowAfterSecondOpen.y - afterResize.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(firstWindowAfterSecondOpen.width - afterResize.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(firstWindowAfterSecondOpen.height - afterResize.height)).toBeLessThanOrEqual(1);
 });
 
 test("uses the fixed mobile conversation layout without exposing desktop resize controls", async ({

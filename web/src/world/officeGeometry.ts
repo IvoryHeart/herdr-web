@@ -4,6 +4,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   ceoEdgePadding: 28,
   ceoDeskWidth: 160,
   ceoBoardWidth: 204,
+  ceoOtelBoardWidth: 204,
   ceoBoardY: 48,
   ceoBoardHeight: 154,
   ceoBlockGap: 44,
@@ -47,6 +48,7 @@ export type OfficeReceptionRect = {
 export type OfficeCeoBlockLayout = {
   ceoX: number;
   boardX: number;
+  otelBoardX: number;
   blockGap: number;
   receptions: OfficeReceptionRect[];
 };
@@ -168,8 +170,9 @@ export function minimumOfficeWidthForReceptions(receptionCount: number) {
     OFFICE_GEOMETRY.ceoEdgePadding * 2 +
       OFFICE_GEOMETRY.ceoDeskWidth +
       OFFICE_GEOMETRY.ceoBoardWidth +
+      OFFICE_GEOMETRY.ceoOtelBoardWidth +
       count * OFFICE_GEOMETRY.receptionStationMinWidth +
-      (count + 1) * OFFICE_GEOMETRY.ceoBlockGap,
+      (count + 2) * OFFICE_GEOMETRY.ceoBlockGap,
   );
 }
 
@@ -180,14 +183,16 @@ export function resolveCeoBlockLayout(
   const count = boundedCount(receptionCount, OFFICE_GEOMETRY.maxReceptionDesks);
   const fixedWidth = OFFICE_GEOMETRY.ceoDeskWidth +
     OFFICE_GEOMETRY.ceoBoardWidth +
+    OFFICE_GEOMETRY.ceoOtelBoardWidth +
     count * OFFICE_GEOMETRY.receptionStationMinWidth;
-  const gapCount = count + 1;
+  const gapCount = count + 2;
   const blockGap = Math.max(
     OFFICE_GEOMETRY.ceoBlockGap,
     (officeWidth - OFFICE_GEOMETRY.ceoEdgePadding * 2 - fixedWidth) / gapCount,
   );
   const ceoX = OFFICE_GEOMETRY.ceoEdgePadding;
-  const boardX = ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blockGap;
+  const otelBoardX = ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blockGap;
+  const boardX = otelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blockGap;
   const receptionStartX = boardX + OFFICE_GEOMETRY.ceoBoardWidth + blockGap;
   const availableReceptionWidth = Math.max(
     0,
@@ -207,7 +212,7 @@ export function resolveCeoBlockLayout(
     height: 160,
     gapBefore: blockGap,
   }));
-  return { ceoX, boardX, blockGap, receptions };
+  return { ceoX, boardX, otelBoardX, blockGap, receptions };
 }
 
 export function resolveReceptionLayout(

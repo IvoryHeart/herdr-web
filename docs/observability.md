@@ -1,8 +1,8 @@
 # Herdr observability extension boundary
 
 Spec 002 establishes a downstream, upstreamable contract for optional
-observability data. It does not add an OTEL client, backend credentials, or an
-Office board yet.
+observability data. The first downstream provider now reads the existing local
+Prometheus sink; Office rendering remains a separate consumer slice.
 
 ## Current implementation
 
@@ -12,6 +12,8 @@ The repository now contains:
   v1 schema and provider fixtures;
 - `bridge/src/observability.rs`, the bounded provider trait, unavailable default
   provider, snapshot response, event sequencing, and resync boundary; and
+- `bridge/src/observability_prometheus.rs`, the optional Prometheus read adapter
+  for model, usage, and cost metrics; and
 - `web/src/observability.ts`, the browser validator and transport client.
 
 The bridge exposes the descriptor and snapshot at:
@@ -28,6 +30,67 @@ observability backend. A provider failure becomes `degraded` with an empty
 bounded snapshot rather than a page-level failure. Event gaps produce a
 resync message; consumers recover by requesting a fresh snapshot.
 
+## Local Prometheus provider
+
+Enable the first provider by setting the bridge environment variable to the
+existing Prometheus HTTP API. The current local ai-observability stack exposes
+that API on port `9101`:
+
+```bash
+HERDR_WORLD_OTEL_PROMETHEUS_URL=http://127.0.0.1:9101 \
+  scripts/run-bridge.sh
+```
+
+Optional settings are:
+
+- `HERDR_WORLD_OTEL_PROMETHEUS_WINDOW_SECONDS` — usage window, defaulting to
+  24 hours and bounded to 60 seconds–30 days;
+- `HERDR_WORLD_OTEL_PROMETHEUS_REFRESH_SECONDS` — polling interval, defaulting
+  to 30 seconds; and
+- `HERDR_WORLD_OTEL_PROMETHEUS_MAX_MODELS` — model-row bound, defaulting to
+  128.
+
+OpenAI/Codex usage metrics do not currently include provider-emitted USD in
+this sink. The bridge therefore applies a built-in, versioned standard API
+rate card and marks those rows as estimates. To replace the defaults for a
+deployment, provide a JSON object through
+`HERDR_WORLD_OTEL_OPENAI_PRICING_JSON`:
+
+```json
+{
+  "version": "my-openai-rate-card-2026-08-10",
+  "fallback_model": "gpt-5.6-sol",
+  "models": {
+    "gpt-5.6-luna": {
+      "input": 0.2,
+      "cached_input": 0.02,
+      "cache_write": 0.25,
+      "output": 1.2
+    }
+  }
+}
+```
+
+Rates are USD per one million tokens. The estimate uses uncached input,
+cached input, cache writes, and output; reasoning output is retained as a
+telemetry breakdown and is not added a second time. Unknown model names use
+the configured fallback row and are marked `~` on the Office board. These are
+API-equivalent estimates, not invoice, subscription, credit, or usage-limit
+figures. The built-in defaults are based on the [official OpenAI API pricing
+page](https://developers.openai.com/api/docs/pricing) and should be reviewed
+when that pricing changes.
+
+The adapter uses the existing sink and does not create a second export path.
+It reports Claude usage and cost counters and Codex usage by model and usage
+category. Results are aggregated by provider/model for the configured source;
+they are not attributed to Herdr agents until an exact Herdr-to-telemetry
+correlation key is available. Backend URLs, credentials, raw labels, session
+IDs, and user identity fields never cross the bridge.
+
+Office renders these aggregates on a separate `OTEL · LAST 24H` board beside
+the CEO desk, with model, tokens, and cost columns. The live admitted-state
+board remains separate beside the reception desks.
+
 ## Ownership and upstream PR seams
 
 ```text
@@ -38,13 +101,12 @@ Office/World projection → presentation and navigation
 distribution            → version pinning and component assembly
 ```
 
-The first upstream-oriented contribution should be the contract and fixtures,
-reviewable without OTEL or Herdr Server changes. A separate Herdr Web bridge
-proposal can then carry the generic extension transport. A Herdr Server
-proposal, if accepted later, should adapt server-owned topology and events to
-the same contract without importing Office code. A provider adapter remains a
-separate contribution because its deployment, credentials, backend, and
-signal support are independent decisions.
+The first upstream-oriented contribution was the contract and fixtures,
+reviewable without OTEL or Herdr Server changes. The Prometheus adapter is a
+downstream contribution because its deployment, query API, retention, and
+signal support belong to the existing sink. A Herdr
+Server proposal, if accepted later, can provide equivalent data through the
+same contract without importing Office code.
 
 ## Security boundary
 

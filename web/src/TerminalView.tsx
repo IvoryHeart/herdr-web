@@ -507,6 +507,8 @@ export function TerminalView({
     let disposeInput: (() => void) | null = null;
     let disposeScroll: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let resizeFrame: number | null = null;
+    let lastMeasuredHostSize = { width: host.clientWidth, height: host.clientHeight };
     const generation = rendererGenerationRef.current + 1;
     rendererGenerationRef.current = generation;
     const renderer: TerminalRenderer = new GhosttyRenderer(
@@ -578,10 +580,27 @@ export function TerminalView({
         });
 
         resizeObserver = new ResizeObserver(() => {
-          publishReady();
-          if (socketRef.current?.readyState !== WebSocket.OPEN) {
-            requestReconnectRef.current("resize");
+          if (resizeFrame !== null) {
+            return;
           }
+          resizeFrame = window.requestAnimationFrame(() => {
+            resizeFrame = null;
+            if (disposed) {
+              return;
+            }
+            const nextSize = { width: host.clientWidth, height: host.clientHeight };
+            if (
+              nextSize.width === lastMeasuredHostSize.width &&
+              nextSize.height === lastMeasuredHostSize.height
+            ) {
+              return;
+            }
+            lastMeasuredHostSize = nextSize;
+            publishReady();
+            if (socketRef.current?.readyState !== WebSocket.OPEN) {
+              requestReconnectRef.current("resize");
+            }
+          });
         });
         resizeObserver.observe(host);
 
@@ -612,6 +631,10 @@ export function TerminalView({
       disposeInput?.();
       disposeScroll?.();
       resizeObserver?.disconnect();
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
       if (rendererReadyRef.current?.generation === generation) {
         rendererReadyRef.current = null;
         setRendererReady(null);
