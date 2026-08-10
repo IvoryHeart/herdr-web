@@ -484,7 +484,9 @@ function WorldStage({
       return;
     }
     const shell = shellRef.current;
-    focusConversation(id);
+    if (conversationOrder[conversationOrder.length - 1] !== id) {
+      focusConversation(id);
+    }
     const geometry = conversationGeometryRef.current[id] ?? measuredConversationGeometry(id);
     if (!shell || !geometry) {
       return;

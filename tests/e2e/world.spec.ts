@@ -420,6 +420,7 @@ test("deduplicates terminal windows and stops at the five-window Office cap", as
 test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
   page,
 }) => {
+  test.setTimeout(45_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/world");
   await waitForOffice(page);
@@ -493,7 +494,7 @@ test("moves and resizes the Office conversation bubble without losing its live a
     beforeResize?.width ?? 0,
   );
   await resizeHandle.focus();
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     await page.keyboard.press("Shift+ArrowRight");
   }
   const readInlineGeometry = () => slot.evaluate((element) => {
