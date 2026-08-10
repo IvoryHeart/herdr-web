@@ -174,6 +174,7 @@ function WorldStage({
   } | null>(null);
   const [conversationOrder, setConversationOrder] = useState<string[]>([]);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
+  const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
     id: string;
     mode: "moving" | "resizing";
@@ -185,6 +186,23 @@ function WorldStage({
 
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
+
+  useEffect(() => () => {
+    if (conversationGeometryFrameRef.current !== null) {
+      window.cancelAnimationFrame(conversationGeometryFrameRef.current);
+      conversationGeometryFrameRef.current = null;
+    }
+  }, []);
+
+  const scheduleConversationGeometryRender = () => {
+    if (conversationGeometryFrameRef.current !== null) {
+      return;
+    }
+    conversationGeometryFrameRef.current = window.requestAnimationFrame(() => {
+      conversationGeometryFrameRef.current = null;
+      setConversationGeometry({ ...conversationGeometryRef.current });
+    });
+  };
 
   const updateConversationGeometry = (id: string, next: ConversationGeometry) => {
     const shell = shellRef.current;
@@ -203,7 +221,7 @@ function WorldStage({
       return;
     }
     conversationGeometryRef.current = { ...conversationGeometryRef.current, [id]: geometry };
-    setConversationGeometry(conversationGeometryRef.current);
+    scheduleConversationGeometryRender();
   };
 
   const measuredConversationGeometry = (id: string) => {
