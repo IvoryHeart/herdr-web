@@ -1,0 +1,14 @@
+# Implementation summary — Herdr observability extension contract
+
+- **Parent spec:** [`002-herdr-observability-extension-contract-spec.md`](002-herdr-observability-extension-contract-spec.md)
+- **Implemented at:** 2026-08-10
+- **Implementation status:** Complete
+
+### 2026-08-10 — Delivered implementation
+
+- **Implemented:** Added the language-neutral v1 observability contract under [`contracts/observability`](../../contracts/observability), including the versioned schema, descriptor, health and capability model, qualified Herdr targets, bounded snapshot/event envelopes, truncation metadata, and compatibility fixtures. Added matching Rust bridge types and validation/provider seams in [`bridge/src/observability.rs`](../../bridge/src/observability.rs), with an explicit unavailable default provider and resync-required event recovery. Added the optional bridge capability and routes for descriptor, snapshot, and WebSocket events in [`bridge/src/web_bridge.rs`](../../bridge/src/web_bridge.rs). Added browser-side TypeScript parsing, validation, fetch helpers, and contract tests in [`web/src/observability.ts`](../../web/src/observability.ts). Documented package ownership and the upstream boundaries in [`docs/observability.md`](../observability.md) and [`docs/architecture.md`](../architecture.md).
+- **Security boundary:** Provider payloads are bounded by depth, collection, string, and total-size limits. Sensitive credential-like fields are rejected. The browser receives only admitted contract data and no provider credentials, backend tokens, connection strings, or SSH keys. The bridge remains the only web transport boundary.
+- **Evidence:** Focused observability tests passed: 7 web tests and 9 Rust tests. Full local validation passed: `npm run check` (314 web tests, 112 compatibility tests, 140 bridge tests, lint, and both builds), `npm run test:security`, `npm run test:independence`, JSON schema/fixture parsing, and `git diff --check`. The full Playwright suite passed on the standard `4173` fixture range: 37 passed and 2 intentionally skipped in 3 minutes. The previously timing-sensitive live conversation test passed. The live World server on `8787` was not changed.
+- **Constraints / operational notes:** The default provider is explicitly unavailable until a downstream OTEL/provider implementation is added. No OTEL backend connection, Office visualization, Herdr Server modification, multi-server aggregation, official plugin protocol, or settings UI was added. The browser event transport retains live events only; a reconnect or sequence gap receives a resync signal and must request a fresh snapshot.
+- **Drift from approved spec:** None.
+- **Follow-up extension:** Implement a provider adapter and Office presentation only through a later approved extension. The approved spec’s deferred decisions remain deferred.

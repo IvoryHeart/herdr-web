@@ -14,6 +14,10 @@ import { fetchWithTimeout } from "./fetchWithTimeout";
 import { normalizeHostProfileId, normalizeHostProfileLabel } from "./hostProfile";
 import { addNativeResumeHandler } from "./native";
 import { officeDebug } from "./officeDebug";
+import {
+  parseObservabilityCapability,
+  type BridgeObservabilityCapability,
+} from "./observability";
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
 
@@ -72,6 +76,7 @@ export type BridgeCapabilities = {
   };
   web_compat?: number;
   min_android_app_compat?: number;
+  observability?: BridgeObservabilityCapability;
 };
 
 export type CapabilityState =
@@ -1205,7 +1210,21 @@ export function parseCapabilities(value: unknown): BridgeCapabilities {
       isRecord(value.launcher_presets) && value.launcher_presets.version === 1
         ? { version: 1 }
         : undefined,
+    ...(value.observability === undefined
+      ? {}
+      : { observability: parseOptionalObservabilityCapability(value.observability) }),
   };
+}
+
+function parseOptionalObservabilityCapability(value: unknown): BridgeObservabilityCapability | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  try {
+    return parseObservabilityCapability(value);
+  } catch {
+    throw new CapabilityContractError("Bridge observability capability is malformed");
+  }
 }
 
 function compatibilityError(capabilities: BridgeCapabilities) {

@@ -50,6 +50,12 @@ agent lifecycle, process state, and terminal byte streams. The bridge owns only 
 the documented bridge-local notes/pins/activity/selection features, request policy, and shared
 fanout of one Herdr terminal attach to multiple admitted browser clients.
 
+Optional extension data follows a separate contract boundary. The observability contract and
+provider seam are downstream source boundaries, while the bridge mediates bounded descriptor,
+snapshot, and event transport to the browser. The Office/World projection is an optional consumer;
+core Herdr topology and terminal operation do not require an observability provider. The browser
+never connects directly to a provider backend or receives its credentials.
+
 ## Security boundary
 
 This increment is trusted-single-user software. An admitted browser has terminal-equivalent control.
