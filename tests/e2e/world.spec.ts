@@ -133,7 +133,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     activeApplications: 1,
     activeTickers: 1,
     activeObservers: 1,
-    activeListeners: 3,
+    activeListeners: 5,
     canvases: 1,
     ready: true,
   });
@@ -304,6 +304,52 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   });
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(0);
+});
+
+test("shows Office callouts and targets a new seat to the hovered room", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await waitForLiveOffice(page);
+
+  const officeWidth = await page.evaluate(
+    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
+  );
+  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 2, standingCount: 0 }]);
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  const firstDesk = deskAnchor(layout.rooms[0], 0);
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + firstDesk.x,
+    (canvasBox?.y ?? 0) + firstDesk.nameY + 25,
+  );
+  await expect(page.getByRole("tooltip")).toContainText("Codex A");
+  await expect(page.getByRole("tooltip")).toContainText("Running");
+
+  const nextSeat = deskAnchor(layout.rooms[0], 1);
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + nextSeat.x,
+    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
+  );
+  await expect(page.getByRole("tooltip")).toContainText("main");
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + nextSeat.x,
+    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
+  );
+  await expect(page.locator("form.launch-modal")).toBeVisible();
+  await page.locator("form.launch-modal").getByRole("button", { name: "Create", exact: true }).click();
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].launches;
+  }).toEqual([{
+    preset_id: "shell",
+    title: "Shell",
+    target: { mode: "tab", workspace_id: "main" },
+  }]);
 });
 
 test("keeps the live connector visible when the selected agent moves to the Agent Bar", async ({
@@ -606,9 +652,17 @@ test("opens the attached terminal when an occupied desk is selected", async ({
     ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
   ]);
   const desk = deskAnchor(layout.rooms[0], 0);
-  await page.locator("canvas[data-office-canvas='true']").click({
-    position: { x: desk.x, y: desk.deskY + 12 },
-  });
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
@@ -634,9 +688,13 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
     ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
   ]);
   const desk = deskAnchor(layout.rooms[0], 7);
-  await page.locator("canvas[data-office-canvas='true']").click({
-    position: { x: desk.x, y: desk.deskY + 12 },
-  });
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();

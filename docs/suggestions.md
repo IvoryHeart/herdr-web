@@ -371,7 +371,7 @@ of hidden requirements.
 
 ### SUG-022 — Contextual agent and desk hover callouts
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`, `herdr-web`, `observability`
 - **Value:** Let users understand what an agent or desk represents without
   opening a terminal or leaving the Office view.
@@ -387,6 +387,7 @@ of hidden requirements.
   movable Office terminals.
 - **Owner:** Open
 - **Added:** 2026-08-09
+- **Related:** [`007-office-ux-and-seat-actions-spec.md`](specs/007-office-ux-and-seat-actions-spec.md)
 
 ### SUG-023 — Harness-reported task summaries
 
@@ -447,7 +448,7 @@ of hidden requirements.
 
 ### SUG-026 — Add-seat and new Herdr session action
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`, `herdr-web`, `bridge`
 - **Value:** Let a user create another interactive shell directly from the
   Office instead of first leaving the visual workspace.
@@ -461,6 +462,7 @@ of hidden requirements.
   reconciliation, and accessible action feedback.
 - **Owner:** Open
 - **Added:** 2026-08-10
+- **Related:** [`007-office-ux-and-seat-actions-spec.md`](specs/007-office-ux-and-seat-actions-spec.md)
 
 ### SUG-027 — Restore open terminal windows after refresh
 

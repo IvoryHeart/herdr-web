@@ -4,6 +4,7 @@ import {
   Application,
   CanvasSource,
   Container,
+  FederatedPointerEvent,
   Graphics,
   Sprite,
   Text,
@@ -150,6 +151,12 @@ export type OfficeRendererAnchor = {
   y: number;
 };
 
+export type OfficeCanvasHover = {
+  key: string;
+  clientX: number;
+  clientY: number;
+};
+
 export type OfficeRendererAnchors = {
   agent: OfficeRendererAnchor | null;
   workbench: OfficeRendererAnchor | null;
@@ -164,6 +171,9 @@ export async function createOfficeRenderer(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
+  canCreateSeat: (roomKey: string) => boolean,
+  onNewSeat: (roomKey: string) => void,
+  onHover: (hover: OfficeCanvasHover | null) => void,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -255,6 +265,24 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
+  const hover = (event: FederatedPointerEvent) => {
+    let target: Container | null = event.target;
+    while (target && !target.label) {
+      target = target.parent;
+    }
+    if (!target?.label) {
+      onHover(null);
+      return;
+    }
+    onHover({
+      key: target.label,
+      clientX: event.nativeEvent.clientX,
+      clientY: event.nativeEvent.clientY,
+    });
+  };
+  const leave = () => onHover(null);
+  app.stage.on("pointermove", hover);
+  app.canvas.addEventListener("pointerleave", leave);
   const onCanvasDoubleClick = (event: MouseEvent) => {
     const prior = canvasActivationCandidates.get(select);
     if (!prior) {
@@ -272,7 +300,7 @@ export async function createOfficeRenderer(
     }
   };
   app.canvas.addEventListener("dblclick", onCanvasDoubleClick);
-  diagnostics.activeListeners += 1;
+  diagnostics.activeListeners += 3;
 
   const renderScene = (layout: OfficeLayout) => {
     if (disposed) {
@@ -338,6 +366,8 @@ export async function createOfficeRenderer(
           select,
           activateAgent,
           activateRoom,
+          canCreateSeat,
+          onNewSeat,
         );
       }
     });
@@ -396,7 +426,9 @@ export async function createOfficeRenderer(
     const layout = resolveOfficeLayout(
       width,
       currentProjection.rooms.map((room) => ({
-        deskCount: room.desks.length,
+        deskCount: room.desks.length + (
+          canCreateSeat(room.key) && room.desks.length < OFFICE_GEOMETRY.desksPerRoom ? 1 : 0
+        ),
         standingCount: room.roomAgents.filter(({ placement }) => placement === "standing").length,
       })),
     );
@@ -487,6 +519,8 @@ export async function createOfficeRenderer(
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
+    app.stage.off("pointermove", hover);
+    app.canvas.removeEventListener("pointerleave", leave);
     app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
     pointerSequences.delete(select);
     canvasActivationCandidates.delete(select);
@@ -498,7 +532,7 @@ export async function createOfficeRenderer(
     diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
     diagnostics.activeListeners = Math.max(
       0,
-      diagnostics.activeListeners - (scrollElement ? 3 : 2),
+      diagnostics.activeListeners - (scrollElement ? 5 : 4),
     );
     throw error;
   }
@@ -538,6 +572,8 @@ export async function createOfficeRenderer(
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
+      app.stage.off("pointermove", hover);
+      app.canvas.removeEventListener("pointerleave", leave);
       app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
       pointerSequences.delete(select);
       canvasActivationCandidates.delete(select);
@@ -555,7 +591,7 @@ export async function createOfficeRenderer(
       diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
       diagnostics.activeListeners = Math.max(
         0,
-        diagnostics.activeListeners - (scrollElement ? 3 : 2),
+        diagnostics.activeListeners - (scrollElement ? 5 : 4),
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
@@ -1204,6 +1240,8 @@ function drawRoom(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
+  canCreateSeat: (roomKey: string) => boolean,
+  onNewSeat: (roomKey: string) => void,
 ) {
   const host = projection.hosts.find(({ key }) => key === room.hostKey);
   if (!host) {
@@ -1273,6 +1311,9 @@ function drawRoom(
         onActivateAgent,
       );
     });
+  if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom && canCreateSeat(room.key)) {
+    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onSelect, onNewSeat);
+  }
 
   const overflow: string[] = [];
   if (room.omittedDeskCount > 0) {
@@ -1297,6 +1338,39 @@ function drawRoom(
     parent.addChild(stale);
   }
   stage.addChild(parent);
+}
+
+function drawNewSeatAction(
+  parent: Container,
+  room: OfficeRoom,
+  rect: OfficeRoomRect,
+  index: number,
+  accent: number,
+  onSelect: (key: string) => void,
+  onNewSeat: (roomKey: string) => void,
+) {
+  const anchor = deskAnchor(rect, index);
+  const action = new Container();
+  action.label = room.key;
+  action.eventMode = "static";
+  action.cursor = "pointer";
+  action.on("pointertap", (event) => {
+    event.stopPropagation();
+    onSelect(room.key);
+    onNewSeat(room.key);
+  });
+  const plate = new Graphics();
+  plate.roundRect(anchor.x - 25, anchor.deskY, 50, 27, 5)
+    .fill({ color: accent, alpha: 0.1 })
+    .stroke({ width: 1, color: accent, alpha: 0.8 });
+  action.addChild(plate);
+  const plus = label("+", { size: 19, color: 0xf4e6c0, anchor: 0.5, weight: "700" });
+  plus.position.set(anchor.x, anchor.deskY + 13);
+  action.addChild(plus);
+  const hint = label("NEW SEAT", { size: 7, color: 0xa9c8a4, anchor: 0.5 });
+  hint.position.set(anchor.x, anchor.nameY + 7);
+  action.addChild(hint);
+  parent.addChild(action);
 }
 
 function drawTabDesk(
@@ -1753,6 +1827,7 @@ function drawDesk(
   if (working) {
     const glow = new Graphics();
     glow.roundRect(x + 16, y + 12, 17, 8, 1).fill({ color: 0xc9fff4, alpha: 0.18 });
+    glow.eventMode = "none";
     parent.addChild(glow);
     animated.push({ kind: "monitor", node: glow, baseAlpha: 0.18, phase: animated.length * 7 });
   }
@@ -1829,6 +1904,7 @@ function makeInteractive(
   onSelect: (key: string) => void,
   onActivate?: (key: string) => void,
 ) {
+  node.label = key;
   node.eventMode = "static";
   node.cursor = "pointer";
   node.on("pointertap", (event) => {

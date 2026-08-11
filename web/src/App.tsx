@@ -175,7 +175,6 @@ import {
   writeWorldCompletionSeenKeys,
 } from "./world/completionSeenState";
 import type { WorldConversationBubblePanel } from "./world/WorldSurface";
-import { officeSeatAvailability } from "./world/officeSelection";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
 import {
   EMPTY_OFFICE_OBSERVABILITY,
@@ -4715,29 +4714,61 @@ export function App() {
   );
   const WorldSurface =
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
-  const worldNewSeatAvailability = officeSeatAvailability(
-    Boolean(selectedRuntime),
-    Boolean(activeSpace),
-    createTabSupported,
-  );
-  const worldNewSeatSupported = worldNewSeatAvailability.supported;
-  const openNewWorldSeat = () => {
-    if (!selectedRuntime) {
+  const canCreateWorldSeat = (roomKey: string) => {
+    const room = worldProjection.rooms.find(({ key }) => key === roomKey);
+    if (!room) {
+      return false;
+    }
+    const runtime = bridge.getRuntime(room.hostKey);
+    const state = runtime ? connectionStates[runtime.id] : null;
+    return Boolean(
+      runtimeFeatureReady(
+        runtime,
+        state,
+        "launcher_presets",
+        activeSurface.requiredCapabilities,
+      ) &&
+      supportsLauncherPresets(runtime?.capabilities) &&
+      runtimeCommandReady(
+        runtime,
+        state,
+        "tab.create",
+        activeSurface.requiredCapabilities,
+      ),
+    );
+  };
+  const openNewWorldSeat = (roomKey?: string) => {
+    const room = roomKey
+      ? worldProjection.rooms.find(({ key }) => key === roomKey)
+      : null;
+    const bridgeId = room?.hostKey ?? selectedRuntime?.id;
+    const workspaceId = room?.workspaceRef.nativeTargetId ?? activeSpace?.workspace_id ?? null;
+    if (!bridgeId) {
       setWorldHandoffStatus("Select a connected workspace before starting a seat.");
       return;
     }
-    if (!activeSpace) {
+    const runtime = bridge.getRuntime(bridgeId);
+    if (!runtime) {
+      setWorldHandoffStatus("Select a connected workspace before starting a seat.");
+      return;
+    }
+    if (!workspaceId) {
       setWorldHandoffStatus("No active workspace is available on this host.");
       return;
     }
-    if (!createTabSupported) {
+    if (roomKey ? !canCreateWorldSeat(roomKey) : !createTabSupported) {
       setWorldHandoffStatus("New seats are unavailable on this host.");
       return;
     }
+    setSelectedBridgeId(bridgeId);
+    setActiveWorkspaceRefState({ bridgeId, workspaceId });
+    setActiveWorkspacesByBridgeId((current) =>
+      current[bridgeId] === workspaceId ? current : { ...current, [bridgeId]: workspaceId },
+    );
     setLaunchTarget({
       mode: "tab",
-      workspaceId: activeSpace.workspace_id,
-      bridgeId: selectedRuntime.id,
+      workspaceId,
+      bridgeId,
     });
   };
   const worldSurfaceContext: WorldSurfaceContext = {
@@ -4755,7 +4786,7 @@ export function App() {
     onCloseConversation: closeWorldConversation,
     onFocusConversation: focusWorldConversation,
     agentActivityTransitions,
-    newSeatSupported: worldNewSeatSupported,
+    canCreateSeat: canCreateWorldSeat,
     onNewSeat: openNewWorldSeat,
   };
   const worldStage = WorldSurface ? (

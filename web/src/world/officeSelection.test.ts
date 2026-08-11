@@ -3,6 +3,7 @@ import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import {
   findOfficeSelection,
   formatOfficeActivityAge,
+  officeCalloutForKey,
   officeSeatAvailability,
 } from "./officeSelection";
 
@@ -128,5 +129,23 @@ describe("Office selection", () => {
       supported: true,
       reason: null,
     });
+  });
+
+  it("resolves bounded hover callouts from authoritative projection data", () => {
+    const current = projection();
+
+    expect(officeCalloutForKey(current, "host-a")).toEqual({
+      kind: "host",
+      title: "Office A",
+      detail: "compatible · live Office state",
+      status: null,
+    });
+    expect(officeCalloutForKey(current, "host-a:workspace:room-a")).toEqual({
+      kind: "room",
+      title: "Room A",
+      detail: "0 desks · 0 agents · Office A",
+      status: null,
+    });
+    expect(officeCalloutForKey(current, "missing")).toBeNull();
   });
 });

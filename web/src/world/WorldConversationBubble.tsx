@@ -103,6 +103,7 @@ export function WorldConversationBubble({
           <span
             className="world-conversation-context"
             aria-label="Agent state and activity"
+            data-status={agent.stale ? "stale" : agent.semanticStatus}
           >
             {agent.stale ? "stale" : agent.semanticStatus}
             {" · "}

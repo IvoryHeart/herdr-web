@@ -1,3 +1,4 @@
+import type { AgentStatus } from "../types";
 import type {
   HerdrOfficeProjection,
   OfficeAgent,
@@ -6,6 +7,13 @@ import type {
   OfficeRoomRosterEntry,
   OfficeRosterEntry,
 } from "./herdrOfficeProjection";
+
+export type OfficeCallout = {
+  kind: "agent" | "desk" | "room" | "host";
+  title: string;
+  detail: string;
+  status: AgentStatus | "stale" | null;
+};
 
 export type OfficeSelection =
   | {
@@ -43,6 +51,58 @@ export function officeSeatAvailability(
     return { supported: false, reason: "capability" as const };
   }
   return { supported: true, reason: null as OfficeSeatAvailabilityReason };
+}
+
+export function officeCalloutForKey(
+  projection: HerdrOfficeProjection,
+  key: string,
+): OfficeCallout | null {
+  const agentEntry = projection.roster.find(({ agent }) => agent.key === key);
+  if (agentEntry) {
+    const { agent } = agentEntry;
+    return {
+      kind: "agent",
+      title: agent.displayLabel,
+      detail: `${agent.stale ? "stale" : agent.stateLabels[agent.semanticStatus] ?? agent.semanticStatus} · ${agentEntry.roomLabel} · ${agentEntry.hostLabel}`,
+      status: agent.stale ? "stale" : agent.semanticStatus,
+    };
+  }
+
+  const deskEntry = projection.deskRoster.find(({ desk }) => desk.key === key);
+  if (deskEntry) {
+    const occupant = deskEntry.desk.occupantAgentKey
+      ? projection.roster.find(({ agent }) => agent.key === deskEntry.desk.occupantAgentKey)?.agent
+      : null;
+    return {
+      kind: "desk",
+      title: deskEntry.desk.displayLabel,
+      detail: `${occupant ? `${occupant.displayLabel} · ${occupant.stale ? "stale" : occupant.semanticStatus}` : "empty desk"} · ${deskEntry.roomLabel} · ${deskEntry.hostLabel}`,
+      status: deskEntry.desk.stale ? "stale" : occupant?.semanticStatus ?? null,
+    };
+  }
+
+  const room = projection.roomRoster.find((entry) => entry.key === key);
+  if (room) {
+    const roomProjection = projection.rooms.find((entry) => entry.key === key);
+    return {
+      kind: "room",
+      title: room.displayLabel,
+      detail: `${room.stale ? "stale" : `${roomProjection?.desks.length ?? 0} desks · ${roomProjection?.roomAgents.length ?? 0} agents`} · ${room.hostLabel}`,
+      status: room.stale ? "stale" : null,
+    };
+  }
+
+  const host = projection.hosts.find((entry) => entry.key === key);
+  if (host) {
+    return {
+      kind: "host",
+      title: host.displayLabel,
+      detail: `${host.connectionState} · ${host.observed ? "live Office state" : "not observed"}`,
+      status: host.stale ? "stale" : null,
+    };
+  }
+
+  return null;
 }
 
 export function findOfficeSelection(

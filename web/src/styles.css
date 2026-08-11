@@ -951,6 +951,41 @@ button {
   color: var(--red);
 }
 
+.world-canvas-callout {
+  position: absolute;
+  z-index: 12;
+  display: grid;
+  max-width: min(260px, calc(100% - 24px));
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line));
+  border-radius: var(--r-sm);
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  color: var(--subtext0);
+  background: color-mix(in srgb, var(--mantle) 94%, var(--accent));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 38%);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.world-canvas-callout strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.world-canvas-callout span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.world-canvas-callout[data-status="working"] { border-color: color-mix(in srgb, var(--st-working) 70%, var(--line)); }
+.world-canvas-callout[data-status="blocked"] { border-color: color-mix(in srgb, var(--st-blocked) 70%, var(--line)); }
+.world-canvas-callout[data-status="done"] { border-color: color-mix(in srgb, var(--st-done) 70%, var(--line)); }
+.world-canvas-callout[data-status="stale"] { border-color: color-mix(in srgb, var(--red) 70%, var(--line)); }
+
 .world-stage-scroll {
   position: relative;
   min-width: 0;
@@ -1087,6 +1122,13 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.world-conversation-context[data-status="working"] { color: var(--st-working); }
+.world-conversation-context[data-status="idle"] { color: var(--overlay1); }
+.world-conversation-context[data-status="blocked"] { color: var(--st-blocked); }
+.world-conversation-context[data-status="done"] { color: var(--st-done); }
+.world-conversation-context[data-status="stale"] { color: var(--red); }
+.world-conversation-context[data-status="unknown"] { color: var(--st-unknown); }
 
 .world-conversation-terminal {
   display: flex;

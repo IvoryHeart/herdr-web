@@ -3,7 +3,6 @@ import {
   ArrowDownToLine,
   ChevronLeft,
   PanelLeft,
-  Plus,
   RotateCcw,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -13,6 +12,7 @@ import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   OfficeConversationAnchors,
   OfficeConversationAnchorTarget,
+  OfficeCanvasHover,
 } from "./PixelOfficeCanvas";
 import {
   clampConversationGeometry,
@@ -23,6 +23,8 @@ import {
 import type { ConversationGeometry } from "./conversationGeometry";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
+import { officeCalloutForKey } from "./officeSelection";
+import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
 import {
   officeAgentHandoffRequest,
@@ -45,8 +47,8 @@ export type WorldSurfaceContext = {
   onCloseConversation: (id: string) => void;
   onFocusConversation: (id: string) => void;
   agentActivityTransitions: ReadonlyMap<string, number>;
-  newSeatSupported: boolean;
-  onNewSeat: () => void;
+  canCreateSeat: (roomKey: string) => boolean;
+  onNewSeat: (roomKey?: string) => void;
 };
 
 export type WorldConversationBubblePanel = {
@@ -123,7 +125,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onCloseConversation: () => {},
   onFocusConversation: () => {},
   agentActivityTransitions: new Map(),
-  newSeatSupported: false,
+  canCreateSeat: () => false,
   onNewSeat: () => {},
 };
 
@@ -180,6 +182,7 @@ function WorldStage({
     mode: "moving" | "resizing";
   } | null>(null);
   const [conversationOrder, setConversationOrder] = useState<string[]>([]);
+  const [canvasHover, setCanvasHover] = useState<(OfficeCanvasHover & { left: number; top: number }) | null>(null);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
   const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
@@ -192,6 +195,27 @@ function WorldStage({
   } | null>(null);
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
+  const selectedRoomKey = projection.rooms.find(({ key }) => key === context.selectedKey)?.key ??
+    projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
+    projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
+    null;
+
+  const onCanvasHover = (hover: OfficeCanvasHover | null) => {
+    if (!hover) {
+      setCanvasHover(null);
+      return;
+    }
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+    const shellRect = shell.getBoundingClientRect();
+    setCanvasHover({
+      ...hover,
+      left: hover.clientX - shellRect.left,
+      top: hover.clientY - shellRect.top,
+    });
+  };
 
   useEffect(() => () => {
     if (conversationGeometryFrameRef.current !== null) {
@@ -640,11 +664,9 @@ function WorldStage({
         <button
           className="world-new-seat btn"
           type="button"
-          disabled={!context.newSeatSupported}
-          title={context.newSeatSupported ? "Start a new Herdr-backed seat" : "New seats are unavailable on this host"}
-          onClick={context.onNewSeat}
+          title={selectedRoomKey ? "Start a new Herdr-backed seat in the selected room" : "Start a new Herdr-backed seat"}
+          onClick={() => context.onNewSeat(selectedRoomKey ?? undefined)}
         >
-          <Plus size={15} aria-hidden="true" />
           <span>New seat</span>
         </button>
       </header>
@@ -681,9 +703,19 @@ function WorldStage({
           onSelect={context.onSelect}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
+          canCreateSeat={context.canCreateSeat}
+          onNewSeat={context.onNewSeat}
+          onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
         />
       </div>
+      {canvasHover ? (
+        <WorldCanvasCallout
+          callout={officeCalloutForKey(projection, canvasHover.key)}
+          left={canvasHover.left}
+          top={canvasHover.top}
+        />
+      ) : null}
       {connector}
       {context.conversationBubbles.map((panel) => {
         const geometry = conversationGeometry[panel.id];
@@ -735,6 +767,32 @@ function WorldStage({
   );
 }
 
+function WorldCanvasCallout({
+  callout,
+  left,
+  top,
+}: {
+  callout: OfficeCallout | null;
+  left: number;
+  top: number;
+}) {
+  if (!callout) {
+    return null;
+  }
+  return (
+    <div
+      className="world-canvas-callout"
+      data-kind={callout.kind}
+      data-status={callout.status ?? undefined}
+      style={{ left: `${left}px`, top: `${top}px` }}
+      role="tooltip"
+    >
+      <strong>{callout.title}</strong>
+      <span>{callout.detail}</span>
+    </div>
+  );
+}
+
 function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
   if (!value || typeof value !== "object") {
     return false;
@@ -745,6 +803,7 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
+    typeof record.canCreateSeat === "function" &&
     typeof record.onNewSeat === "function" &&
     Boolean(record.projection)
   );
