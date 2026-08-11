@@ -32,6 +32,7 @@ export function PixelOfficeCanvas({
   observability,
   conversationTargets,
   onSelect,
+  onHover,
   onActivateAgent,
   onActivateRoom,
   onAnchorChange,
@@ -42,6 +43,7 @@ export function PixelOfficeCanvas({
   observability: OfficeObservability;
   conversationTargets: readonly OfficeConversationAnchorTarget[];
   onSelect: (key: string) => void;
+  onHover?: (key: string | null) => void;
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
@@ -55,6 +57,7 @@ export function PixelOfficeCanvas({
     observability,
     conversationTargets,
     onSelect,
+    onHover,
     onActivateAgent,
     onActivateRoom,
     onAnchorChange,
@@ -67,6 +70,7 @@ export function PixelOfficeCanvas({
     observability,
     conversationTargets,
     onSelect,
+    onHover,
     onActivateAgent,
     onActivateRoom,
     onAnchorChange,
@@ -167,6 +171,7 @@ export function PixelOfficeCanvas({
       (key) => latestRef.current.onSelect(key),
       (key) => latestRef.current.onActivateAgent(key),
       (key) => latestRef.current.onActivateRoom(key),
+      (key) => latestRef.current.onHover?.(key),
     )
       .then((controller) => {
         if (disposed) {
@@ -241,6 +246,7 @@ export function PixelOfficeCanvas({
         className="world-canvas-host"
         data-renderer={failure ? "unavailable" : "pixi"}
         hidden={failure}
+        onPointerLeave={() => latestRef.current.onHover?.(null)}
       />
     </div>
   );

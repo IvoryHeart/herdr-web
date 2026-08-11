@@ -507,6 +507,7 @@ export function TerminalView({
     let disposeInput: (() => void) | null = null;
     let disposeScroll: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let resizeTimer: number | null = null;
     let resizeFrame: number | null = null;
     let lastMeasuredHostSize = { width: host.clientWidth, height: host.clientHeight };
     const generation = rendererGenerationRef.current + 1;
@@ -579,29 +580,36 @@ export function TerminalView({
           );
         });
 
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeFrame !== null) {
+        const flushResize = () => {
+          resizeFrame = null;
+          if (disposed) {
             return;
           }
-          resizeFrame = window.requestAnimationFrame(() => {
-            resizeFrame = null;
-            if (disposed) {
-              return;
+          const nextSize = { width: host.clientWidth, height: host.clientHeight };
+          if (
+            nextSize.width === lastMeasuredHostSize.width &&
+            nextSize.height === lastMeasuredHostSize.height
+          ) {
+            return;
+          }
+          lastMeasuredHostSize = nextSize;
+          publishReady();
+          if (socketRef.current?.readyState !== WebSocket.OPEN) {
+            requestReconnectRef.current("resize");
+          }
+        };
+        const scheduleResize = () => {
+          if (resizeTimer !== null) {
+            window.clearTimeout(resizeTimer);
+          }
+          resizeTimer = window.setTimeout(() => {
+            resizeTimer = null;
+            if (resizeFrame === null) {
+              resizeFrame = window.requestAnimationFrame(flushResize);
             }
-            const nextSize = { width: host.clientWidth, height: host.clientHeight };
-            if (
-              nextSize.width === lastMeasuredHostSize.width &&
-              nextSize.height === lastMeasuredHostSize.height
-            ) {
-              return;
-            }
-            lastMeasuredHostSize = nextSize;
-            publishReady();
-            if (socketRef.current?.readyState !== WebSocket.OPEN) {
-              requestReconnectRef.current("resize");
-            }
-          });
-        });
+          }, 50);
+        };
+        resizeObserver = new ResizeObserver(scheduleResize);
         resizeObserver.observe(host);
 
         const fontReady = document.fonts?.ready;
@@ -631,6 +639,10 @@ export function TerminalView({
       disposeInput?.();
       disposeScroll?.();
       resizeObserver?.disconnect();
+      if (resizeTimer !== null) {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = null;
+      }
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = null;

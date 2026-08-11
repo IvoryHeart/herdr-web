@@ -783,10 +783,20 @@ test("shows an accessible Office selection inspector and launches a real new sea
   await page.goto("/world");
   await waitForOffice(page);
 
-  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  const officeWidth = await page.evaluate(
+    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
+  );
+  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 1, standingCount: 0 }]);
+  const agent = deskAnchor(layout.rooms[0], 0);
+  await page.locator("canvas[data-office-canvas='true']").hover({
+    position: { x: agent.x, y: agent.characterFeetY - 34 },
+  });
   const selection = page.getByRole("region", { name: "Codex A" });
   await expect(selection).toBeVisible();
   await expect(selection).toContainText("Codex A");
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await expect(selection).toBeVisible();
   await expect(selection.getByRole("button", { name: "Open in Spaces" })).toBeEnabled();
   await expect(selection.getByRole("button", { name: "Clear Office selection" })).toBeVisible();
 

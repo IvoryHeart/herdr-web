@@ -881,6 +881,10 @@ button {
   border-top: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.world-stage-bar[data-selection="true"] .stage-id {
+  flex: 0 1 230px;
+}
+
 .world-stage-stat {
   display: inline-flex;
   height: 26px;
@@ -947,48 +951,6 @@ button {
   background: color-mix(in srgb, var(--accent) 18%, var(--surface0));
 }
 
-.world-selection-panel {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
-  z-index: 25;
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(150px, 0.75fr) minmax(0, 1.8fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 13px;
-  border-bottom: 1px solid var(--line);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  color: var(--subtext0);
-  background: color-mix(in srgb, var(--surface0) 78%, #080812);
-  box-shadow: 0 10px 24px rgb(0 0 0 / 0.28);
-}
-
-.world-selection-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.world-selection-heading > div {
-  min-width: 0;
-}
-
-.world-selection-heading strong {
-  display: block;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .world-selection-eyebrow {
   margin-bottom: 3px;
   color: var(--accent);
@@ -998,54 +960,84 @@ button {
   text-transform: uppercase;
 }
 
-.world-selection-details {
+.world-selection-titlebar {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  gap: 7px 16px;
-  margin: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  max-width: min(72%, 760px);
+  overflow: hidden;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
 }
 
-.world-selection-details > div {
+.world-selection-titlebar-label {
   display: flex;
-  min-width: 96px;
-  max-width: 240px;
+  min-width: 90px;
+  flex: 0 1 150px;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  overflow: hidden;
 }
 
-.world-selection-details dt {
+.world-selection-titlebar-label strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.world-selection-titlebar-details {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.world-selection-titlebar-details::-webkit-scrollbar {
+  display: none;
+}
+
+.world-selection-titlebar-details > div {
+  display: flex;
+  min-width: max-content;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.world-selection-titlebar-details dt {
   color: var(--subtext0);
   font-size: 8px;
   text-transform: uppercase;
 }
 
-.world-selection-details dd {
+.world-selection-titlebar-details dd {
   overflow: hidden;
   margin: 0;
   color: var(--subtext0);
-  font-size: 10px;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.world-selection-gap {
-  grid-column: 2 / 3;
-  margin: 0;
-  color: var(--yellow);
-  font-size: 9px;
-  line-height: 1.35;
-}
-
-.world-selection-actions {
+.world-selection-titlebar-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
-.world-selection-actions:empty {
-  display: none;
+.world-selection-titlebar-actions .world-handoff {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 9px;
 }
 
 .world-notice-stale {
@@ -4160,28 +4152,18 @@ button {
     font-size: 12px;
   }
 
-  .world-selection-panel {
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
-    grid-template-columns: 1fr auto;
-    gap: 9px 12px;
+  .world-selection-titlebar {
+    max-width: min(62%, 420px);
+    padding-left: 7px;
   }
 
-  .world-selection-details {
-    grid-column: 1 / -1;
-    order: 3;
+  .world-selection-titlebar-details {
+    display: none;
   }
 
-  .world-selection-gap {
-    grid-column: 1 / -1;
-    order: 4;
-  }
-
-  .world-selection-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    order: 5;
+  .world-selection-titlebar-label {
+    min-width: 0;
+    flex-basis: 120px;
   }
 
   .sidebar-resizer {

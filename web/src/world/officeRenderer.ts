@@ -70,6 +70,10 @@ const canvasActivationCandidates = new WeakMap<
     activate: (key: string) => void;
   }
 >();
+const hoverHandlers = new WeakMap<
+  (key: string) => void,
+  (key: string | null) => void
+>();
 
 const THEMES = Object.freeze([
   { floorA: 0x0c1620, floorB: 0x0a121c, wall: 0x1e3050, accent: 0x4aa3d8 },
@@ -165,6 +169,7 @@ export async function createOfficeRenderer(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
+  onHover?: (key: string | null) => void,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -256,6 +261,9 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
+  if (onHover) {
+    hoverHandlers.set(select, onHover);
+  }
   const onCanvasDoubleClick = (event: MouseEvent) => {
     const prior = canvasActivationCandidates.get(select);
     if (!prior) {
@@ -475,7 +483,10 @@ export async function createOfficeRenderer(
     if (resizeTimer !== null) {
       window.clearTimeout(resizeTimer);
     }
-    resizeTimer = window.setTimeout(() => build(nextWidth), 80);
+    resizeTimer = window.setTimeout(() => {
+      resizeTimer = null;
+      build(nextWidth);
+    }, 80);
   });
   observer.observe(element);
   diagnostics.activeObservers += 1;
@@ -488,6 +499,7 @@ export async function createOfficeRenderer(
     app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
     pointerSequences.delete(select);
     canvasActivationCandidates.delete(select);
+    hoverHandlers.delete(select);
     app.ticker.remove(ticker);
     app.destroy(true, { children: true });
     destroyTextures(textures);
@@ -539,6 +551,7 @@ export async function createOfficeRenderer(
       app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
       pointerSequences.delete(select);
       canvasActivationCandidates.delete(select);
+      hoverHandlers.delete(select);
       app.ticker.remove(ticker);
       app.destroy(true, { children: true });
       destroyTextures(textures);
@@ -870,7 +883,7 @@ function drawOtelCostBoard(
   board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
   parent.addChild(board);
 
-  const heading = label("USAGE", {
+  const heading = label("ECONOMY", {
     size: 12,
     color: 0xe2f1d1,
     anchor: 0.5,
@@ -887,13 +900,13 @@ function drawOtelCostBoard(
   modelHeader.position.set(x + 12, y + 26);
   parent.addChild(modelHeader);
   const tokenColumnX = x + 100;
-  const tokenIcon = new Graphics();
-  tokenIcon.roundRect(tokenColumnX - 8, y + 20, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.62 });
-  tokenIcon.roundRect(tokenColumnX - 8, y + 23, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.82 });
-  tokenIcon.roundRect(tokenColumnX - 8, y + 26, 16, 4, 1).fill(0xf1e9bd);
-  tokenIcon.rect(tokenColumnX - 5, y + 27, 2, 2).fill({ color: 0x8a6b3d, alpha: 0.8 });
-  parent.addChild(tokenIcon);
-  const costHeader = label("$", {
+  const coinIcon = new Graphics();
+  coinIcon.circle(tokenColumnX - 4, y + 25, 5).fill({ color: 0xd4b66c, alpha: 0.62 });
+  coinIcon.circle(tokenColumnX + 3, y + 24, 5).fill({ color: 0xd4b66c, alpha: 0.82 });
+  coinIcon.circle(tokenColumnX, y + 28, 5).fill(0xf1e9bd);
+  coinIcon.circle(tokenColumnX, y + 28, 2).fill({ color: 0x8a6b3d, alpha: 0.8 });
+  parent.addChild(coinIcon);
+  const costHeader = label("$$$", {
     size: 12,
     color: 0xa9c8a4,
     anchor: { x: 1, y: 0.5 },
@@ -1829,6 +1842,17 @@ function makeInteractive(
 ) {
   node.eventMode = "static";
   node.cursor = "pointer";
+  const onHover = hoverHandlers.get(onSelect);
+  if (onHover) {
+    node.on("pointerover", (event) => {
+      event.stopPropagation();
+      onHover(key);
+    });
+    node.on("pointerout", (event) => {
+      event.stopPropagation();
+      onHover(null);
+    });
+  }
   node.on("pointertap", (event) => {
     event.stopPropagation();
     officeDebug("renderer:pointertap", {

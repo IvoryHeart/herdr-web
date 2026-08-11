@@ -198,7 +198,38 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
-  const selection = findOfficeSelection(projection, context.selectedKey);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const selection = findOfficeSelection(projection, hoveredKey ?? context.selectedKey);
+  const hoverClearTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (hoverClearTimerRef.current !== null) {
+      window.clearTimeout(hoverClearTimerRef.current);
+    }
+  }, []);
+
+  const cancelHoverClear = () => {
+    if (hoverClearTimerRef.current !== null) {
+      window.clearTimeout(hoverClearTimerRef.current);
+      hoverClearTimerRef.current = null;
+    }
+  };
+  const handleHover = (key: string | null) => {
+    cancelHoverClear();
+    if (key !== null) {
+      setHoveredKey(key);
+      return;
+    }
+    hoverClearTimerRef.current = window.setTimeout(() => {
+      hoverClearTimerRef.current = null;
+      setHoveredKey(null);
+    }, 180);
+  };
+  const clearSelection = () => {
+    cancelHoverClear();
+    setHoveredKey(null);
+    context.onSelect(null);
+  };
 
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
@@ -600,7 +631,10 @@ function WorldStage({
 
   return (
     <div ref={shellRef} className="world-stage-shell">
-      <header className="stage-bar world-stage-bar">
+      <header
+        className="stage-bar world-stage-bar"
+        data-selection={selection ? "true" : undefined}
+      >
         <button
           className="icon-btn"
           type="button"
@@ -612,8 +646,23 @@ function WorldStage({
         </button>
         <div className="stage-id">
           <span className="stage-title">Pixel Office</span>
-          <span className="stage-sub">Shared Herdr state · live board in CEO Office</span>
+          <span className="stage-sub">
+            {selection
+              ? `Selected ${selection.kind} · ${selectionTitle(selection)} · ${selectionSummary(selection, context.agentActivityTransitions)}`
+              : "Shared Herdr state · live board in CEO Office"}
+          </span>
         </div>
+        {selection ? (
+          <WorldSelectionTitlebar
+            selection={selection}
+            activityTransitions={context.agentActivityTransitions}
+            onActivateAgent={onActivateAgent}
+            onActivateRoom={onActivateRoom}
+            onClear={clearSelection}
+            onHoverStart={cancelHoverClear}
+            onHoverEnd={() => handleHover(null)}
+          />
+        ) : null}
         <button
           className="icon-btn"
           type="button"
@@ -661,15 +710,6 @@ function WorldStage({
           <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
         ) : null}
       </div>
-      {selection ? (
-        <WorldSelectionPanel
-          selection={selection}
-          activityTransitions={context.agentActivityTransitions}
-          onActivateAgent={onActivateAgent}
-          onActivateRoom={onActivateRoom}
-          onClear={() => context.onSelect(null)}
-        />
-      ) : null}
       <div
         ref={scrollRef}
         className="world-stage-scroll"
@@ -688,6 +728,7 @@ function WorldStage({
             targetKey: panel.targetKey,
           }))}
           onSelect={context.onSelect}
+          onHover={handleHover}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
@@ -744,26 +785,59 @@ function WorldStage({
   );
 }
 
-function WorldSelectionPanel({
-  selection,
-  activityTransitions,
-  onActivateAgent,
-  onActivateRoom,
-  onClear,
-}: {
-  selection: OfficeSelection;
-  activityTransitions: ReadonlyMap<string, number>;
-  onActivateAgent: (key: string) => void;
-  onActivateRoom: (key: string) => void;
-  onClear: () => void;
-}) {
-  const title = selection.kind === "agent"
+function selectionTitle(selection: OfficeSelection) {
+  return selection.kind === "agent"
     ? selection.agent.displayLabel
     : selection.kind === "desk"
       ? selection.desk.desk.displayLabel
       : selection.kind === "room"
         ? selection.room.displayLabel
         : selection.host.displayLabel;
+}
+
+function selectionSummary(
+  selection: OfficeSelection,
+  activityTransitions: ReadonlyMap<string, number>,
+) {
+  if (selection.kind === "agent") {
+    const status = selection.agent.stale ? "stale" : selection.agent.semanticStatus;
+    const activity = formatOfficeActivityAge(
+      activityTransitions.get(
+        agentActivityKey(
+          selection.agent.hostKey,
+          selection.agent.currentPaneRef.nativeTargetId,
+          selection.agent.currentTerminalRef.nativeTargetId,
+        ),
+      ),
+    ) ?? "activity unavailable";
+    return `${status} · ${selection.entry.roomLabel} · ${activity}`;
+  }
+  if (selection.kind === "desk") {
+    return `${selection.desk.desk.occupantAgentKey ? "occupied" : "empty"} · ${selection.desk.hostLabel}`;
+  }
+  if (selection.kind === "room") {
+    return `${selection.room.stale ? "stale" : "live"} · ${selection.room.hostLabel}`;
+  }
+  return `${selection.host.connectionState} · ${selection.host.compatibleWithWorld ? "Office compatible" : "Office unavailable"}`;
+}
+
+function WorldSelectionTitlebar({
+  selection,
+  activityTransitions,
+  onActivateAgent,
+  onActivateRoom,
+  onClear,
+  onHoverStart,
+  onHoverEnd,
+}: {
+  selection: OfficeSelection;
+  activityTransitions: ReadonlyMap<string, number>;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
+  onClear: () => void;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+}) {
   const kindLabel = selection.kind === "agent"
     ? "Agent"
     : selection.kind === "desk"
@@ -773,23 +847,21 @@ function WorldSelectionPanel({
         : "Host";
 
   return (
-    <section className="world-selection-panel" aria-labelledby="world-selection-title">
-      <div className="world-selection-heading">
-        <div>
-          <div className="world-selection-eyebrow">Selected {kindLabel}</div>
-          <strong id="world-selection-title">{title}</strong>
-        </div>
-        <button
-          className="icon-btn"
-          type="button"
-          aria-label="Clear Office selection"
-          title="Clear selection"
-          onClick={onClear}
-        >
-          <X size={16} />
-        </button>
+    <section
+      className="world-selection-titlebar"
+      aria-label={selectionTitle(selection)}
+      onPointerEnter={onHoverStart}
+      onPointerLeave={onHoverEnd}
+    >
+      <div className="world-selection-titlebar-label">
+        <span className="world-selection-eyebrow">Selected {kindLabel}</span>
+        <strong>{selectionTitle(selection)}</strong>
       </div>
-      <dl className="world-selection-details">
+      <dl
+        className="world-selection-titlebar-details"
+        tabIndex={0}
+        aria-label="Selected context details"
+      >
         {selection.kind === "agent" ? (
           <>
             <SelectionDetail label="State">
@@ -813,6 +885,9 @@ function WorldSelectionPanel({
               <SelectionDetail label="Status label">
                 {selection.agent.stateLabels[selection.agent.semanticStatus]}
               </SelectionDetail>
+            ) : null}
+            {!selection.agent.canOpenInSpaces ? (
+              <SelectionDetail label="Handoff">Unavailable</SelectionDetail>
             ) : null}
           </>
         ) : selection.kind === "desk" ? (
@@ -847,16 +922,7 @@ function WorldSelectionPanel({
           </>
         )}
       </dl>
-      {selection.kind === "agent" && selection.agent.stale ? (
-        <p className="world-selection-gap">
-          This host is stale, so handoff is suppressed until the next admitted snapshot.
-        </p>
-      ) : selection.kind === "agent" && !selection.agent.canOpenInSpaces ? (
-        <p className="world-selection-gap">
-          Spaces handoff is unavailable for this current host connection.
-        </p>
-      ) : null}
-      <div className="world-selection-actions">
+      <div className="world-selection-titlebar-actions">
         {selection.kind === "agent" && selection.agent.canOpenInSpaces ? (
           <button className="world-handoff" type="button" onClick={() => onActivateAgent(selection.agent.key)}>
             <ExternalLink size={14} aria-hidden="true" />
@@ -875,6 +941,15 @@ function WorldSelectionPanel({
             Open in Spaces
           </button>
         ) : null}
+        <button
+          className="icon-btn"
+          type="button"
+          aria-label="Clear Office selection"
+          title="Clear selection"
+          onClick={onClear}
+        >
+          <X size={16} />
+        </button>
       </div>
     </section>
   );

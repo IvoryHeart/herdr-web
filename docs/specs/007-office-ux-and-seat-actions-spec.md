@@ -31,7 +31,7 @@ without leaving the Office view.
 ## 3. Non-goals
 
 - No Prometheus query, provider, or metrics-board changes. The existing
-  `Usage` board remains the metrics surface.
+  `Economy` board remains the metrics surface.
 - No generic extension registry or new upstream observability protocol.
 - No guessed task summaries from terminal text.
 - No visual-only or persisted fake desks/chairs.
