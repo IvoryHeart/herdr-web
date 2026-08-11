@@ -485,6 +485,10 @@ of hidden requirements.
   reconciliation, and accessible action feedback.
 - **Owner:** Open
 - **Added:** 2026-08-10
+- **Current slice:** The Office now exposes a capability-gated `New room` action
+  plus selected-room rename and close controls. These issue the native Herdr
+  workspace lifecycle commands and create real named workspaces; the Office
+  does not maintain a separate room model.
 - **Related:** [`007-office-ux-and-seat-actions-spec.md`](specs/007-office-ux-and-seat-actions-spec.md)
 
 ### SUG-027 — Restore open terminal windows after refresh

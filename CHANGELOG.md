@@ -20,6 +20,10 @@
 - Added short-lived Office terminal restoration across browser refreshes by
   persisting only qualified pane descriptors and revalidating them against an
   admitted snapshot.
+- Added a semantic CEO overview Agent Bar and capability-gated Office room
+  create, rename, and close actions backed by Herdr workspace lifecycle
+  commands. The former bottom canvas Agent Bar band no longer consumes scene
+  space.
 - Added a documented `npm run dev:local` workflow that checks the Herdr socket,
   reuses or starts the bridge, and launches the web client with the correct
   development proxy.
@@ -43,6 +47,9 @@
 - Added compact colour-coded Herdr host and Economy provider state to the
   Office notice, and made Office canvas hover resolution and in-room `+`
   actions use explicit canvas hit targets.
+- Moved the Agent Bar into the top CEO overview as a keyboard-accessible DOM
+  control rail, and kept room lifecycle actions disabled when the selected
+  host does not advertise the required Herdr commands.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

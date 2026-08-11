@@ -18,8 +18,6 @@ export const OFFICE_GEOMETRY = Object.freeze({
   deskHeight: 26,
   roomPadding: 16,
   tile: 20,
-  barBandHeight: 224,
-  barBandGap: 32,
   roomGap: 12,
   maxRooms: 128,
   desksPerRoom: 8,
@@ -76,7 +74,6 @@ export type OfficeLayout = {
   roomWidth: number;
   roomStartX: number;
   roomStartY: number;
-  barBandY: number;
   rooms: OfficeRoomRect[];
 };
 
@@ -175,8 +172,7 @@ export function resolveOfficeLayout(
   });
   const roomWidth = Math.max(0, ...rooms.map(({ width }) => width));
   const roomStartX = rooms.length > 0 ? Math.min(...rooms.map(({ x }) => x)) : 0;
-  const barBandY = nextY + OFFICE_GEOMETRY.barBandGap;
-  const totalHeight = barBandY + OFFICE_GEOMETRY.barBandHeight + 30;
+  const totalHeight = nextY + 30;
   return {
     officeWidth,
     totalHeight,
@@ -185,7 +181,6 @@ export function resolveOfficeLayout(
     roomWidth,
     roomStartX,
     roomStartY,
-    barBandY,
     rooms,
   };
 }

@@ -3,6 +3,7 @@ import {
   commands,
   createCommands,
   createdPaneId,
+  createdWorkspaceId,
 } from "./commands";
 
 describe("command helpers", () => {
@@ -17,6 +18,12 @@ describe("command helpers", () => {
     expect(createdPaneId({ agent: { pane_id: "agent" } })).toBe("agent");
     expect(createdPaneId({ move_result: { pane: { pane_id: "moved" } } })).toBe("moved");
     expect(createdPaneId({})).toBeNull();
+  });
+
+  it("finds created workspace ids from supported response shapes", () => {
+    expect(createdWorkspaceId({ workspace_id: "top" })).toBe("top");
+    expect(createdWorkspaceId({ workspace: { workspace_id: "nested" } })).toBe("nested");
+    expect(createdWorkspaceId({})).toBeNull();
   });
 
   it("uses injected bridge URLs for commands", async () => {

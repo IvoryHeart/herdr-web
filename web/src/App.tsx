@@ -66,7 +66,7 @@ import {
 import type { AgentPinsListResponse } from "./agentPins";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
 import type { BridgeId, BridgeRuntime, CapabilityState } from "./bridge";
-import { createCommands, createdPaneId } from "./commands";
+import { createCommands, createdPaneId, createdWorkspaceId } from "./commands";
 import type { LaunchSpec, PaneFocusDirection, SplitDirection } from "./commands";
 import { isConnectionResultCurrent } from "./connectionState";
 import {
@@ -154,7 +154,7 @@ import {
   isRuntimeGenerationCurrent,
 } from "./runtimeConnection";
 import type { BridgeConnectionState } from "./runtimeConnection";
-import { qualifyRuntimeTarget } from "./runtimeIdentity";
+import { qualifiedRuntimeKey, qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import type { TerminalSessionDescriptor } from "./terminalSessions";
@@ -566,12 +566,13 @@ type MenuState = {
   pinLabel?: "agent" | "pane";
 };
 type DialogState = {
-  mode: "rename" | "close";
+  mode: "rename" | "close" | "create";
   kind: MenuKind;
   bridgeId: BridgeId;
   id: string;
   label: string;
   clearable?: boolean;
+  noun?: "room";
 };
 type DisplayPrefs = {
   hostScope: HostScope;
@@ -4405,6 +4406,7 @@ export function App() {
     target: RuntimeCommandTarget,
     action: (commands: ReturnType<typeof createCommands>) => Promise<{ [key: string]: unknown }>,
     selectCreated = false,
+    onSuccess?: (result: { [key: string]: unknown }, snapshot: Snapshot) => void,
   ) {
     if (
       !runtime ||
@@ -4469,6 +4471,7 @@ export function App() {
           }
         }
       }
+      onSuccess?.(result, patched);
       setError(null);
       return true;
     } catch (caught) {
@@ -4626,6 +4629,37 @@ export function App() {
     void exec(runtime, { kind: kind === "space" ? "workspace" : kind, id, command }, action).then(
       (ok) => ok && setDialog(null),
     );
+  };
+
+  const submitCreateRoom = (value: string) => {
+    if (!dialog || dialog.mode !== "create") {
+      return;
+    }
+    const runtime = bridge.getRuntime(dialog.bridgeId);
+    if (!runtime) {
+      setError("Bridge is not ready");
+      return;
+    }
+    void exec(
+      runtime,
+      { kind: "workspace", id: "new", command: "workspace.create" },
+      (routedCommands) => routedCommands.createWorkspace(value),
+      false,
+      (result) => {
+        const workspaceId = createdWorkspaceId(result);
+        if (workspaceId) {
+          setSelectedBridgeId(runtime.id);
+          setWorldSelectedKey(
+            qualifiedRuntimeKey(qualifyRuntimeTarget(runtime.id, "workspace", workspaceId)),
+          );
+        }
+        setWorldHandoffStatus(`Room “${value}” created.`);
+      },
+    ).then((ok) => {
+      if (ok) {
+        setDialog(null);
+      }
+    });
   };
 
   const clearRename = () => {
@@ -5019,6 +5053,82 @@ export function App() {
       bridgeId,
     });
   };
+  const worldRoomForKey = (roomKey?: string) =>
+    roomKey ? worldProjection.rooms.find(({ key }) => key === roomKey) ?? null : null;
+  const worldRoomRuntime = (roomKey?: string) => {
+    const room = worldRoomForKey(roomKey);
+    return bridge.getRuntime(room?.hostKey ?? selectedRuntime?.id ?? "") ?? null;
+  };
+  const canCreateWorldRoom = (roomKey?: string) => {
+    const runtime = worldRoomRuntime(roomKey);
+    const state = runtime ? connectionStates[runtime.id] : null;
+    return Boolean(
+      runtimeCommandReady(
+        runtime,
+        state,
+        "workspace.create",
+        activeSurface.requiredCapabilities,
+      ),
+    );
+  };
+  const openNewWorldRoom = (roomKey?: string) => {
+    const runtime = worldRoomRuntime(roomKey);
+    if (!runtime || !canCreateWorldRoom(roomKey)) {
+      setWorldHandoffStatus("Room creation is unavailable on this host.");
+      return;
+    }
+    setSelectedBridgeId(runtime.id);
+    setDialog({
+      mode: "create",
+      kind: "space",
+      bridgeId: runtime.id,
+      id: "new",
+      label: "",
+      noun: "room",
+    });
+  };
+  const canManageWorldRoom = (roomKey: string, command: "workspace.rename" | "workspace.close") => {
+    const runtime = worldRoomRuntime(roomKey);
+    const state = runtime ? connectionStates[runtime.id] : null;
+    return Boolean(
+      runtimeCommandReady(
+        runtime,
+        state,
+        command,
+        activeSurface.requiredCapabilities,
+      ),
+    );
+  };
+  const openWorldRoomRename = (roomKey: string) => {
+    const room = worldRoomForKey(roomKey);
+    if (!room || !canManageWorldRoom(roomKey, "workspace.rename")) {
+      setWorldHandoffStatus("Room renaming is unavailable on this host.");
+      return;
+    }
+    setDialog({
+      mode: "rename",
+      kind: "space",
+      bridgeId: room.hostKey,
+      id: room.workspaceRef.nativeTargetId,
+      label: room.displayLabel,
+      noun: "room",
+    });
+  };
+  const openWorldRoomClose = (roomKey: string) => {
+    const room = worldRoomForKey(roomKey);
+    if (!room || !canManageWorldRoom(roomKey, "workspace.close")) {
+      setWorldHandoffStatus("Room closing is unavailable on this host.");
+      return;
+    }
+    setDialog({
+      mode: "close",
+      kind: "space",
+      bridgeId: room.hostKey,
+      id: room.workspaceRef.nativeTargetId,
+      label: room.displayLabel,
+      noun: "room",
+    });
+  };
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
     observability: worldObservability,
@@ -5036,6 +5146,12 @@ export function App() {
     agentActivityTransitions,
     canCreateSeat: canCreateWorldSeat,
     onNewSeat: openNewWorldSeat,
+    canCreateRoom: canCreateWorldRoom,
+    onCreateRoom: openNewWorldRoom,
+    canRenameRoom: (roomKey) => canManageWorldRoom(roomKey, "workspace.rename"),
+    onRenameRoom: openWorldRoomRename,
+    canCloseRoom: (roomKey) => canManageWorldRoom(roomKey, "workspace.close"),
+    onCloseRoom: openWorldRoomClose,
   };
   const worldStage = WorldSurface ? (
     <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>
@@ -5618,9 +5734,20 @@ export function App() {
         />
       ) : null}
 
+      {dialog?.mode === "create" ? (
+        <RenameDialog
+          title="Create room"
+          initial=""
+          placeholder="Room name"
+          busy={busy}
+          onCancel={() => setDialog(null)}
+          onSubmit={submitCreateRoom}
+        />
+      ) : null}
+
       {dialog?.mode === "rename" ? (
         <RenameDialog
-          title={`Rename ${dialog.kind}`}
+          title={`Rename ${dialog.noun ?? dialog.kind}`}
           initial={dialog.label}
           placeholder={dialog.label}
           busy={busy}
@@ -5632,9 +5759,9 @@ export function App() {
 
       {dialog?.mode === "close" ? (
         <ConfirmDialog
-          title={closeCopy(dialog.kind).title}
-          message={closeCopy(dialog.kind).message}
-          confirmLabel={closeCopy(dialog.kind).confirm}
+          title={closeCopy(dialog.kind, dialog.noun).title}
+          message={closeCopy(dialog.kind, dialog.noun).message}
+          confirmLabel={closeCopy(dialog.kind, dialog.noun).confirm}
           busy={busy}
           onCancel={() => setDialog(null)}
           onConfirm={confirmClose}
@@ -10552,13 +10679,15 @@ export function menuItems(
   return paneItems;
 }
 
-function closeCopy(kind: MenuKind) {
+function closeCopy(kind: MenuKind, noun?: "room") {
   switch (kind) {
     case "space":
       return {
-        title: "Close space?",
-        message: "This closes the space and every tab and pane inside it.",
-        confirm: "Close space",
+        title: noun === "room" ? "Close room?" : "Close space?",
+        message: noun === "room"
+          ? "This closes the Herdr workspace and every desk, tab, and pane inside it."
+          : "This closes the space and every tab and pane inside it.",
+        confirm: noun === "room" ? "Close room" : "Close space",
       };
     case "tab":
       return {

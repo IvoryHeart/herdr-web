@@ -1,9 +1,11 @@
 import {
   AlertTriangle,
-  ArrowDownToLine,
   ChevronLeft,
   PanelLeft,
+  Pencil,
+  Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -55,6 +57,12 @@ export type WorldSurfaceContext = {
   agentActivityTransitions: ReadonlyMap<string, number>;
   canCreateSeat: (roomKey: string) => boolean;
   onNewSeat: (roomKey?: string) => void;
+  canCreateRoom: (roomKey?: string) => boolean;
+  onCreateRoom: (roomKey?: string) => void;
+  canRenameRoom: (roomKey: string) => boolean;
+  onRenameRoom: (roomKey: string) => void;
+  canCloseRoom: (roomKey: string) => boolean;
+  onCloseRoom: (roomKey: string) => void;
 };
 
 export type WorldConversationBubblePanel = {
@@ -137,6 +145,12 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   agentActivityTransitions: new Map(),
   canCreateSeat: () => false,
   onNewSeat: () => {},
+  canCreateRoom: () => false,
+  onCreateRoom: () => {},
+  canRenameRoom: () => false,
+  onRenameRoom: () => {},
+  canCloseRoom: () => false,
+  onCloseRoom: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -239,6 +253,9 @@ function WorldStage({
     projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
     projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
     null;
+  const selectedRoom = selectedRoomKey
+    ? projection.roomRoster.find(({ key }) => key === selectedRoomKey) ?? null
+    : null;
 
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
@@ -769,20 +786,6 @@ function WorldStage({
         <button
           className="icon-btn"
           type="button"
-          aria-label="Scroll to Agent Bar"
-          title="Agent Bar"
-          onClick={() => scrollRef.current?.scrollTo({
-            top: scrollRef.current.scrollHeight,
-            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-              ? "auto"
-              : "smooth",
-          })}
-        >
-          <ArrowDownToLine size={17} />
-        </button>
-        <button
-          className="icon-btn"
-          type="button"
           aria-label="Reset office view"
           title="Reset view"
           onClick={() => scrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })}
@@ -797,7 +800,49 @@ function WorldStage({
         >
           <span>New seat</span>
         </button>
+        <button
+          className="world-new-room btn"
+          type="button"
+          aria-label="New room"
+          title="Create a new Herdr workspace"
+          disabled={!context.canCreateRoom(selectedRoomKey ?? undefined)}
+          onClick={() => context.onCreateRoom(selectedRoomKey ?? undefined)}
+        >
+          <Plus size={14} aria-hidden="true" />
+          <span>New room</span>
+        </button>
+        {selectedRoom ? (
+          <div className="world-room-context" aria-label={`Selected room ${selectedRoom.displayLabel}`}>
+            <span className="world-room-context-label">{selectedRoom.displayLabel}</span>
+            <button
+              className="icon-btn world-room-action"
+              type="button"
+              aria-label={`Rename room ${selectedRoom.displayLabel}`}
+              title="Rename room"
+              disabled={!context.canRenameRoom(selectedRoom.key)}
+              onClick={() => context.onRenameRoom(selectedRoom.key)}
+            >
+              <Pencil size={14} aria-hidden="true" />
+            </button>
+            <button
+              className="icon-btn world-room-action world-room-action-danger"
+              type="button"
+              aria-label={`Close room ${selectedRoom.displayLabel}`}
+              title="Close room"
+              disabled={!context.canCloseRoom(selectedRoom.key)}
+              onClick={() => context.onCloseRoom(selectedRoom.key)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </header>
+      <WorldAgentBar
+        projection={projection}
+        selectedKey={context.selectedKey}
+        onSelect={context.onSelect}
+        onActivateAgent={onActivateAgent}
+      />
       <div className="world-stage-notice" role="status">
         <span>Live admitted state is shown on the CEO Office blackboard</span>
         <span>Double-click a room or agent to open it in Spaces</span>
@@ -950,6 +995,67 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onOpenInSpaces === "function" &&
     typeof record.canCreateSeat === "function" &&
     typeof record.onNewSeat === "function" &&
+    typeof record.canCreateRoom === "function" &&
+    typeof record.onCreateRoom === "function" &&
+    typeof record.canRenameRoom === "function" &&
+    typeof record.onRenameRoom === "function" &&
+    typeof record.canCloseRoom === "function" &&
+    typeof record.onCloseRoom === "function" &&
     Boolean(record.projection)
+  );
+}
+
+function WorldAgentBar({
+  projection,
+  selectedKey,
+  onSelect,
+  onActivateAgent,
+}: {
+  projection: HerdrOfficeProjection;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+  onActivateAgent: (key: string) => void;
+}) {
+  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
+  const blockedCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "blocked").length;
+  const overflowCount = projection.coverage.omittedBarAgents;
+  return (
+    <section className="world-office-overview" aria-label="CEO overview">
+      <div className="world-overview-heading">
+        <strong>Agent Bar</strong>
+        <span>{projection.barAgents.length} visible · {idleCount} idle · {blockedCount} needs input</span>
+      </div>
+      <ul className="world-agent-bar" aria-label="Agent Bar">
+        {projection.barAgents.length === 0 ? (
+          <li className="world-agent-bar-empty">No completed or waiting agents</li>
+        ) : (
+          projection.barAgents.map((agent) => {
+            const status = agent.stale ? "stale" : agent.semanticStatus;
+            const statusLabel = agent.stale
+              ? "STALE"
+              : agent.stateLabels[agent.semanticStatus] ?? agent.semanticStatus.toUpperCase();
+            return (
+              <li key={agent.key} className="world-agent-bar-item-shell">
+                <button
+                  className="world-agent-bar-item"
+                  type="button"
+                  aria-pressed={selectedKey === agent.key}
+                  data-status={status}
+                  title={agent.taskSummary ?? `${agent.displayLabel} · ${statusLabel}`}
+                  onClick={() => onSelect(agent.key)}
+                  onDoubleClick={() => onActivateAgent(agent.key)}
+                >
+                  <span className="world-agent-bar-name">{agent.displayLabel}</span>
+                  <span className="world-agent-bar-state">{statusLabel}</span>
+                </button>
+              </li>
+            );
+          })
+        )}
+        {overflowCount > 0 ? (
+          <li className="world-agent-bar-overflow">+{overflowCount} more in roster</li>
+        ) : null}
+      </ul>
+    </section>
   );
 }

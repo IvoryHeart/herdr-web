@@ -11,7 +11,7 @@ import {
 } from "./officeGeometry";
 
 describe("Pixel Office geometry", () => {
-  it("keeps a two-column horizontally scrollable office at a readable logical width", () => {
+  it("keeps the current two-column office at a readable logical width", () => {
     const narrow = resolveOfficeLayout(375, Array.from({ length: 6 }, () => ({
       deskCount: 1,
       standingCount: 0,
@@ -25,7 +25,7 @@ describe("Pixel Office geometry", () => {
     expect(narrow.roomStartY).toBe(
       OFFICE_GEOMETRY.ceoBandHeight + OFFICE_GEOMETRY.hallwayHeight,
     );
-    expect(narrow.barBandY).toBeGreaterThan(
+    expect(narrow.totalHeight).toBeGreaterThan(
       narrow.rooms.at(-1)!.y + narrow.rooms.at(-1)!.height,
     );
   });

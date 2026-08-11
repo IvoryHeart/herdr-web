@@ -118,7 +118,6 @@ export type OfficeRendererDiagnostics = {
     rooms: number;
     characterHeight: number;
     ceoBandHeight: number;
-    barBandHeight: number;
     viewportHeight: number;
   };
   completionMarkers: number;
@@ -373,16 +372,6 @@ export async function createOfficeRenderer(
         );
       }
     });
-    drawAgentBar(
-      app.stage,
-      layout,
-      currentProjection,
-      currentSelectedKey,
-      textures,
-      animated,
-      select,
-      activateAgent,
-    );
     if (!diagnostics.ready) {
       officeDebug("renderer:scene-ready", {
         rooms: layout.rooms.length,
@@ -457,7 +446,6 @@ export async function createOfficeRenderer(
       rooms: layout.rooms.length,
       characterHeight: OFFICE_GEOMETRY.characterHeight,
       ceoBandHeight: OFFICE_GEOMETRY.ceoBandHeight,
-      barBandHeight: OFFICE_GEOMETRY.barBandHeight,
       viewportHeight,
     };
   };
@@ -677,20 +665,8 @@ function resolveOfficeAgentAnchor(
     return { x: anchor.x, y: anchor.characterFeetY - 42 };
   }
   if (agent.destination === "bar") {
-    const index = projection.barAgents.findIndex(({ key: agentKey }) => agentKey === key);
-    if (index < 0) {
-      return null;
-    }
-    const x = Math.floor(layout.officeWidth / 2) + 4;
-    const width = layout.officeWidth - x - 4;
-    const boardX = x + 16;
-    const barX = boardX + 120 + 16;
-    const barWidth = x + width - 16 - barX;
-    const stationSpan = barWidth / 5;
-    return {
-      x: barX + stationSpan * (index + 0.5),
-      y: layout.barBandY + 136 - 42,
-    };
+    // Agent Bar entries are semantic DOM controls in the CEO overview.
+    return null;
   }
   const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
   const room = projection.rooms[roomIndex];
@@ -1120,12 +1096,11 @@ function drawReceptionDesk(
 
 function drawHallways(stage: Container, layout: OfficeLayout) {
   const hall = new Graphics();
-  for (const y of [OFFICE_GEOMETRY.ceoBandHeight, layout.barBandY - OFFICE_GEOMETRY.hallwayHeight]) {
-    hall.rect(4, y, layout.officeWidth - 8, OFFICE_GEOMETRY.hallwayHeight).fill(0x252537);
-    hall.rect(4, y, layout.officeWidth - 8, 1).fill({ color: 0x6c6990, alpha: 0.35 });
-    for (let x = 20; x < layout.officeWidth - 20; x += 18) {
-      hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
-    }
+  const y = OFFICE_GEOMETRY.ceoBandHeight;
+  hall.rect(4, y, layout.officeWidth - 8, OFFICE_GEOMETRY.hallwayHeight).fill(0x252537);
+  hall.rect(4, y, layout.officeWidth - 8, 1).fill({ color: 0x6c6990, alpha: 0.35 });
+  for (let x = 20; x < layout.officeWidth - 20; x += 18) {
+    hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
   }
   stage.addChild(hall);
 }
@@ -1559,190 +1534,6 @@ function drawStandingAgent(
     onActivateAgent,
   );
   character.alpha = agent.stale ? 0.56 : 1;
-}
-
-function drawAgentBar(
-  stage: Container,
-  layout: OfficeLayout,
-  projection: HerdrOfficeProjection,
-  selectedKey: string | null,
-  textures: readonly Texture[],
-  animated: AnimatedItem[],
-  onSelect: (key: string) => void,
-  onActivateAgent: (key: string) => void,
-) {
-  const x = Math.floor(layout.officeWidth / 2) + 4;
-  const y = layout.barBandY;
-  const width = layout.officeWidth - x - 4;
-  const room = new Container();
-  const floor = new Graphics();
-  drawTiledFloor(floor, x, y, width, OFFICE_GEOMETRY.barBandHeight, 0x17140f, 0x11100d);
-  floor.rect(x, y, width, 42).fill({ color: 0x3c2d22, alpha: 0.9 });
-  floor.roundRect(x, y, width, OFFICE_GEOMETRY.barBandHeight, 4)
-    .stroke({ width: 2, color: 0xb59048, alpha: 0.72 });
-  room.addChild(floor);
-  addSign(
-    room,
-    x + width / 2 - 72,
-    y - 5,
-    "AGENT BAR",
-    0xa17d37,
-    144,
-    undefined,
-    undefined,
-    undefined,
-    OFFICE_HEADING_TEXT_SIZE,
-  );
-
-  const boardX = x + 16;
-  const boardY = y + 44;
-  const boardWidth = 120;
-  const boardHeight = OFFICE_GEOMETRY.barBandHeight - 60;
-  const barX = boardX + boardWidth + 16;
-  const barWidth = x + width - 16 - barX;
-  const columns = 5;
-  const stationSpan = barWidth / columns;
-  const labelY = y + 47;
-  const characterFeetY = y + 136;
-  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
-  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
-  projection.barAgents.slice(0, columns).forEach((agent, index) => {
-    const px = barX + stationSpan * (index + 0.5);
-    const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
-    const name = label(shortLabel(agent.displayLabel, 14), {
-      size: 10,
-      color: 0xf0ece5,
-      anchor: 0.5,
-    });
-    name.position.set(px, labelY);
-    makeInteractive(name, agent.key, onSelect, onActivateAgent);
-    room.addChild(name);
-    const state = label(cue.label, { size: 8, color: cue.color, anchor: 0.5 });
-    state.position.set(px, labelY + 14);
-    makeInteractive(state, agent.key, onSelect, onActivateAgent);
-    room.addChild(state);
-    drawBarStool(room, px, characterFeetY - 3, cue.color);
-    const character = drawCharacter(
-      room,
-      textures[agent.characterIndex] ?? Texture.EMPTY,
-      px,
-      characterFeetY,
-      false,
-      agent.stale,
-      animated,
-      agent.key,
-      onSelect,
-      selectedKey,
-      onActivateAgent,
-    );
-    character.alpha = agent.stale ? 0.56 : 1;
-  });
-  drawBarCounter(room, barX, y + 138, barWidth);
-  drawBarBackWall(room, barX, y + 180, barWidth);
-  const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - columns);
-  if (overflowCount > 0) {
-    const overflow = label(`+${overflowCount} more in roster`, {
-      size: 9,
-      color: 0xe5cf98,
-      anchor: { x: 1, y: 0 },
-    });
-    overflow.position.set(x + width - 16, y + 20);
-    room.addChild(overflow);
-  }
-  stage.addChild(room);
-}
-
-function drawPartyBoard(
-  parent: Container,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  idleCount: number,
-) {
-  const board = new Graphics();
-  board.roundRect(x + 3, y + 4, width, height, 4).fill({ color: 0x000000, alpha: 0.28 });
-  board.roundRect(x, y, width, height, 4).fill(0x553b25);
-  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2).fill(0x17251f);
-  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2)
-    .stroke({ width: 1, color: 0x9b7542, alpha: 0.72 });
-  parent.addChild(board);
-  const heading = label("PARTY", { size: 14, color: 0xf2d78f, anchor: 0.5 });
-  heading.position.set(x + width / 2, y + 20);
-  parent.addChild(heading);
-  const value = label(String(idleCount), { size: 32, color: 0xf1e9bd, anchor: 0.5 });
-  value.position.set(x + width / 2, y + height / 2 - 6);
-  parent.addChild(value);
-  drawPartyDecorations(parent, x, y, width, height);
-}
-
-function drawPartyDecorations(parent: Container, x: number, y: number, width: number, height: number) {
-  const decorations = new Graphics();
-  const confetti = [
-    [18, 31, 0xe29b66], [width - 24, 28, 0x8fb9d8], [28, 68, 0x9fceac],
-    [width - 32, 78, 0xdca4c7], [16, height - 50, 0xf3c07e], [width - 20, height - 48, 0xe29b66],
-  ] as const;
-  confetti.forEach(([offsetX, offsetY, color], index) => {
-    if (index % 2 === 0) {
-      decorations.rect(x + offsetX, y + offsetY, 4, 8).fill(color);
-    } else {
-      decorations.circle(x + offsetX, y + offsetY, 3).fill(color);
-    }
-  });
-  const glassX = x + width / 2 - 4;
-  const glassY = y + height - 37;
-  decorations.roundRect(glassX - 7, glassY, 14, 10, 3)
-    .stroke({ width: 2, color: 0xf1d19a, alpha: 0.9 });
-  decorations.rect(glassX - 1, glassY + 10, 2, 10).fill(0xf1d19a);
-  decorations.rect(glassX - 8, glassY + 20, 16, 2).fill(0xf1d19a);
-  decorations.circle(glassX - 3, glassY - 3, 2).fill({ color: 0xf8df99, alpha: 0.9 });
-  decorations.circle(glassX + 3, glassY - 5, 2).fill({ color: 0xf8df99, alpha: 0.9 });
-  parent.addChild(decorations);
-}
-function drawBarBackWall(parent: Container, x: number, y: number, width: number) {
-  const wall = new Graphics();
-  wall.roundRect(x, y, width, 44, 4).fill(0x271b18);
-  wall.roundRect(x + 4, y + 4, width - 8, 36, 3).fill(0x34221c);
-  wall.roundRect(x + 8, y + 8, width - 16, 2, 1).fill({ color: 0xb59048, alpha: 0.5 });
-  wall.roundRect(x + 8, y + 29, width - 16, 2, 1).fill({ color: 0x8d6335, alpha: 0.64 });
-  for (let index = 0; index < Math.floor((width - 28) / 22); index += 1) {
-    const bottleX = x + 14 + index * 22;
-    const color = [0xe29b66, 0x8fb9d8, 0x9fceac, 0xdca4c7, 0xf3c07e][index % 5];
-    wall.roundRect(bottleX, y + 14, 7, 13, 2).fill(color);
-    wall.rect(bottleX + 2, y + 10, 3, 5).fill(blendColor(color, 0xf6e5b7, 0.3));
-    wall.rect(bottleX + 1, y + 28, 5, 1).fill({ color: 0xffffff, alpha: 0.18 });
-  }
-  parent.addChild(wall);
-  const neon = label("AFTER HOURS", { size: 8, color: 0xf0c878, anchor: 0.5 });
-  neon.position.set(x + width / 2, y + 6);
-  parent.addChild(neon);
-}
-
-function drawBarCounter(parent: Container, x: number, y: number, width: number) {
-  const counter = new Graphics();
-  counter.roundRect(x + 3, y + 6, width, 38, 8).fill({ color: 0x000000, alpha: 0.28 });
-  counter.roundRect(x, y, width, 36, 7).fill(0x4c3122);
-  counter.roundRect(x + 4, y + 4, width - 8, 10, 4).fill(0x8b5b35);
-  counter.rect(x + 8, y + 7, width - 16, 2).fill({ color: 0xd0a878, alpha: 0.54 });
-  counter.roundRect(x + 8, y + 17, width - 16, 14, 4).fill(0x38231d);
-  for (let panel = x + 28; panel < x + width - 18; panel += 58) {
-    counter.rect(panel, y + 20, 1, 8).fill({ color: 0xb07945, alpha: 0.4 });
-  }
-  for (let tap = x + 28; tap < x + width - 20; tap += 82) {
-    counter.circle(tap, y + 11, 3).fill(0xd0a878);
-    counter.rect(tap - 1, y + 10, 2, 8).fill(0x5b3c2b);
-  }
-  parent.addChild(counter);
-}
-
-function drawBarStool(parent: Container, x: number, y: number, accent: number) {
-  const stool = new Graphics();
-  stool.ellipse(x, y + 8, 18, 4).fill({ color: 0x000000, alpha: 0.26 });
-  stool.roundRect(x - 13, y - 4, 26, 8, 4).fill(blendColor(accent, 0x2b1f1c, 0.58));
-  stool.roundRect(x - 10, y - 2, 20, 4, 2).fill(blendColor(accent, 0xf1d19a, 0.16));
-  stool.rect(x - 2, y + 3, 4, 11).fill(0x8d6335);
-  stool.rect(x - 10, y + 13, 20, 2).fill(0x6b482e);
-  parent.addChild(stool);
 }
 
 function drawCharacter(

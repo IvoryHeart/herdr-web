@@ -89,9 +89,20 @@ export function createdPaneId(result: CommandResult): string | null {
   );
 }
 
+/** Pull a workspace id out of a workspace creation response. */
+export function createdWorkspaceId(result: CommandResult): string | null {
+  const workspaceId = typeof result.workspace_id === "string" ? result.workspace_id : null;
+  const workspace = result.workspace as { workspace_id?: string } | undefined;
+  return workspaceId ?? workspace?.workspace_id ?? null;
+}
+
 export function createCommands(httpUrl: BridgeHttpUrl = sameOriginHttpUrl) {
   const api = {
-    createWorkspace: () => runCommand(httpUrl, "workspace.create", { focus: true }),
+    createWorkspace: (label?: string) =>
+      runCommand(httpUrl, "workspace.create", {
+        focus: true,
+        ...(label?.trim() ? { label: label.trim() } : {}),
+      }),
     renameWorkspace: (workspaceId: string, label: string | null) =>
       runCommand(httpUrl, "workspace.rename", { workspace_id: workspaceId, label }),
     closeWorkspace: (workspaceId: string) =>
