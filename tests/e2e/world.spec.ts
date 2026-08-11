@@ -869,6 +869,7 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await page.goto("/world");
   await waitForOffice(page);
   const barAgent = page.locator(".agent-row").filter({ hasText: "Agent 14" });
+  await expect(page.locator(".world-canvas-agent-bar")).toBeVisible();
   await expect(barAgent).toContainText("Ready for review");
 
   await barAgent.dblclick();

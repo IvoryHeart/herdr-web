@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
@@ -42,6 +42,7 @@ export function PixelOfficeCanvas({
   onHover,
   onAnchorChange,
   onSelectedAnchorChange,
+  children,
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
@@ -56,6 +57,7 @@ export function PixelOfficeCanvas({
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
   onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
+  children?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
@@ -268,6 +270,7 @@ export function PixelOfficeCanvas({
         data-renderer={failure ? "unavailable" : "pixi"}
         hidden={failure}
       />
+      {children}
     </div>
   );
 }

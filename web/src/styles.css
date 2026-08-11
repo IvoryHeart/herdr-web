@@ -937,6 +937,81 @@ button {
   background: color-mix(in srgb, var(--surface0) 92%, #080812);
 }
 
+.world-canvas-shell {
+  width: max-content;
+}
+
+.world-canvas-agent-bar {
+  position: absolute;
+  top: 12px;
+  right: 28px;
+  z-index: 6;
+  display: block;
+  width: clamp(280px, 31%, 420px);
+  max-height: 190px;
+  padding: 8px 10px 9px;
+  border: 1px solid color-mix(in srgb, var(--yellow) 52%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, #17140f 94%, var(--surface0));
+  box-shadow: 0 8px 18px rgb(0 0 0 / 22%);
+}
+
+.world-canvas-agent-bar .world-overview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: #d7c394;
+}
+
+.world-canvas-agent-bar .world-overview-heading strong {
+  color: #f2d78f;
+}
+
+.world-canvas-agent-bar .world-agent-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  gap: 4px;
+  max-height: 142px;
+  overflow-y: auto;
+}
+
+.world-canvas-agent-bar .world-agent-bar-item-shell {
+  min-width: 0;
+}
+
+.world-canvas-agent-bar .world-agent-bar-item {
+  grid-template-columns: 27px minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 4px 6px;
+  border-color: color-mix(in srgb, var(--yellow) 28%, var(--line));
+  background: color-mix(in srgb, #2b2118 84%, var(--surface0));
+}
+
+.world-canvas-agent-bar .world-agent-bar-name,
+.world-canvas-agent-bar .world-agent-bar-state {
+  font-size: 8px;
+}
+
+.world-agent-bar-avatar {
+  width: 27px;
+  height: 35px;
+  grid-row: 1 / span 2;
+  align-self: end;
+  object-fit: contain;
+  object-position: center bottom;
+  image-rendering: pixelated;
+}
+
+.world-canvas-agent-bar .world-agent-bar-empty,
+.world-canvas-agent-bar .world-agent-bar-overflow {
+  min-height: 30px;
+}
+
 .world-overview-heading {
   display: grid;
   flex: 0 0 auto;
@@ -4475,6 +4550,11 @@ button {
   align-items: stretch;
   flex-direction: column;
   gap: 6px;
+}
+
+.app[data-compact="true"] .world-canvas-agent-bar {
+  right: 12px;
+  width: min(420px, calc(100% - 24px));
 }
 
 .app[data-compact="true"] .world-overview-heading {

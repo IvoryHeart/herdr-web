@@ -63,27 +63,27 @@ describe("Pixel Office geometry", () => {
     expect(receptions).toHaveLength(6);
     expect(blocks.ceoX).toBe(OFFICE_GEOMETRY.ceoEdgePadding);
     expect(blocks.otelBoardX).toBe(
-      blocks.ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
+      blocks.ceoX + blocks.ceoScale * OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
     );
     expect(blocks.boardX).toBe(
-      blocks.otelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blocks.blockGap,
+      blocks.otelBoardX + blocks.ceoScale * OFFICE_GEOMETRY.ceoOtelBoardWidth + blocks.blockGap,
     );
     expect(receptions[0].x).toBe(
-      blocks.boardX + OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,
+      blocks.boardX + blocks.ceoScale * OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,
     );
     expect(new Set(receptions.map(({ y }) => y))).toEqual(new Set([36]));
     expect(receptions.every(({ width }) =>
-      width === OFFICE_GEOMETRY.receptionStationMinWidth)).toBe(true);
+      width <= OFFICE_GEOMETRY.receptionStationMinWidth)).toBe(true);
     expect(receptions.every(({ gapBefore }) => gapBefore === blocks.blockGap)).toBe(true);
     expect(receptions[1].x - (receptions[0].x + receptions[0].width))
-      .toBe(blocks.blockGap);
+      .toBeCloseTo(blocks.blockGap);
     expect(receptions.at(-1)!.x + receptions.at(-1)!.width).toBeLessThanOrEqual(officeWidth - 12);
     const agents = Array.from({ length: 4 }, (_, index) =>
       receptionAgentAnchor(receptions[0], index));
     expect(new Set(agents.map(({ x }) => x)).size).toBe(4);
-    expect(agents[1].x - agents[0].x).toBe(agents[0].stationSpan);
+    expect(agents[1].x - agents[0].x).toBeCloseTo(agents[0].stationSpan);
     const table = receptionTableRect(receptions[0]);
-    expect(table.width).toBe(OFFICE_GEOMETRY.receptionTableWidth);
+    expect(table.width).toBeLessThanOrEqual(OFFICE_GEOMETRY.receptionTableWidth);
     expect(table.x).toBeGreaterThan(receptions[0].x);
     expect(table.x + table.width).toBeLessThan(receptions[0].x + receptions[0].width);
   });

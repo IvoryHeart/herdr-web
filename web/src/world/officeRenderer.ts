@@ -736,9 +736,16 @@ function drawCeoReception(
     .roundRect(4, 4, layout.officeWidth - 8, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
+  const ceoBlocks = resolveCeoBlockLayout(
+    layout.officeWidth,
+    projection.receptions.length,
+  );
+  const ceoContent = new Container();
+  ceoContent.position.x = ceoBlocks.ceoOriginX;
+  ceoContent.scale.x = ceoBlocks.ceoScale;
   addSign(
-    band,
-    layout.officeWidth / 2 - 88,
+    ceoContent,
+    ceoBlocks.ceoContentWidth / 2 - 88,
     8,
     "CEO OFFICE",
     0x76571c,
@@ -748,22 +755,17 @@ function drawCeoReception(
     undefined,
     13,
   );
-
-  const ceoBlocks = resolveCeoBlockLayout(
-    layout.officeWidth,
-    projection.receptions.length,
-  );
-  drawCeo(band, textures, ceoBlocks.ceoX);
-  drawOtelCostBoard(band, observability, ceoBlocks.otelBoardX);
-  drawLiveStateBlackboard(band, projection, ceoBlocks.boardX);
-  const receptionRects = ceoBlocks.receptions;
+  drawCeo(ceoContent, textures, ceoBlocks.localCeoX);
+  drawOtelCostBoard(ceoContent, observability, ceoBlocks.localOtelBoardX);
+  drawLiveStateBlackboard(ceoContent, projection, ceoBlocks.localBoardX);
+  const receptionRects = ceoBlocks.localReceptions;
   projection.receptions.forEach((reception, index) => {
     const rect = receptionRects[index];
     if (!rect) {
       return;
     }
     drawReceptionDesk(
-      band,
+      ceoContent,
       reception,
       projection,
       rect,
@@ -780,9 +782,10 @@ function drawCeoReception(
       color: 0xd7c394,
       anchor: { x: 1, y: 0 },
     });
-    overflow.position.set(layout.officeWidth - 18, 13);
-    band.addChild(overflow);
+    overflow.position.set(ceoBlocks.ceoContentWidth - 18, 13);
+    ceoContent.addChild(overflow);
   }
+  band.addChild(ceoContent);
   stage.addChild(band);
 }
 

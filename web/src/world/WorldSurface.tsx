@@ -837,12 +837,6 @@ function WorldStage({
           </div>
         ) : null}
       </header>
-      <WorldAgentBar
-        projection={projection}
-        selectedKey={context.selectedKey}
-        onSelect={context.onSelect}
-        onActivateAgent={onActivateAgent}
-      />
       <div className="world-stage-notice" role="status">
         <span>Live admitted state is shown on the CEO Office blackboard</span>
         <span>Double-click a room or agent to open it in Spaces</span>
@@ -885,7 +879,15 @@ function WorldStage({
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
           onSelectedAnchorChange={onSelectedCanvasAnchorChange}
-        />
+        >
+          <WorldAgentBar
+            className="world-canvas-agent-bar"
+            projection={projection}
+            selectedKey={context.selectedKey}
+            onSelect={context.onSelect}
+            onActivateAgent={onActivateAgent}
+          />
+        </PixelOfficeCanvas>
       </div>
       {context.selectedKey && selectedCanvasAnchor ? (
         <WorldCanvasCallout
@@ -1006,11 +1008,13 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
 }
 
 function WorldAgentBar({
+  className,
   projection,
   selectedKey,
   onSelect,
   onActivateAgent,
 }: {
+  className?: string;
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
   onSelect: (key: string) => void;
@@ -1020,7 +1024,10 @@ function WorldAgentBar({
   const blockedCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "blocked").length;
   const overflowCount = projection.coverage.omittedBarAgents;
   return (
-    <section className="world-office-overview" aria-label="CEO overview">
+    <section
+      className={`world-office-overview${className ? ` ${className}` : ""}`}
+      aria-label="CEO overview"
+    >
       <div className="world-overview-heading">
         <strong>Agent Bar</strong>
         <span>{projection.barAgents.length} visible · {idleCount} idle · {blockedCount} needs input</span>
@@ -1045,6 +1052,12 @@ function WorldAgentBar({
                   onClick={() => onSelect(agent.key)}
                   onDoubleClick={() => onActivateAgent(agent.key)}
                 >
+                  <img
+                    className="world-agent-bar-avatar"
+                    src={`/world/characters/${agent.characterIndex + 1}-D-1.png`}
+                    alt=""
+                    aria-hidden="true"
+                  />
                   <span className="world-agent-bar-name">{agent.displayLabel}</span>
                   <span className="world-agent-bar-state">{statusLabel}</span>
                 </button>

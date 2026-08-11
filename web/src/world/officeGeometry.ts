@@ -8,6 +8,10 @@ export const OFFICE_GEOMETRY = Object.freeze({
   ceoBoardY: 48,
   ceoBoardHeight: 154,
   ceoBlockGap: 24,
+  agentBarMinWidth: 280,
+  agentBarMaxWidth: 420,
+  agentBarWidthRatio: 0.31,
+  agentBarGap: 18,
   receptionStationMinWidth: 176,
   receptionTableWidth: 160,
   receptionTableHeight: 42,
@@ -50,6 +54,16 @@ export type OfficeCeoBlockLayout = {
   otelBoardX: number;
   blockGap: number;
   receptions: OfficeReceptionRect[];
+  ceoOriginX: number;
+  ceoScale: number;
+  ceoContentWidth: number;
+  localCeoX: number;
+  localBoardX: number;
+  localOtelBoardX: number;
+  localBlockGap: number;
+  localReceptions: OfficeReceptionRect[];
+  agentBarX: number;
+  agentBarWidth: number;
 };
 
 export type OfficeRoomRect = {
@@ -187,14 +201,25 @@ export function resolveOfficeLayout(
 
 export function minimumOfficeWidthForReceptions(receptionCount: number) {
   const count = boundedCount(receptionCount, OFFICE_GEOMETRY.maxReceptionDesks);
+  const fixedWidth = OFFICE_GEOMETRY.ceoDeskWidth +
+    OFFICE_GEOMETRY.ceoBoardWidth +
+    OFFICE_GEOMETRY.ceoOtelBoardWidth +
+    count * OFFICE_GEOMETRY.receptionStationMinWidth;
+  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoBlockGap;
   return Math.max(
     OFFICE_GEOMETRY.minOfficeWidth,
     OFFICE_GEOMETRY.ceoEdgePadding * 2 +
-      OFFICE_GEOMETRY.ceoDeskWidth +
-      OFFICE_GEOMETRY.ceoBoardWidth +
-      OFFICE_GEOMETRY.ceoOtelBoardWidth +
-      count * OFFICE_GEOMETRY.receptionStationMinWidth +
-      (count + 2) * OFFICE_GEOMETRY.ceoBlockGap,
+      ceoContentWidth,
+  );
+}
+
+export function agentBarWidthForOffice(officeWidth: number) {
+  return Math.max(
+    OFFICE_GEOMETRY.agentBarMinWidth,
+    Math.min(
+      OFFICE_GEOMETRY.agentBarMaxWidth,
+      Math.floor(officeWidth * OFFICE_GEOMETRY.agentBarWidthRatio),
+    ),
   );
 }
 
@@ -207,26 +232,31 @@ export function resolveCeoBlockLayout(
     OFFICE_GEOMETRY.ceoBoardWidth +
     OFFICE_GEOMETRY.ceoOtelBoardWidth +
     count * OFFICE_GEOMETRY.receptionStationMinWidth;
+  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoBlockGap;
+  const agentBarWidth = agentBarWidthForOffice(officeWidth);
+  const agentBarX = officeWidth - OFFICE_GEOMETRY.ceoEdgePadding - agentBarWidth;
+  const ceoPanelWidth = Math.max(
+    0,
+    agentBarX - OFFICE_GEOMETRY.agentBarGap - OFFICE_GEOMETRY.ceoEdgePadding,
+  );
+  const ceoScale = Math.min(1, ceoPanelWidth / Math.max(1, ceoContentWidth));
   const gapCount = count + 2;
   const blockGap = Math.max(
     OFFICE_GEOMETRY.ceoBlockGap,
-    (officeWidth - OFFICE_GEOMETRY.ceoEdgePadding * 2 - fixedWidth) / gapCount,
+    (ceoContentWidth - fixedWidth) / gapCount,
   );
-  const ceoX = OFFICE_GEOMETRY.ceoEdgePadding;
-  const otelBoardX = ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blockGap;
-  const boardX = otelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blockGap;
-  const receptionStartX = boardX + OFFICE_GEOMETRY.ceoBoardWidth + blockGap;
-  const availableReceptionWidth = Math.max(
-    0,
-    officeWidth - OFFICE_GEOMETRY.ceoEdgePadding - receptionStartX,
-  );
+  const localCeoX = 0;
+  const localOtelBoardX = localCeoX + OFFICE_GEOMETRY.ceoDeskWidth + blockGap;
+  const localBoardX = localOtelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blockGap;
+  const receptionStartX = localBoardX + OFFICE_GEOMETRY.ceoBoardWidth + blockGap;
+  const availableReceptionWidth = Math.max(0, ceoContentWidth - receptionStartX);
   const stationWidth = count > 0
     ? Math.min(
         OFFICE_GEOMETRY.receptionStationMinWidth,
         Math.max(0, (availableReceptionWidth - blockGap * (count - 1)) / count),
       )
     : 0;
-  const receptions = Array.from({ length: count }, (_, index) => ({
+  const localReceptions = Array.from({ length: count }, (_, index) => ({
     index,
     x: receptionStartX + index * (stationWidth + blockGap),
     y: 36,
@@ -234,7 +264,31 @@ export function resolveCeoBlockLayout(
     height: 160,
     gapBefore: blockGap,
   }));
-  return { ceoX, boardX, otelBoardX, blockGap, receptions };
+  const ceoOriginX = OFFICE_GEOMETRY.ceoEdgePadding;
+  const scaleX = (value: number) => ceoOriginX + value * ceoScale;
+  const receptions = localReceptions.map((reception) => ({
+    ...reception,
+    x: scaleX(reception.x),
+    width: reception.width * ceoScale,
+    gapBefore: reception.gapBefore * ceoScale,
+  }));
+  return {
+    ceoX: scaleX(localCeoX),
+    boardX: scaleX(localBoardX),
+    otelBoardX: scaleX(localOtelBoardX),
+    blockGap: blockGap * ceoScale,
+    receptions,
+    ceoOriginX,
+    ceoScale,
+    ceoContentWidth,
+    localCeoX,
+    localBoardX,
+    localOtelBoardX,
+    localBlockGap: blockGap,
+    localReceptions,
+    agentBarX,
+    agentBarWidth,
+  };
 }
 
 export function resolveReceptionLayout(
