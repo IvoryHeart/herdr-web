@@ -330,6 +330,11 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   await expect(page.getByRole("tooltip")).toContainText("Codex A");
   await expect(page.getByRole("tooltip")).toContainText("Running");
 
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+
   const nextSeat = deskAnchor(layout.rooms[0], 1);
   await page.mouse.move(
     (canvasBox?.x ?? 0) + nextSeat.x,
@@ -341,6 +346,9 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
     (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
   );
   await expect(page.locator("form.launch-modal")).toBeVisible();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
   await page.locator("form.launch-modal").getByRole("button", { name: "Create", exact: true }).click();
   await expect.poll(async () => {
     const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
@@ -869,6 +877,9 @@ test("selects an Office agent semantically and launches a real new seat", async 
   page,
   request,
 }) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", launchCreatesSeat: true },
+  });
   await page.goto("/world");
   await waitForOffice(page);
 
@@ -896,9 +907,10 @@ test("selects an Office agent semantically and launches a real new seat", async 
       target: { mode: "tab", workspace_id: "main" },
     },
   ]);
-  await expect(page.getByText("New seat created. The Office will update from the next admitted snapshot.", {
-    exact: true,
-  })).toBeVisible();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(2);
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Shell" }),
+  ).toBeVisible();
 });
 
 test("opens the same standing room agent from its semantic row and canvas sprite", async ({

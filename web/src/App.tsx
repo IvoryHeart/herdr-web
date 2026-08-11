@@ -257,6 +257,12 @@ type PendingWorldPaneSelection = {
   paneId: string;
   tabId: string;
 };
+type PendingWorldSeatLaunch = {
+  bridgeId: BridgeId;
+  workspaceId: string;
+  baselineTabIds: ReadonlySet<string>;
+  baselinePaneIds: ReadonlySet<string>;
+};
 type WorldConversationView = {
   windowId: string;
   agent: OfficeAgent | null;
@@ -289,6 +295,43 @@ function worldConversationAdmissionPending(
         state.loadState === "loading" ||
         (state.snapshot === null && state.loadState !== "error")),
   );
+}
+
+function worldConversationObservationPending(
+  runtime: BridgeRuntime | null,
+  state: BridgeConnectionState | null | undefined,
+) {
+  return Boolean(
+    !runtime ||
+      !state ||
+      runtime.capabilityState === "idle" ||
+      runtime.capabilityState === "probing" ||
+      state.connectionKey !== runtime.generationKey ||
+      state.loadState !== "ready" ||
+      state.snapshot === null,
+  );
+}
+
+export function findNewWorldSeatPane(
+  snapshot: Snapshot | null,
+  workspaceId: string,
+  baselineTabIds: ReadonlySet<string>,
+  baselinePaneIds: ReadonlySet<string>,
+) {
+  if (!snapshot) {
+    return null;
+  }
+  const newTabIds = new Set(
+    snapshot.tabs
+      .filter((tab) => tab.workspace_id === workspaceId && !baselineTabIds.has(tab.tab_id))
+      .map((tab) => tab.tab_id),
+  );
+  return snapshot.panes.find(
+    (pane) =>
+      pane.workspace_id === workspaceId &&
+      newTabIds.has(pane.tab_id) &&
+      !baselinePaneIds.has(pane.pane_id),
+  ) ?? null;
 }
 type RuntimeCommandTarget = {
   kind: "workspace" | "tab" | "pane";
@@ -1115,6 +1158,7 @@ export function App() {
   );
   const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>([]);
   const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
+  const pendingWorldSeatLaunchRef = useRef<PendingWorldSeatLaunch | null>(null);
   const worldConversationCacheRef = useRef<Map<string, WorldConversationView>>(new Map());
   const worldCanvasSelectionTimerRef = useRef<number | null>(null);
   const worldSelectionSeedPendingRef = useRef(false);
@@ -1705,6 +1749,53 @@ export function App() {
       generationKey: runtime.generationKey,
     });
   };
+  useEffect(() => {
+    const pending = pendingWorldSeatLaunchRef.current;
+    if (!pending) {
+      return;
+    }
+    if (activeSurface.id !== "world") {
+      pendingWorldSeatLaunchRef.current = null;
+      return;
+    }
+    const source = worldSourcesInScope.find(
+      ({ profile }) => profile.profileId === pending.bridgeId,
+    );
+    const pane = findNewWorldSeatPane(
+      source?.snapshot ?? null,
+      pending.workspaceId,
+      pending.baselineTabIds,
+      pending.baselinePaneIds,
+    );
+    if (!pane) {
+      return;
+    }
+
+    pendingWorldSeatLaunchRef.current = null;
+    const deskEntry = worldProjection.deskRoster.find(
+      ({ desk }) =>
+        desk.tabRef.profileId === pending.bridgeId &&
+        desk.tabRef.nativeTargetId === pane.tab_id,
+    );
+    if (deskEntry) {
+      selectWorldProjectedDesk(deskEntry.desk);
+      return;
+    }
+
+    pendingWorldPaneSelectionRef.current = {
+      bridgeId: pending.bridgeId,
+      paneId: pane.pane_id,
+      tabId: pane.tab_id,
+    };
+    setSelectedBridgeId(pending.bridgeId);
+    setWorldSelectedKey(null);
+    setWorldHandoffStatus("New seat created. Opening terminal…");
+  }, [
+    activeSurface.id,
+    selectWorldProjectedDesk,
+    worldProjection,
+    worldSourcesInScope,
+  ]);
   const syncWorldSelectionFromSpaces = useCallback(() => {
     const selectedRef = selectedPaneRefState;
     const selectedPane = selectedRef
@@ -1809,7 +1900,6 @@ export function App() {
     setSelectedBridgeId(bridgeId);
     setWorldSelectedKey(null);
     setWorldHandoffStatus(null);
-    clearWorldConversations();
   };
 
   useEffect(() => {
@@ -1893,7 +1983,6 @@ export function App() {
       return;
     }
     setWorldSelectedKey(key);
-    clearWorldConversations();
     setWorldHandoffStatus(null);
   };
   const openWorldTabInSpaces = (bridgeId: BridgeId, tabId: string) => {
@@ -4498,6 +4587,23 @@ export function App() {
     const launchSnapshot =
       connectionRefs.current[launchTarget.bridgeId]?.snapshot ??
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
+    const createdWorldSeat = activeSurface.id === "world" && launchTarget.mode === "tab";
+    const pendingWorldSeatLaunch = createdWorldSeat
+      ? {
+          bridgeId: launchTarget.bridgeId,
+          workspaceId: launchTarget.workspaceId,
+          baselineTabIds: new Set(
+            (launchSnapshot?.tabs ?? [])
+              .filter((tab) => tab.workspace_id === launchTarget.workspaceId)
+              .map((tab) => tab.tab_id),
+          ),
+          baselinePaneIds: new Set(
+            (launchSnapshot?.panes ?? [])
+              .filter((pane) => pane.workspace_id === launchTarget.workspaceId)
+              .map((pane) => pane.pane_id),
+          ),
+        }
+      : null;
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
     const target =
       launchTarget.mode === "tab"
@@ -4518,10 +4624,12 @@ export function App() {
       if (!ok) {
         return;
       }
-      const createdWorldSeat = activeSurface.id === "world" && launchTarget.mode === "tab";
+      if (pendingWorldSeatLaunch) {
+        pendingWorldSeatLaunchRef.current = pendingWorldSeatLaunch;
+      }
       setLaunchTarget(null);
       if (createdWorldSeat) {
-        setWorldHandoffStatus("New seat created. The Office will update from the next admitted snapshot.");
+        setWorldHandoffStatus("New seat created. Opening terminal…");
       }
     });
   };
@@ -4564,6 +4672,10 @@ export function App() {
       const runtimeMatchesTarget = Boolean(
         runtime && runtime.generationKey === worldConversationTarget.generationKey,
       );
+      const observationPending = worldConversationObservationPending(runtime, state);
+      const paneStillObserved = Boolean(
+        state?.snapshot?.panes.some(({ pane_id }) => pane_id === worldConversationTarget.paneId),
+      );
       if (
         runtimeMatchesTarget &&
         runtime &&
@@ -4601,7 +4713,7 @@ export function App() {
       if (
         runtimeMatchesTarget &&
         cached?.targetKey === worldConversationTarget.targetKey &&
-        (!state || state.snapshot === null || state.loadState !== "ready")
+        (observationPending || paneStillObserved)
       ) {
         return [{
           ...cached,
@@ -4635,29 +4747,51 @@ export function App() {
     if (activeSurface.id !== "world") {
       return;
     }
-    const visibleIds = new Set(worldConversations.map(({ windowId }) => windowId));
+    const targetsToClose = new Set<string>();
+    const targetsToRebind = new Map<string, string>();
     for (const target of worldConversationTargets) {
-      if (visibleIds.has(target.windowId)) {
-        continue;
-      }
       const runtime = bridge.getRuntime(target.bridgeId);
-      if (
-        worldConversationAdmissionPending(
-          runtime,
-          runtime ? connectionStates[runtime.id] : null,
-          target.generationKey,
-        )
-      ) {
+      const state = runtime ? connectionStates[runtime.id] : null;
+      if (worldConversationObservationPending(runtime, state)) {
         continue;
       }
+      const paneStillObserved = Boolean(
+        state?.snapshot?.panes.some(({ pane_id }) => pane_id === target.paneId),
+      );
+      if (paneStillObserved && runtime && runtime.generationKey !== target.generationKey) {
+        targetsToRebind.set(target.windowId, runtime.generationKey);
+        continue;
+      }
+      if (paneStillObserved) {
+        continue;
+      }
+      targetsToClose.add(target.windowId);
       officeDebug("conversation:cleanup-check", {
         windowId: target.windowId,
         targetKey: target.targetKey,
         activeSurface: activeSurface.id,
+        reason: "pane-absent-from-admitted-snapshot",
       });
-      closeWorldConversation(target.windowId);
     }
-  }, [activeSurface.id, bridge, connectionStates, worldConversationTargets, worldConversations]);
+    if (targetsToClose.size === 0 && targetsToRebind.size === 0) {
+      return;
+    }
+    for (const windowId of targetsToClose) {
+      worldConversationCacheRef.current.delete(windowId);
+    }
+    for (const windowId of targetsToRebind.keys()) {
+      worldConversationCacheRef.current.delete(windowId);
+    }
+    setWorldConversationTargets((current) =>
+      current.flatMap((target) => {
+        if (targetsToClose.has(target.windowId)) {
+          return [];
+        }
+        const generationKey = targetsToRebind.get(target.windowId);
+        return generationKey ? [{ ...target, generationKey }] : [target];
+      }),
+    );
+  }, [activeSurface.id, bridge, connectionStates, worldConversationTargets]);
   const worldConversationPanels = useMemo<WorldConversationBubblePanel[]>(
     () => worldConversations.map((worldConversation) => ({
       id: worldConversation.windowId,

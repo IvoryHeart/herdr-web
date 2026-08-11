@@ -847,7 +847,7 @@ function drawLiveStateBlackboard(
   parent.addChild(board);
 
   const heading = label("WORKFORCE", {
-    size: 10,
+    size: 12,
     color: 0xe2f1d1,
     anchor: 0.5,
   });
@@ -878,7 +878,7 @@ function drawLiveStateBlackboard(
     valueLabel.position.set(centerX, centerY);
     parent.addChild(valueLabel);
     const metricLabel = label(metric, {
-      size: 10,
+      size: 11,
       color: 0xa9c8a4,
       anchor: 0.5,
     });
@@ -917,7 +917,7 @@ function drawOtelCostBoard(
   parent.addChild(heading);
 
   const modelHeader = label("MODEL", {
-    size: 10,
+    size: 11,
     color: 0xa9c8a4,
     anchor: { x: 0, y: 0.5 },
     weight: "700",
@@ -953,21 +953,21 @@ function drawOtelCostBoard(
   observability.models.slice(0, 4).forEach((model, index) => {
     const rowY = y + 48 + index * 22;
     const modelLabel = label(formatOfficeModelName(model.model), {
-      size: 10,
+      size: 11,
       color: 0xf0ece5,
       anchor: { x: 0, y: 0.5 },
     });
     modelLabel.position.set(x + 12, rowY);
     parent.addChild(modelLabel);
     const tokenLabel = label(formatOfficeUsage(officeModelUsageTotal(model.usage)), {
-      size: 11,
+      size: 12,
       color: 0xf1e9bd,
       anchor: 0.5,
     });
     tokenLabel.position.set(tokenColumnX, rowY);
     parent.addChild(tokenLabel);
     const costLabel = label(formatOfficeCost(model.costUsd, model.costKind), {
-      size: 11,
+      size: 12,
       color: 0xf1e9bd,
       anchor: { x: 1, y: 0.5 },
     });
@@ -977,7 +977,7 @@ function drawOtelCostBoard(
 
   board.rect(x + 10, y + height - 31, width - 20, 1).fill({ color: 0xd8e8c8, alpha: 0.2 });
   const totalLabel = label("TOTAL", {
-    size: 10,
+    size: 11,
     color: 0xa9c8a4,
     anchor: { x: 0, y: 0.5 },
     weight: "700",
@@ -1312,7 +1312,7 @@ function drawRoom(
       );
     });
   if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom && canCreateSeat(room.key)) {
-    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onSelect, onNewSeat);
+    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
   }
 
   const overflow: string[] = [];
@@ -1346,7 +1346,6 @@ function drawNewSeatAction(
   rect: OfficeRoomRect,
   index: number,
   accent: number,
-  onSelect: (key: string) => void,
   onNewSeat: (roomKey: string) => void,
 ) {
   const anchor = deskAnchor(rect, index);
@@ -1356,7 +1355,6 @@ function drawNewSeatAction(
   action.cursor = "pointer";
   action.on("pointertap", (event) => {
     event.stopPropagation();
-    onSelect(room.key);
     onNewSeat(room.key);
   });
   const plate = new Graphics();

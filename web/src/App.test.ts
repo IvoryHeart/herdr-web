@@ -12,6 +12,7 @@ import {
   canAddNoteFromPaneMenu,
   filterCollapsedAgentPaneEntries,
   filterCollapsedTabEntries,
+  findNewWorldSeatPane,
   mergeCreatedPaneNoteList,
   mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
@@ -103,6 +104,46 @@ describe("App connection guards", () => {
         .selected_pane_id,
     ).toBe("pane-a");
     expect(ref.sharedSelectionOverride).toBeNull();
+  });
+
+  it("identifies only the pane admitted by a newly-created Office seat", () => {
+    const before = multiPaneSnapshot(
+      [workspace("workspace-a", 1)],
+      [pane("pane-a", "workspace-a", "tab-a")],
+    );
+    const after: Snapshot = {
+      ...before,
+      tabs: [
+        ...before.tabs,
+        {
+          ...before.tabs[0],
+          tab_id: "tab-new",
+          number: 2,
+          label: "New seat",
+        },
+      ],
+      panes: [
+        ...before.panes,
+        pane("pane-new", "workspace-a", "tab-new"),
+      ],
+    };
+
+    expect(
+      findNewWorldSeatPane(
+        after,
+        "workspace-a",
+        new Set(before.tabs.map((tab) => tab.tab_id)),
+        new Set(before.panes.map((item) => item.pane_id)),
+      )?.pane_id,
+    ).toBe("pane-new");
+    expect(
+      findNewWorldSeatPane(
+        before,
+        "workspace-a",
+        new Set(before.tabs.map((tab) => tab.tab_id)),
+        new Set(before.panes.map((item) => item.pane_id)),
+      ),
+    ).toBeNull();
   });
 
   it("rejects async results from stale backend connections", () => {
