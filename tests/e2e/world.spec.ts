@@ -776,6 +776,42 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
 });
 
+test("shows an accessible Office selection inspector and launches a real new seat", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  const selection = page.getByRole("region", { name: "Codex A" });
+  await expect(selection).toBeVisible();
+  await expect(selection).toContainText("Codex A");
+  await expect(selection.getByRole("button", { name: "Open in Spaces" })).toBeEnabled();
+  await expect(selection.getByRole("button", { name: "Clear Office selection" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New seat", exact: true }).click();
+  const launchDialog = page.locator("form.launch-modal");
+  await expect(launchDialog).toBeVisible();
+  await expect(launchDialog).toContainText("New tab");
+  await launchDialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(launchDialog).toHaveCount(0);
+
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].launches;
+  }).toEqual([
+    {
+      preset_id: "shell",
+      title: "Shell",
+      target: { mode: "tab", workspace_id: "main" },
+    },
+  ]);
+  await expect(page.getByText("New seat created. The Office will update from the next admitted snapshot.", {
+    exact: true,
+  })).toBeVisible();
+});
+
 test("opens the same standing room agent from its semantic row and canvas sprite", async ({
   page,
   request,

@@ -175,6 +175,7 @@ import {
   writeWorldCompletionSeenKeys,
 } from "./world/completionSeenState";
 import type { WorldConversationBubblePanel } from "./world/WorldSurface";
+import { officeSeatAvailability } from "./world/officeSelection";
 import { herdrOfficeSourcesFromRuntime } from "./world/worldRuntime";
 import {
   EMPTY_OFFICE_OBSERVABILITY,
@@ -4514,7 +4515,16 @@ export function App() {
               launchTarget.direction,
               resolvedSpec,
             );
-    void exec(runtime, target, action, true).then((ok) => ok && setLaunchTarget(null));
+    void exec(runtime, target, action, true).then((ok) => {
+      if (!ok) {
+        return;
+      }
+      const createdWorldSeat = activeSurface.id === "world" && launchTarget.mode === "tab";
+      setLaunchTarget(null);
+      if (createdWorldSeat) {
+        setWorldHandoffStatus("New seat created. The Office will update from the next admitted snapshot.");
+      }
+    });
   };
 
   const selectedTerminalSession = terminalSessionDescriptor(
@@ -4704,6 +4714,31 @@ export function App() {
   );
   const WorldSurface =
     activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
+  const worldNewSeatAvailability = officeSeatAvailability(
+    Boolean(selectedRuntime),
+    Boolean(activeSpace),
+    createTabSupported,
+  );
+  const worldNewSeatSupported = worldNewSeatAvailability.supported;
+  const openNewWorldSeat = () => {
+    if (!selectedRuntime) {
+      setWorldHandoffStatus("Select a connected workspace before starting a seat.");
+      return;
+    }
+    if (!activeSpace) {
+      setWorldHandoffStatus("No active workspace is available on this host.");
+      return;
+    }
+    if (!createTabSupported) {
+      setWorldHandoffStatus("New seats are unavailable on this host.");
+      return;
+    }
+    setLaunchTarget({
+      mode: "tab",
+      workspaceId: activeSpace.workspace_id,
+      bridgeId: selectedRuntime.id,
+    });
+  };
   const worldSurfaceContext: WorldSurfaceContext = {
     projection: worldProjection,
     observability: worldObservability,
@@ -4718,6 +4753,9 @@ export function App() {
     conversationBubbles: worldConversationPanels,
     onCloseConversation: closeWorldConversation,
     onFocusConversation: focusWorldConversation,
+    agentActivityTransitions,
+    newSeatSupported: worldNewSeatSupported,
+    onNewSeat: openNewWorldSeat,
   };
   const worldStage = WorldSurface ? (
     <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>

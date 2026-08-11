@@ -2,8 +2,11 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ChevronLeft,
+  ExternalLink,
   PanelLeft,
+  Plus,
   RotateCcw,
+  X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -28,6 +31,12 @@ import {
   officeRoomHandoffRequest,
 } from "./herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
+import { agentActivityKey } from "../agentActivity";
+import {
+  findOfficeSelection,
+  formatOfficeActivityAge,
+} from "./officeSelection";
+import type { OfficeSelection } from "./officeSelection";
 
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
@@ -43,6 +52,9 @@ export type WorldSurfaceContext = {
   conversationBubbles: readonly WorldConversationBubblePanel[];
   onCloseConversation: (id: string) => void;
   onFocusConversation: (id: string) => void;
+  agentActivityTransitions: ReadonlyMap<string, number>;
+  newSeatSupported: boolean;
+  onNewSeat: () => void;
 };
 
 export type WorldConversationBubblePanel = {
@@ -118,6 +130,9 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   conversationBubbles: [],
   onCloseConversation: () => {},
   onFocusConversation: () => {},
+  agentActivityTransitions: new Map(),
+  newSeatSupported: false,
+  onNewSeat: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -183,6 +198,7 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
+  const selection = findOfficeSelection(projection, context.selectedKey);
 
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
@@ -621,6 +637,16 @@ function WorldStage({
         >
           <RotateCcw size={16} />
         </button>
+        <button
+          className="world-new-seat btn"
+          type="button"
+          disabled={!context.newSeatSupported}
+          title={context.newSeatSupported ? "Start a new Herdr-backed seat" : "New seats are unavailable on this host"}
+          onClick={context.onNewSeat}
+        >
+          <Plus size={15} aria-hidden="true" />
+          <span>New seat</span>
+        </button>
       </header>
       <div className="world-stage-notice" role="status">
         <span>Live admitted state is shown on the CEO Office blackboard</span>
@@ -635,6 +661,15 @@ function WorldStage({
           <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
         ) : null}
       </div>
+      {selection ? (
+        <WorldSelectionPanel
+          selection={selection}
+          activityTransitions={context.agentActivityTransitions}
+          onActivateAgent={onActivateAgent}
+          onActivateRoom={onActivateRoom}
+          onClear={() => context.onSelect(null)}
+        />
+      ) : null}
       <div
         ref={scrollRef}
         className="world-stage-scroll"
@@ -709,6 +744,151 @@ function WorldStage({
   );
 }
 
+function WorldSelectionPanel({
+  selection,
+  activityTransitions,
+  onActivateAgent,
+  onActivateRoom,
+  onClear,
+}: {
+  selection: OfficeSelection;
+  activityTransitions: ReadonlyMap<string, number>;
+  onActivateAgent: (key: string) => void;
+  onActivateRoom: (key: string) => void;
+  onClear: () => void;
+}) {
+  const title = selection.kind === "agent"
+    ? selection.agent.displayLabel
+    : selection.kind === "desk"
+      ? selection.desk.desk.displayLabel
+      : selection.kind === "room"
+        ? selection.room.displayLabel
+        : selection.host.displayLabel;
+  const kindLabel = selection.kind === "agent"
+    ? "Agent"
+    : selection.kind === "desk"
+      ? "Desk"
+      : selection.kind === "room"
+        ? "Room"
+        : "Host";
+
+  return (
+    <section className="world-selection-panel" aria-labelledby="world-selection-title">
+      <div className="world-selection-heading">
+        <div>
+          <div className="world-selection-eyebrow">Selected {kindLabel}</div>
+          <strong id="world-selection-title">{title}</strong>
+        </div>
+        <button
+          className="icon-btn"
+          type="button"
+          aria-label="Clear Office selection"
+          title="Clear selection"
+          onClick={onClear}
+        >
+          <X size={16} />
+        </button>
+      </div>
+      <dl className="world-selection-details">
+        {selection.kind === "agent" ? (
+          <>
+            <SelectionDetail label="State">
+              {selection.agent.stale ? "stale" : selection.agent.semanticStatus}
+            </SelectionDetail>
+            <SelectionDetail label="Location">
+              {selection.entry.roomLabel} · {selection.entry.hostLabel}
+            </SelectionDetail>
+            <SelectionDetail label="Activity">
+              {formatOfficeActivityAge(
+                activityTransitions.get(
+                  agentActivityKey(
+                    selection.agent.hostKey,
+                    selection.agent.currentPaneRef.nativeTargetId,
+                    selection.agent.currentTerminalRef.nativeTargetId,
+                  ),
+                ),
+              ) ?? "No transition data available"}
+            </SelectionDetail>
+            {selection.agent.stateLabels[selection.agent.semanticStatus] ? (
+              <SelectionDetail label="Status label">
+                {selection.agent.stateLabels[selection.agent.semanticStatus]}
+              </SelectionDetail>
+            ) : null}
+          </>
+        ) : selection.kind === "desk" ? (
+          <>
+            <SelectionDetail label="Host">
+              {selection.desk.hostLabel}
+            </SelectionDetail>
+            <SelectionDetail label="Occupant">
+              {selection.desk.desk.occupantAgentKey ? "Occupied" : "Empty"}
+            </SelectionDetail>
+            {selection.desk.desk.completionAgentKeys.length > 0 ? (
+              <SelectionDetail label="Completed">
+                {selection.desk.desk.completionAgentKeys.length}
+              </SelectionDetail>
+            ) : null}
+          </>
+        ) : selection.kind === "room" ? (
+          <>
+            <SelectionDetail label="Host">{selection.room.hostLabel}</SelectionDetail>
+            <SelectionDetail label="State">
+              {selection.room.stale ? "stale" : "live"}
+            </SelectionDetail>
+          </>
+        ) : (
+          <>
+            <SelectionDetail label="Connection">
+              {selection.host.connectionState}
+            </SelectionDetail>
+            <SelectionDetail label="Office">
+              {selection.host.compatibleWithWorld ? "compatible" : "unavailable"}
+            </SelectionDetail>
+          </>
+        )}
+      </dl>
+      {selection.kind === "agent" && selection.agent.stale ? (
+        <p className="world-selection-gap">
+          This host is stale, so handoff is suppressed until the next admitted snapshot.
+        </p>
+      ) : selection.kind === "agent" && !selection.agent.canOpenInSpaces ? (
+        <p className="world-selection-gap">
+          Spaces handoff is unavailable for this current host connection.
+        </p>
+      ) : null}
+      <div className="world-selection-actions">
+        {selection.kind === "agent" && selection.agent.canOpenInSpaces ? (
+          <button className="world-handoff" type="button" onClick={() => onActivateAgent(selection.agent.key)}>
+            <ExternalLink size={14} aria-hidden="true" />
+            Open in Spaces
+          </button>
+        ) : null}
+        {selection.kind === "desk" && selection.desk.desk.canOpenInSpaces ? (
+          <button className="world-handoff" type="button" onClick={() => onActivateRoom(selection.desk.desk.roomKey)}>
+            <ExternalLink size={14} aria-hidden="true" />
+            Open room in Spaces
+          </button>
+        ) : null}
+        {selection.kind === "room" && selection.room.canOpenInSpaces ? (
+          <button className="world-handoff" type="button" onClick={() => onActivateRoom(selection.room.key)}>
+            <ExternalLink size={14} aria-hidden="true" />
+            Open in Spaces
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function SelectionDetail({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
 function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
   if (!value || typeof value !== "object") {
     return false;
@@ -719,6 +899,7 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
+    typeof record.onNewSeat === "function" &&
     Boolean(record.projection)
   );
 }
