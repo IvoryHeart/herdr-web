@@ -12,6 +12,7 @@ export type OfficeCallout = {
   kind: "agent" | "desk" | "room" | "host";
   title: string;
   detail: string;
+  summary?: string;
   status: AgentStatus | "stale" | null;
 };
 
@@ -64,6 +65,7 @@ export function officeCalloutForKey(
       kind: "agent",
       title: agent.displayLabel,
       detail: `${agent.stale ? "stale" : agent.stateLabels[agent.semanticStatus] ?? agent.semanticStatus} · ${agentEntry.roomLabel} · ${agentEntry.hostLabel}`,
+      ...(agent.taskSummary ? { summary: agent.taskSummary } : {}),
       status: agent.stale ? "stale" : agent.semanticStatus,
     };
   }
@@ -77,6 +79,7 @@ export function officeCalloutForKey(
       kind: "desk",
       title: deskEntry.desk.displayLabel,
       detail: `${occupant ? `${occupant.displayLabel} · ${occupant.stale ? "stale" : occupant.semanticStatus}` : "empty desk"} · ${deskEntry.roomLabel} · ${deskEntry.hostLabel}`,
+      ...(occupant?.taskSummary ? { summary: occupant.taskSummary } : {}),
       status: deskEntry.desk.stale ? "stale" : occupant?.semanticStatus ?? null,
     };
   }

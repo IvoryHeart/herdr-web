@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
+import type { HerdrOfficeProjection, OfficeAgent } from "./herdrOfficeProjection";
 import {
   findOfficeSelection,
   formatOfficeActivityAge,
@@ -147,5 +147,45 @@ describe("Office selection", () => {
       status: null,
     });
     expect(officeCalloutForKey(current, "missing")).toBeNull();
+  });
+
+  it("surfaces an available task summary in the selected agent callout", () => {
+    const current = projection();
+    const agent = {
+      key: "agent-a",
+      currentPaneRef: { profileId: "host-a", kind: "pane", nativeTargetId: "pane-a" },
+      currentTerminalRef: { profileId: "host-a", kind: "terminal", nativeTargetId: "terminal-a" },
+      currentTabRef: { profileId: "host-a", kind: "tab", nativeTargetId: "tab-a" },
+      deskKey: null,
+      observedGeneration: "generation-a",
+      roomKey: "host-a:workspace:room-a",
+      hostKey: "host-a",
+      displayLabel: "Codex",
+      taskSummary: "Reviewing the Office layout",
+      semanticStatus: "working",
+      stateLabels: { working: "Running" },
+      focused: true,
+      destination: "room",
+      placement: "standing",
+      stale: false,
+      canOpenInSpaces: true,
+      characterIndex: 0,
+    } satisfies OfficeAgent;
+    current.roster = [{
+      agent,
+      roomKey: "host-a:workspace:room-a",
+      roomLabel: "Room A",
+      hostKey: "host-a",
+      hostLabel: "Office A",
+      roomPresented: true,
+      deskPresented: false,
+      destinationPresented: true,
+    }];
+
+    expect(officeCalloutForKey(current, "agent-a")).toMatchObject({
+      title: "Codex",
+      summary: "Reviewing the Office layout",
+      status: "working",
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  allAvailableBridgeIds,
   buildHttpUrl,
   buildWsUrl,
   capabilityProbeFailure,
@@ -291,6 +292,22 @@ describe("backend store parsing", () => {
 
     expect(storage.has(removed)).toBe(false);
     expect(storage.has(retained)).toBe(true);
+  });
+});
+
+describe("bridge fleet coordination", () => {
+  it("orders the same-origin bridge before configured bridges when enabling the fleet", () => {
+    const backends = [
+      { id: "office-a", name: "Office A", baseUrl: "http://office-a:4000" },
+      { id: "office-b", name: "Office B", baseUrl: "http://office-b:4000" },
+    ];
+
+    expect(allAvailableBridgeIds(backends, true)).toEqual([
+      SAME_ORIGIN_BRIDGE_ID,
+      "office-a",
+      "office-b",
+    ]);
+    expect(allAvailableBridgeIds(backends, false)).toEqual(["office-a", "office-b"]);
   });
 });
 

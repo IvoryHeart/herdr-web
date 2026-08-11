@@ -134,6 +134,11 @@ of hidden requirements.
 - **Owner:** Open
 - **Added:** 2026-08-06
 - **Related:** [Federation guidance](federation.md)
+- **Current slice:** Direct browser federation remains the supported boundary.
+  Settings now offers an explicit Enable all / Disable all action for saved
+  bridge profiles, while probes and failures remain isolated per host. A
+  central authenticated coordinator remains deferred pending upstream auth,
+  discovery, and transport decisions.
 
 ### SUG-005 — Office provider and host health panel
 
@@ -166,7 +171,7 @@ of hidden requirements.
 
 ### SUG-007 — Saved Office layouts and views
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`
 - **Value:** Let users return to a useful arrangement of terminal windows,
   boards, filters, and host scope.
@@ -176,6 +181,10 @@ of hidden requirements.
   explicit persistence/privacy rules.
 - **Owner:** Open
 - **Added:** 2026-08-06
+- **Current slice:** The Office now restores bounded browser-local conversation
+  geometry, window order, and scene scroll position after refresh. Named view
+  presets, filters, and cross-device synchronization remain deferred.
+- **Related:** [`008-office-productivity-ux-spec.md`](specs/008-office-productivity-ux-spec.md)
 
 ### SUG-008 — Office accessibility and presentation modes
 
@@ -315,7 +324,7 @@ of hidden requirements.
 
 ### SUG-018 — CEO and reception spacing refinement
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`
 - **Value:** Use the CEO band more efficiently while preserving legible blocks
   and clear click targets.
@@ -326,6 +335,9 @@ of hidden requirements.
   overflow behaviour, and accessibility hit targets.
 - **Owner:** Open
 - **Added:** 2026-08-06
+- **Current slice:** The CEO/reception block gap is tighter while preserving
+  the existing furniture and hit-target model.
+- **Related:** [`008-office-productivity-ux-spec.md`](specs/008-office-productivity-ux-spec.md)
 
 ### SUG-019 — Dedicated mobile Office composition
 
@@ -394,7 +406,7 @@ of hidden requirements.
 
 ### SUG-023 — Harness-reported task summaries
 
-- **Status:** candidate
+- **Status:** promoted
 - **Scope:** `herdr-server`, `herdr-web`, `observability`, `office-view`
 - **Value:** Show what an agent is actually doing or has just completed using
   information reported by the harness, rather than guessing from screen text.
@@ -410,6 +422,11 @@ of hidden requirements.
   stable field or extension hook.
 - **Owner:** Open
 - **Added:** 2026-08-09
+- **Current slice:** Herdr Web accepts optional `task_summary` metadata on
+  snapshots and activity messages, bounds it, and surfaces it as a persistent
+  selected-agent Office callout. A native producer, TTL, privacy filter, and
+  upstream contract remain deferred.
+- **Related:** [`008-office-productivity-ux-spec.md`](specs/008-office-productivity-ux-spec.md)
 - **Related:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
 
 ### SUG-024 — Visible completion rendezvous and acknowledgement
@@ -435,7 +452,7 @@ of hidden requirements.
 
 ### SUG-025 — Fluid unit-based Office rooms
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`
 - **Value:** Make room composition scale with the number of desks and chairs
   instead of forcing every room into the same rigid footprint.
@@ -448,6 +465,9 @@ of hidden requirements.
   decisions.
 - **Owner:** Open
 - **Added:** 2026-08-10
+- **Current slice:** Room widths and local desk/standing columns now derive from
+  each room's contents while retaining minimum dimensions and inter-room gaps.
+- **Related:** [`008-office-productivity-ux-spec.md`](specs/008-office-productivity-ux-spec.md)
 
 ### SUG-026 — Add-seat and new Herdr session action
 
@@ -494,7 +514,7 @@ of hidden requirements.
 
 ### SUG-028 — Smooth Office terminal refit during resize
 
-- **Status:** candidate
+- **Status:** promoted
 - **Scope:** `office-view`, `herdr-web`
 - **Value:** Keep the terminal canvas visually aligned with its Office
   conversation window while the user drags or resizes it.
@@ -507,6 +527,11 @@ of hidden requirements.
   resize instability.
 - **Owner:** Open
 - **Added:** 2026-08-11
+- **Current slice:** The embedded terminal's ResizeObserver path now refits on
+  the next animation frame, removing the extra trailing debounce that made the
+  inner canvas visibly lag the outer Office window. The renderer scene-build
+  guard remains a separate follow-up if field use still exposes a delay.
+- **Related:** [`008-office-productivity-ux-spec.md`](specs/008-office-productivity-ux-spec.md)
 - **Related:** [Issue #7](https://github.com/IvoryHeart/herdr-web/issues/7)
 
 ## Parked or declined

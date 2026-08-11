@@ -318,7 +318,10 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   const officeWidth = await page.evaluate(
     () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
   );
-  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 2, standingCount: 0 }]);
+  const layout = resolveOfficeLayout(officeWidth, [
+    { deskCount: 2, standingCount: 0 },
+    { deskCount: 2, standingCount: 0 },
+  ]);
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
@@ -334,6 +337,18 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   await expect(
     page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
   ).toBeVisible();
+
+  // Keep the conversation window out of the room while inspecting the next
+  // seat; the responsive layout may place the room beneath the default window.
+  const conversationHeader = page.locator(".world-conversation-header");
+  for (let index = 0; index < 5; index += 1) {
+    await conversationHeader.focus();
+    await page.keyboard.press("Shift+ArrowLeft");
+  }
+  for (let index = 0; index < 6; index += 1) {
+    await conversationHeader.focus();
+    await page.keyboard.press("Shift+ArrowDown");
+  }
 
   const nextSeat = deskAnchor(layout.rooms[0], 1);
   await page.mouse.move(

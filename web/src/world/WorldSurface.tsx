@@ -5,13 +5,14 @@ import {
   PanelLeft,
   RotateCcw,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   OfficeConversationAnchors,
   OfficeConversationAnchorTarget,
+  OfficeCanvasAnchor,
   OfficeCanvasHover,
 } from "./PixelOfficeCanvas";
 import {
@@ -26,6 +27,11 @@ import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
 import { officeCalloutForKey } from "./officeSelection";
 import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
+import {
+  MAX_SAVED_WORLD_WINDOWS,
+  readWorldViewPrefs,
+  writeWorldViewPrefs,
+} from "./worldViewPrefs";
 import {
   officeAgentHandoffRequest,
   officeRoomHandoffRequest,
@@ -177,6 +183,10 @@ function WorldStage({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const conversationRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [initialSavedView] = useState(readWorldViewPrefs);
+  const savedViewRef = useRef(initialSavedView);
+  const scrollRestoreRef = useRef(false);
+  const scrollSaveTimerRef = useRef<number | null>(null);
   const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
@@ -185,8 +195,11 @@ function WorldStage({
     id: string;
     mode: "moving" | "resizing";
   } | null>(null);
-  const [conversationOrder, setConversationOrder] = useState<string[]>([]);
+  const [conversationOrder, setConversationOrder] = useState<string[]>(() =>
+    savedViewRef.current.order,
+  );
   const [canvasHover, setCanvasHover] = useState<(OfficeCanvasHover & { left: number; top: number }) | null>(null);
+  const [selectedCanvasAnchor, setSelectedCanvasAnchor] = useState<(OfficeCanvasAnchor & { left: number; top: number }) | null>(null);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
   const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
@@ -197,6 +210,29 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
+
+  const persistWorldView = useCallback(() => {
+    const geometry = {
+      ...savedViewRef.current.geometry,
+      ...conversationGeometryRef.current,
+    };
+    savedViewRef.current = {
+      geometry,
+      order: conversationOrder.filter(Boolean).slice(0, MAX_SAVED_WORLD_WINDOWS),
+      scrollTop: Math.max(0, scrollRef.current?.scrollTop ?? savedViewRef.current.scrollTop),
+    };
+    writeWorldViewPrefs(savedViewRef.current);
+  }, [conversationOrder]);
+
+  const scheduleWorldViewPersist = useCallback(() => {
+    if (scrollSaveTimerRef.current !== null) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+    }
+    scrollSaveTimerRef.current = window.setTimeout(() => {
+      scrollSaveTimerRef.current = null;
+      persistWorldView();
+    }, 120);
+  }, [persistWorldView]);
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
   const selectedRoomKey = projection.rooms.find(({ key }) => key === context.selectedKey)?.key ??
@@ -221,10 +257,31 @@ function WorldStage({
     });
   };
 
+  const onSelectedCanvasAnchorChange = (anchor: OfficeCanvasAnchor | null) => {
+    if (!anchor) {
+      setSelectedCanvasAnchor(null);
+      return;
+    }
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+    const shellRect = shell.getBoundingClientRect();
+    setSelectedCanvasAnchor({
+      ...anchor,
+      left: anchor.x - shellRect.left,
+      top: anchor.y - shellRect.top,
+    });
+  };
+
   useEffect(() => () => {
     if (conversationGeometryFrameRef.current !== null) {
       window.cancelAnimationFrame(conversationGeometryFrameRef.current);
       conversationGeometryFrameRef.current = null;
+    }
+    if (scrollSaveTimerRef.current !== null) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = null;
     }
   }, []);
 
@@ -362,6 +419,38 @@ function WorldStage({
     };
   }, [context.compact, panelIdsKey]);
 
+  useEffect(() => {
+    if (context.compact || scrollRestoreRef.current) {
+      return;
+    }
+    const scroll = scrollRef.current;
+    if (!scroll) {
+      return;
+    }
+    const restore = () => {
+      scroll.scrollTop = savedViewRef.current.scrollTop;
+      scrollRestoreRef.current = true;
+    };
+    const frame = window.requestAnimationFrame(() => {
+      restore();
+      window.requestAnimationFrame(restore);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [context.compact, projection.generatedAt]);
+
+  useEffect(() => {
+    if (context.compact) {
+      return;
+    }
+    const scroll = scrollRef.current;
+    if (!scroll) {
+      return;
+    }
+    const onScroll = () => scheduleWorldViewPersist();
+    scroll.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroll.removeEventListener("scroll", onScroll);
+  }, [context.compact, scheduleWorldViewPersist]);
+
   useLayoutEffect(() => {
     const nextRects: Record<string, DOMRect> = {};
     for (const panel of context.conversationBubbles) {
@@ -380,7 +469,10 @@ function WorldStage({
       setConversationGeometry({});
     } else {
       const nextGeometry = Object.fromEntries(
-        Object.entries(conversationGeometryRef.current).filter(([id]) => ids.has(id)),
+        panelIds.flatMap((id) => {
+          const geometry = conversationGeometryRef.current[id] ?? savedViewRef.current.geometry[id];
+          return geometry ? [[id, geometry] as const] : [];
+        }),
       );
       conversationGeometryRef.current = nextGeometry;
       setConversationGeometry(nextGeometry);
@@ -392,14 +484,20 @@ function WorldStage({
       Object.entries(current).filter(([id]) => ids.has(id)),
     ));
     setConversationOrder((current) => [
-      ...current.filter((id) => ids.has(id)),
-      ...panelIds.filter((id) => !current.includes(id)),
+      ...(current.length > 0 ? current : savedViewRef.current.order).filter((id) => ids.has(id)),
+      ...panelIds.filter((id) => !(current.length > 0 ? current : savedViewRef.current.order).includes(id)),
     ]);
     if (panelIds.length === 0) {
       conversationInteractionRef.current = null;
       setConversationInteraction(null);
     }
   }, [context.compact, panelIdsKey]);
+
+  useEffect(() => {
+    if (!context.compact) {
+      persistWorldView();
+    }
+  }, [context.compact, conversationGeometry, conversationOrder, persistWorldView]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -741,9 +839,18 @@ function WorldStage({
           onNewSeat={context.onNewSeat}
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
+          onSelectedAnchorChange={onSelectedCanvasAnchorChange}
         />
       </div>
-      {canvasHover ? (
+      {context.selectedKey && selectedCanvasAnchor ? (
+        <WorldCanvasCallout
+          callout={officeCalloutForKey(projection, context.selectedKey)}
+          left={selectedCanvasAnchor.left}
+          top={selectedCanvasAnchor.top}
+          persistent
+        />
+      ) : null}
+      {canvasHover && !(canvasHover.key === context.selectedKey && officeCalloutForKey(projection, canvasHover.key)?.summary) ? (
         <WorldCanvasCallout
           callout={officeCalloutForKey(projection, canvasHover.key)}
           left={canvasHover.left}
@@ -805,23 +912,27 @@ function WorldCanvasCallout({
   callout,
   left,
   top,
+  persistent = false,
 }: {
   callout: OfficeCallout | null;
   left: number;
   top: number;
+  persistent?: boolean;
 }) {
   if (!callout) {
     return null;
   }
   return (
     <div
-      className="world-canvas-callout"
+      className={`world-canvas-callout${persistent ? " world-canvas-callout-persistent" : ""}`}
       data-kind={callout.kind}
       data-status={callout.status ?? undefined}
       style={{ left: `${left}px`, top: `${top}px` }}
-      role="tooltip"
+      role={persistent ? "status" : "tooltip"}
+      aria-live={persistent ? "polite" : undefined}
     >
       <strong>{callout.title}</strong>
+      {callout.summary ? <span className="world-canvas-callout-summary">{callout.summary}</span> : null}
       <span>{callout.detail}</span>
     </div>
   );

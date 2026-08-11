@@ -42,6 +42,19 @@ describe("Pixel Office geometry", () => {
     expect(layout.rooms[2].height).toBeGreaterThan(OFFICE_GEOMETRY.minRoomHeight);
   });
 
+  it("gives smaller rooms a smaller unit footprint while keeping dense rooms readable", () => {
+    const layout = resolveOfficeLayout(1000, [
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 8, standingCount: 8 },
+    ]);
+    expect(layout.rooms[0].width).toBeLessThan(layout.rooms[1].width);
+    expect(layout.rooms[1].width).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minRoomWidth);
+    expect(layout.rooms[1].deskColumns).toBe(4);
+    expect(layout.rooms[1].standingColumns).toBe(8);
+    expect(layout.rooms[0].x + layout.rooms[0].width + OFFICE_GEOMETRY.roomGap)
+      .toBeLessThanOrEqual(layout.rooms[1].x + 1);
+  });
+
   it("keeps CEO and all host reception desks on one bounded horizontal row", () => {
     const officeWidth = minimumOfficeWidthForReceptions(6);
     const blocks = resolveCeoBlockLayout(officeWidth, 6);

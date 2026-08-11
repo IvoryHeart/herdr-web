@@ -124,6 +124,7 @@ export type BridgeManager = {
   lastSelectedBridgeId: BridgeId | null;
   getRuntime: (bridgeId: BridgeId | null | undefined) => BridgeRuntime | null;
   setBridgeEnabled: (bridgeId: BridgeId, enabled: boolean) => void;
+  setAllBridgesEnabled: (enabled: boolean) => void;
   setLastSelectedBridgeId: (bridgeId: BridgeId | null) => void;
   markBridgeUsed: (bridgeId: BridgeId) => void;
   retryBridgeProbe: (bridgeId: BridgeId) => void;
@@ -270,6 +271,25 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         enabledBridgeIds,
         lastSelectedBridgeId,
         backends: current.backends,
+      };
+    });
+  }, []);
+
+  const setAllBridgesEnabled = useCallback((enabled: boolean) => {
+    storeEditedRef.current = true;
+    setStore((current) => {
+      const enabledBridgeIds = enabled
+        ? allAvailableBridgeIds(current.backends, defaultBridgeMode() === "same-origin")
+        : [];
+      const lastSelectedBridgeId = enabled
+        ? current.lastSelectedBridgeId && enabledBridgeIds.includes(current.lastSelectedBridgeId)
+          ? current.lastSelectedBridgeId
+          : enabledBridgeIds[0] ?? null
+        : null;
+      return {
+        ...current,
+        enabledBridgeIds,
+        lastSelectedBridgeId,
       };
     });
   }, []);
@@ -428,6 +448,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
           : (enabledBridgeIds[0] ?? null),
       getRuntime,
       setBridgeEnabled,
+      setAllBridgesEnabled,
       setLastSelectedBridgeId,
       markBridgeUsed,
       retryBridgeProbe,
@@ -448,6 +469,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       retryBridgeProbe,
       sameOriginAvailable,
       setBridgeEnabled,
+      setAllBridgesEnabled,
       setLastSelectedBridgeId,
       store,
       storeLoaded,
@@ -901,16 +923,23 @@ function normalizeEnabledBridgeIds(
   sameOriginAvailable: boolean,
 ) {
   const result: BridgeId[] = [];
-  const availableIds = new Set(backends.map((backend) => backend.id));
-  if (sameOriginAvailable) {
-    availableIds.add(SAME_ORIGIN_BRIDGE_ID);
-  }
+  const availableIds = new Set(allAvailableBridgeIds(backends, sameOriginAvailable));
   for (const id of ids) {
     if (typeof id === "string" && availableIds.has(id) && !result.includes(id)) {
       result.push(id);
     }
   }
   return result;
+}
+
+export function allAvailableBridgeIds(
+  backends: readonly BridgeBackendProfile[],
+  sameOriginAvailable: boolean,
+): BridgeId[] {
+  return [
+    ...(sameOriginAvailable ? [SAME_ORIGIN_BRIDGE_ID] : []),
+    ...backends.map((backend) => backend.id),
+  ];
 }
 
 function isAvailableBridgeId(

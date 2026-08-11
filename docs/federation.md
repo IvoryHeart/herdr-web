@@ -52,6 +52,12 @@ page origin to call B. `--allow-connect-origin` on A adds B's HTTP and WebSocket
 of the page A serves. Neither option is authentication. Never expose this configuration to an
 untrusted network.
 
+In Settings → Bridge, `Enable all` and `Disable all` are convenience actions for the saved browser
+profiles. They only change which directly reachable profiles are admitted to the current Office
+view; each bridge still has its own capability probe, connection state, origin policy, and failure
+boundary. This is a downstream coordination affordance, not a fleet gateway or authentication
+system.
+
 The Origin check is a browser cross-site-request guard, not a client identity check. Browsers send
 Origin for the cross-origin requests this policy is designed to constrain, while non-browser clients
 may omit the header and are admitted. Require authentication at an operator-managed VPN or reverse
@@ -111,6 +117,8 @@ asset service or central gateway.
 ## Verification checklist
 
 - Load two compatible host profiles in one browser and confirm both appear in All-host scope.
+- Use Settings → Bridge → Enable all and confirm every saved profile is admitted, then disable one
+  profile and confirm the remaining host stays navigable.
 - Type, send control input, resize/refit, and create/rename/move/close on each owning host.
 - Disconnect one bridge and confirm the other host remains navigable and controllable.
 - Configure a protocol-`16` or malformed fixture and confirm it is visible but not controllable.

@@ -6,6 +6,12 @@
 
 ### Added
 
+- Added a bounded Office productivity slice: browser-local restoration of Office window geometry,
+  ordering, and scroll position; responsive room sizing; persistent selected-agent callouts for
+  optional harness task summaries; and direct-federation Enable all / Disable all bridge controls.
+  [PR #9](https://github.com/IvoryHeart/herdr-web/pull/9)
+- Added animation-frame terminal refits during Office window resizing to remove the extra inner
+  canvas catch-up delay. [PR #9](https://github.com/IvoryHeart/herdr-web/pull/9)
 - Added an isolated Office settings surface for an optional Prometheus URL,
   with bridge-owned live configuration, per-bridge browser persistence, and
   clear provider health feedback. The generic Herdr Web settings remain the

@@ -41,6 +41,7 @@ export function PixelOfficeCanvas({
   onNewSeat,
   onHover,
   onAnchorChange,
+  onSelectedAnchorChange,
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
@@ -54,6 +55,7 @@ export function PixelOfficeCanvas({
   onNewSeat: (roomKey: string) => void;
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
+  onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
@@ -70,6 +72,7 @@ export function PixelOfficeCanvas({
     onNewSeat,
     onHover,
     onAnchorChange,
+    onSelectedAnchorChange,
   });
   const [failure, setFailure] = useState(false);
   latestRef.current = {
@@ -85,11 +88,13 @@ export function PixelOfficeCanvas({
     onNewSeat,
     onHover,
     onAnchorChange,
+    onSelectedAnchorChange,
   };
 
   const reportAnchors = () => {
     const callback = latestRef.current.onAnchorChange;
-    if (!callback) {
+    const selectedCallback = latestRef.current.onSelectedAnchorChange;
+    if (!callback && !selectedCallback) {
       return;
     }
     const controller = controllerRef.current;
@@ -97,7 +102,8 @@ export function PixelOfficeCanvas({
     const scroll = host?.closest<HTMLElement>(".world-stage-scroll");
     const canvas = host?.querySelector<HTMLCanvasElement>("canvas[data-office-canvas='true']");
     if (!scroll || !canvas || !controller) {
-      callback(null);
+      callback?.(null);
+      selectedCallback?.(null);
       return;
     }
     const canvasRect = canvas.getBoundingClientRect();
@@ -157,7 +163,9 @@ export function PixelOfficeCanvas({
         workbench: toViewportAnchor(sceneAnchors.workbench),
       };
     }
-    callback(anchors);
+    callback?.(anchors);
+    const selectedAnchors = controller.getAnchors(latestRef.current.selectedKey, null);
+    selectedCallback?.(toViewportAnchor(selectedAnchors.agent ?? selectedAnchors.workbench));
   };
   const reportAnchorsRef = useRef(reportAnchors);
   reportAnchorsRef.current = reportAnchors;

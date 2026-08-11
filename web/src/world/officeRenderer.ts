@@ -613,6 +613,9 @@ function resolveOfficeAnchors(
   const directDesk = conversationTargetKey
     ? projection.deskRoster.find(({ desk }) => desk.key === conversationTargetKey)?.desk ?? null
     : null;
+  const selectedDesk = !agentEntry && selectedKey
+    ? projection.deskRoster.find(({ desk }) => desk.key === selectedKey)?.desk ?? null
+    : null;
   const agentDesk = agentEntry?.agent.deskKey
     ? projection.deskRoster.find(({ desk }) => desk.key === agentEntry.agent.deskKey)?.desk ?? null
     : null;
@@ -620,7 +623,7 @@ function resolveOfficeAnchors(
     agent: agentEntry
       ? resolveOfficeAgentAnchor(projection, layout, agentEntry.agent.key)
       : null,
-    workbench: resolveOfficeDeskAnchor(projection, layout, directDesk ?? agentDesk),
+    workbench: resolveOfficeDeskAnchor(projection, layout, directDesk ?? agentDesk ?? selectedDesk),
   };
 }
 
@@ -1360,6 +1363,9 @@ function drawNewSeatAction(
     onNewSeat(room.key);
   });
   const plate = new Graphics();
+  // Keep the visible + target self-describing for Pixi's hit-test walk so
+  // hover callouts work on the empty-seat action as well as on desks.
+  plate.label = room.key;
   plate.eventMode = "static";
   plate.roundRect(anchor.x - 25, anchor.deskY, 50, 27, 5)
     .fill({ color: accent, alpha: 0.1 })
