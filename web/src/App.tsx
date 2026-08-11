@@ -170,6 +170,12 @@ import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
 import type { OfficeAgent } from "./world/herdrOfficeProjection";
 import { WorldConversationBubble } from "./world/WorldConversationBubble";
+import { WorldSettingsDialog } from "./world/WorldSettingsDialog";
+import {
+  hasStoredWorldSettings,
+  readWorldSettings,
+  updateWorldObservabilityConfiguration,
+} from "./world/worldSettings";
 import {
   readWorldCompletionSeenKeys,
   writeWorldCompletionSeenKeys,
@@ -275,9 +281,69 @@ type WorldConversationView = {
 };
 
 const MAX_WORLD_CONVERSATIONS = 5;
+const WORLD_CONVERSATIONS_STORAGE_KEY = "herdrWeb.worldConversations.v1";
 
 function worldConversationWindowId(bridgeId: BridgeId, paneId: string) {
   return `${bridgeId}:${paneId}`;
+}
+
+function readWorldConversationTargets(): WorldConversationTarget[] {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(WORLD_CONVERSATIONS_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const targets = parsed.flatMap((value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return [];
+      }
+      const record = value as Record<string, unknown>;
+      if (
+        (record.kind !== "agent" && record.kind !== "desk") ||
+        typeof record.targetKey !== "string" ||
+        typeof record.bridgeId !== "string" ||
+        typeof record.paneId !== "string" ||
+        typeof record.generationKey !== "string" ||
+        (record.agentKey !== null && typeof record.agentKey !== "string")
+      ) {
+        return [];
+      }
+      return [{
+        windowId: worldConversationWindowId(record.bridgeId, record.paneId),
+        kind: record.kind,
+        targetKey: record.targetKey,
+        agentKey: record.agentKey as string | null,
+        bridgeId: record.bridgeId,
+        paneId: record.paneId,
+        generationKey: record.generationKey,
+      } satisfies WorldConversationTarget];
+    });
+    return targets.slice(0, MAX_WORLD_CONVERSATIONS);
+  } catch {
+    return [];
+  }
+}
+
+function writeWorldConversationTargets(targets: readonly WorldConversationTarget[]) {
+  try {
+    globalThis.sessionStorage?.setItem(
+      WORLD_CONVERSATIONS_STORAGE_KEY,
+      JSON.stringify(targets.map((target) => ({
+        kind: target.kind,
+        targetKey: target.targetKey,
+        agentKey: target.agentKey,
+        bridgeId: target.bridgeId,
+        paneId: target.paneId,
+        generationKey: target.generationKey,
+      }))),
+    );
+  } catch {
+    // Session storage can be unavailable in private or locked-down contexts.
+  }
 }
 
 function worldConversationAdmissionPending(
@@ -1156,12 +1222,17 @@ export function App() {
   const [worldObservability, setWorldObservability] = useState<OfficeObservability>(
     EMPTY_OFFICE_OBSERVABILITY,
   );
-  const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>([]);
+  const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>(
+    () => readWorldConversationTargets(),
+  );
   const pendingWorldPaneSelectionRef = useRef<PendingWorldPaneSelection | null>(null);
   const pendingWorldSeatLaunchRef = useRef<PendingWorldSeatLaunch | null>(null);
   const worldConversationCacheRef = useRef<Map<string, WorldConversationView>>(new Map());
   const worldCanvasSelectionTimerRef = useRef<number | null>(null);
   const worldSelectionSeedPendingRef = useRef(false);
+  useEffect(() => {
+    writeWorldConversationTargets(worldConversationTargets);
+  }, [worldConversationTargets]);
   useEffect(() => () => {
     if (worldCanvasSelectionTimerRef.current !== null) {
       window.clearTimeout(worldCanvasSelectionTimerRef.current);
@@ -1201,7 +1272,10 @@ export function App() {
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
   const [backendSettingsOpen, setBackendSettingsOpen] = useState(false);
+  const [worldSettingsOpen, setWorldSettingsOpen] = useState(false);
+  const [worldObservabilityRevision, setWorldObservabilityRevision] = useState(0);
   const backendSettingsReturnFocusRef = useRef<HTMLElement | null>(null);
+  const worldSettingsAppliedRef = useRef(new Map<string, string>());
   const openBackendSettings = useCallback(() => {
     backendSettingsReturnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1217,6 +1291,40 @@ export function App() {
       }
     });
   }, []);
+  const openWorldSettings = useCallback(() => {
+    setBackendSettingsOpen(false);
+    setWorldSettingsOpen(true);
+  }, []);
+  const closeWorldSettings = useCallback(() => {
+    setWorldSettingsOpen(false);
+  }, []);
+  const markWorldSettingsSaved = useCallback(() => {
+    setWorldObservabilityRevision((revision) => revision + 1);
+  }, []);
+  useEffect(() => {
+    for (const runtime of bridge.enabledRuntimes) {
+      if (
+        runtime.capabilityState !== "ready" ||
+        !runtime.canConnect ||
+        !hasStoredWorldSettings(runtime.id)
+      ) {
+        continue;
+      }
+      const settings = readWorldSettings(runtime.id);
+      if (!settings) {
+        continue;
+      }
+      const value = settings.prometheusUrl ?? "";
+      const marker = `${runtime.generationKey}:${value}`;
+      if (worldSettingsAppliedRef.current.get(runtime.id) === marker) {
+        continue;
+      }
+      worldSettingsAppliedRef.current.set(runtime.id, marker);
+      void updateWorldObservabilityConfiguration(runtime, settings.prometheusUrl).catch(() => {
+        worldSettingsAppliedRef.current.delete(runtime.id);
+      });
+    }
+  }, [bridge.enabledRuntimes]);
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
@@ -1393,6 +1501,10 @@ export function App() {
         closeBackendSettings();
         return true;
       }
+      if (worldSettingsOpen) {
+        closeWorldSettings();
+        return true;
+      }
       if (spaceReorderMode) {
         cancelSpaceReorder();
         return true;
@@ -1414,6 +1526,8 @@ export function App() {
     noteDeleteTarget,
     notesPanelOpen,
     spaceReorderMode,
+    worldSettingsOpen,
+    closeWorldSettings,
   ]);
 
   useEffect(() => {
@@ -1537,7 +1651,7 @@ export function App() {
       disposed = true;
       window.clearInterval(interval);
     };
-  }, [activeSurface.id, bridge.enabledRuntimes]);
+  }, [activeSurface.id, bridge.enabledRuntimes, worldObservabilityRevision]);
   const worldProjection = useMemo(
     () => projectHerdrOffice(worldSourcesInScope, Date.now()),
     [worldSourcesInScope],
@@ -5569,6 +5683,7 @@ export function App() {
       {backendSettingsOpen ? (
         <BackendSettingsDialog
           showMobileTerminalSettings={isTouchInput}
+          onOpenWorldSettings={openWorldSettings}
           notesEnabled={notesEnabled}
           onNotesEnabled={setNotesEnabled}
           navigationSyncMode={navigationSyncMode}
@@ -5610,6 +5725,10 @@ export function App() {
           onMobileKeyboardHideRefit={setMobileKeyboardHideRefit}
           onClose={closeBackendSettings}
         />
+      ) : null}
+
+      {worldSettingsOpen ? (
+        <WorldSettingsDialog onClose={closeWorldSettings} onSaved={markWorldSettingsSaved} />
       ) : null}
 
       {error ? (

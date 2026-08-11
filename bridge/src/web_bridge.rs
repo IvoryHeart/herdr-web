@@ -56,8 +56,8 @@ use crate::notes::{
     NotesListResponse, NotesManager, RevisionRequest, UpdateNoteRequest,
 };
 use crate::observability::{
-    ObservabilityContractVersion, ObservabilityDescriptor, ObservabilityHealth, ObservabilityState,
-    ObservabilityTransportMessage,
+    ObservabilityConfiguration, ObservabilityContractVersion, ObservabilityDescriptor,
+    ObservabilityHealth, ObservabilityState, ObservabilityTransportMessage,
 };
 use crate::observability_prometheus::{PrometheusConfig, PrometheusObservabilityProvider};
 
@@ -202,6 +202,11 @@ struct ObservabilityCapability {
     version: u32,
     contract_version: ObservabilityContractVersion,
     health: ObservabilityHealth,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservabilityConfigurationRequest {
+    prometheus_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -979,13 +984,21 @@ Uploads default to HERDR_WEB_UPLOAD_DIR, XDG_DATA_HOME/herdr-web/uploads, or ~/.
 fn observability_state_from_environment() -> ObservabilityState {
     match PrometheusConfig::from_env() {
         Ok(Some(config)) => {
+            let endpoint = config.endpoint_string();
             info!(
                 provider = "prometheus.otel",
                 window_seconds = config.window_seconds,
                 refresh_seconds = config.refresh_seconds,
                 "Prometheus observability provider enabled"
             );
-            ObservabilityState::with_provider(PrometheusObservabilityProvider::start(config))
+            ObservabilityState::with_provider_and_configuration(
+                PrometheusObservabilityProvider::start(config),
+                ObservabilityConfiguration {
+                    provider_id: "prometheus.otel".to_string(),
+                    configured: true,
+                    endpoint: Some(endpoint),
+                },
+            )
         }
         Ok(None) => ObservabilityState::unavailable(),
         Err(error) => {
@@ -1117,6 +1130,12 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
         .route(
             "/api/extensions/observability/snapshot",
             get(observability_snapshot_handler).options(preflight_handler),
+        )
+        .route(
+            "/api/extensions/observability/config",
+            get(observability_configuration_handler)
+                .put(update_observability_configuration_handler)
+                .options(preflight_handler),
         );
     let world_entry = options.static_dir.join("index.html");
     let app = Router::new()
@@ -3044,6 +3063,57 @@ async fn observability_snapshot_handler(
         .snapshot()
         .map_err(|err| BridgeError::Protocol(err.to_string()))?;
     Ok(Json(snapshot))
+}
+
+async fn observability_configuration_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+) -> Result<Json<ObservabilityConfiguration>, BridgeError> {
+    ensure_allowed_request(&headers, &state.request_policy)?;
+    Ok(Json(state.observability.configuration()))
+}
+
+async fn update_observability_configuration_handler(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+    Json(body): Json<ObservabilityConfigurationRequest>,
+) -> Result<Json<ObservabilityConfiguration>, BridgeError> {
+    ensure_allowed_request(&headers, &state.request_policy)?;
+    let raw_endpoint = body
+        .prometheus_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let (provider, configuration): (
+        Arc<dyn crate::observability::ObservabilityProvider>,
+        ObservabilityConfiguration,
+    ) = match raw_endpoint {
+        Some(raw_endpoint) => {
+            let config = PrometheusConfig::from_settings_endpoint(raw_endpoint)
+                .map_err(BridgeError::BadRequest)?;
+            let endpoint = config.endpoint_string();
+            (
+                PrometheusObservabilityProvider::start(config),
+                ObservabilityConfiguration {
+                    provider_id: "prometheus.otel".to_string(),
+                    configured: true,
+                    endpoint: Some(endpoint),
+                },
+            )
+        }
+        None => (
+            Arc::new(crate::observability::UnavailableObservabilityProvider),
+            ObservabilityConfiguration {
+                provider_id: "none".to_string(),
+                configured: false,
+                endpoint: None,
+            },
+        ),
+    };
+    state
+        .observability
+        .replace_provider(provider, configuration.clone());
+    Ok(Json(configuration))
 }
 
 async fn agent_activity_list_handler(

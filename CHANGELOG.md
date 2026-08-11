@@ -6,6 +6,14 @@
 
 ### Added
 
+- Added an isolated Office settings surface for an optional Prometheus URL,
+  with bridge-owned live configuration, per-bridge browser persistence, and
+  clear provider health feedback. The generic Herdr Web settings remain the
+  only integration entry point so the Office slice can be removed for an
+  upstream contribution.
+- Added short-lived Office terminal restoration across browser refreshes by
+  persisting only qualified pane descriptors and revalidating them against an
+  admitted snapshot.
 - Added a documented `npm run dev:local` workflow that checks the Herdr socket,
   reuses or starts the bridge, and launches the web client with the correct
   development proxy.
@@ -26,6 +34,11 @@
 
 ### Changed
 
+- Added compact colour-coded Herdr host and Economy provider state to the
+  Office notice, and made Office canvas hover resolution and in-room `+`
+  actions use explicit canvas hit targets.
+- Documented Office settings verification and tracked the usable-but-not-yet
+  smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state
   coverage onto a CEO-room blackboard, opened the CEO/reception composition for future plugin
   boards, shifted room furniture down within the existing wall clearance, and refreshed the Agent

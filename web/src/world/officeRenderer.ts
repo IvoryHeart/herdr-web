@@ -4,7 +4,6 @@ import {
   Application,
   CanvasSource,
   Container,
-  FederatedPointerEvent,
   Graphics,
   Sprite,
   Text,
@@ -265,8 +264,11 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
-  const hover = (event: FederatedPointerEvent) => {
-    let target: Container | null = event.target;
+  const hover = (event: PointerEvent) => {
+    let target: Container | null = app.renderer.events.rootBoundary.hitTest(
+      event.offsetX,
+      event.offsetY,
+    );
     while (target && !target.label) {
       target = target.parent;
     }
@@ -276,12 +278,12 @@ export async function createOfficeRenderer(
     }
     onHover({
       key: target.label,
-      clientX: event.nativeEvent.clientX,
-      clientY: event.nativeEvent.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
     });
   };
   const leave = () => onHover(null);
-  app.stage.on("pointermove", hover);
+  app.canvas.addEventListener("pointermove", hover);
   app.canvas.addEventListener("pointerleave", leave);
   const onCanvasDoubleClick = (event: MouseEvent) => {
     const prior = canvasActivationCandidates.get(select);
@@ -519,7 +521,7 @@ export async function createOfficeRenderer(
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
-    app.stage.off("pointermove", hover);
+    app.canvas.removeEventListener("pointermove", hover);
     app.canvas.removeEventListener("pointerleave", leave);
     app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
     pointerSequences.delete(select);
@@ -572,7 +574,7 @@ export async function createOfficeRenderer(
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
-      app.stage.off("pointermove", hover);
+      app.canvas.removeEventListener("pointermove", hover);
       app.canvas.removeEventListener("pointerleave", leave);
       app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
       pointerSequences.delete(select);
@@ -1358,14 +1360,17 @@ function drawNewSeatAction(
     onNewSeat(room.key);
   });
   const plate = new Graphics();
+  plate.eventMode = "static";
   plate.roundRect(anchor.x - 25, anchor.deskY, 50, 27, 5)
     .fill({ color: accent, alpha: 0.1 })
     .stroke({ width: 1, color: accent, alpha: 0.8 });
   action.addChild(plate);
   const plus = label("+", { size: 19, color: 0xf4e6c0, anchor: 0.5, weight: "700" });
+  plus.eventMode = "none";
   plus.position.set(anchor.x, anchor.deskY + 13);
   action.addChild(plus);
   const hint = label("NEW SEAT", { size: 7, color: 0xa9c8a4, anchor: 0.5 });
+  hint.eventMode = "none";
   hint.position.set(anchor.x, anchor.nameY + 7);
   action.addChild(hint);
   parent.addChild(action);

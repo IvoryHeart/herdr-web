@@ -41,6 +41,19 @@ HERDR_WORLD_OTEL_PROMETHEUS_URL=http://127.0.0.1:9101 \
   scripts/run-bridge.sh
 ```
 
+The Office-only Settings surface can also configure this endpoint while the
+bridge is running. Open Herdr Web Settings, choose `Office`, and save the
+optional Prometheus URL. The browser sends the value only to the selected
+bridge's configuration route; it never queries Prometheus directly. The
+setting is stored in browser local storage per bridge profile under the
+`herdrWeb.worldSettings.v1` key, and is re-applied when that bridge reconnects.
+
+The environment variable remains the startup default. If no Office setting
+has been saved, it remains effective. Once an operator saves or clears the
+Office setting, that per-bridge browser value takes precedence for that
+browser. This live-configuration seam is downstream to this repository and
+should be reviewed before proposing it upstream.
+
 Optional settings are:
 
 - `HERDR_WORLD_OTEL_PROMETHEUS_WINDOW_SECONDS` — usage window, defaulting to
@@ -92,6 +105,23 @@ desk, with model, tokens, and cost columns. The `Workforce` board remains
 separate beside the reception desks.
 
 ## Ownership and upstream PR seams
+
+Office-specific configuration is intentionally kept outside the generic
+Herdr Web settings implementation:
+
+- `web/src/world/worldSettings.ts` owns the Office setting shape, validation,
+  persistence, and bridge API calls;
+- `web/src/world/WorldSettingsDialog.tsx` owns the Office settings UI;
+- `web/src/world/officeObservability.ts` and `web/src/world/WorldSurface.tsx`
+  own the Office health projection and presentation; and
+- `web/src/App.tsx` and `web/src/BackendSettingsDialog.tsx` contain only the
+  small entry-point/lifecycle seams needed to mount the Office slice.
+
+The bridge-side dynamic provider seam is limited to the observability
+extension files. Removing the Office-specific settings slice for an upstream
+Herdr Web contribution therefore means removing the `worldSettings` module,
+the Office dialog, its App/Settings entry points, and the configuration route;
+the generic Herdr Web settings remain intact.
 
 ```text
 observability contract  → schemas, versioning, validation, fixtures

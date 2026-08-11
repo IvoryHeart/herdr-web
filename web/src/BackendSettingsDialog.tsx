@@ -2,6 +2,7 @@ import { hexToHsva, hsvaToHex } from "@uiw/color-convert";
 import type { HsvaColor } from "@uiw/color-convert";
 import Wheel from "@uiw/react-color-wheel";
 import {
+  Building2,
   Plus,
   RotateCcw,
   Server,
@@ -60,6 +61,7 @@ import { TERMINAL_OUTPUT_COALESCE_OPTIONS_MS } from "./terminalOutputCoalescing"
 
 type Props = {
   showMobileTerminalSettings: boolean;
+  onOpenWorldSettings: () => void;
   notesEnabled: boolean;
   onNotesEnabled: (enabled: boolean) => void;
   navigationSyncMode: NavigationSyncMode;
@@ -114,6 +116,7 @@ type SettingsArea = "bridge" | "features" | "display" | "terminal" | "mobile";
 
 export function BackendSettingsDialog({
   showMobileTerminalSettings,
+  onOpenWorldSettings,
   notesEnabled,
   onNotesEnabled,
   navigationSyncMode,
@@ -344,6 +347,17 @@ export function BackendSettingsDialog({
                 <span>{label}</span>
               </button>
             ))}
+            <button
+              className="settings-area-tab"
+              type="button"
+              role="tab"
+              aria-label="Office settings"
+              aria-selected={false}
+              onClick={onOpenWorldSettings}
+            >
+              <Building2 size={15} />
+              <span>Office</span>
+            </button>
           </div>
 
           <div className="settings-panel" role="tabpanel">

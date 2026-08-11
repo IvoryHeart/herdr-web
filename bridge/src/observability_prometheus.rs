@@ -65,6 +65,27 @@ impl PrometheusConfig {
         Ok(Some(config))
     }
 
+    pub(crate) fn from_settings_endpoint(raw_endpoint: &str) -> Result<Self, String> {
+        let mut config = Self::from_endpoint_and_settings(
+            raw_endpoint,
+            env::var("HERDR_WORLD_OTEL_PROMETHEUS_WINDOW_SECONDS")
+                .ok()
+                .as_deref(),
+            env::var("HERDR_WORLD_OTEL_PROMETHEUS_REFRESH_SECONDS")
+                .ok()
+                .as_deref(),
+            env::var("HERDR_WORLD_OTEL_PROMETHEUS_MAX_MODELS")
+                .ok()
+                .as_deref(),
+        )?;
+        config.openai_pricing = OpenAiPricing::from_env()?;
+        Ok(config)
+    }
+
+    pub(crate) fn endpoint_string(&self) -> String {
+        self.endpoint.to_string()
+    }
+
     fn from_endpoint_and_settings(
         raw_endpoint: &str,
         window_seconds: Option<&str>,
@@ -374,15 +395,21 @@ impl PrometheusObservabilityProvider {
             state: Arc::new(RwLock::new(ProviderState::default())),
         });
 
-        let task_provider = Arc::clone(&provider);
+        let task_provider = Arc::downgrade(&provider);
         tokio::spawn(async move {
-            task_provider.refresh().await;
+            let Some(provider) = task_provider.upgrade() else {
+                return;
+            };
+            provider.refresh().await;
             let mut interval =
-                tokio::time::interval(Duration::from_secs(task_provider.config.refresh_seconds));
+                tokio::time::interval(Duration::from_secs(provider.config.refresh_seconds));
             interval.tick().await;
             loop {
                 interval.tick().await;
-                task_provider.refresh().await;
+                let Some(provider) = task_provider.upgrade() else {
+                    return;
+                };
+                provider.refresh().await;
             }
         });
 

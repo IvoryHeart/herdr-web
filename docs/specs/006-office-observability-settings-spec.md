@@ -1,15 +1,16 @@
 # Office observability settings
 
 - **Spec ID:** `006-office-observability-settings`
-- **Status:** Draft
+- **Status:** Implemented
 - **Created:** 2026-08-10
 - **Owner:** Herdr Web / Office
 - **Reviewers:** —
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Requester
+- **Approved at:** 2026-08-11
 
-> Draft only. This records the requested future capability and does not
-> authorize implementation.
+> This records the downstream implementation boundary. It is not an upstream
+> API commitment; the live bridge configuration seam still requires review
+> before it is proposed outside this repository.
 
 ## 1. Purpose
 
@@ -41,8 +42,10 @@ model rather than becoming a general Herdr runtime configuration editor.
   or another telemetry backend.
 - No credentials, bearer tokens, passwords, or arbitrary Prometheus query
   editing in the initial setting.
-- No replacement of the existing environment-variable startup path until a
-  compatible migration and precedence rule is approved.
+- No removal of the existing environment-variable startup path. The current
+  downstream precedence is: no saved Office value leaves the environment
+  configuration effective; a saved or explicitly cleared per-bridge Office
+  value overrides it for that browser.
 - No change to Herdr session, terminal, workspace, or Office roster
   authority.
 - No requirement to configure remote bridges through a local browser unless a
@@ -158,6 +161,13 @@ The eventual implementation must specify:
 - environment-variable versus Settings precedence;
 - how a bridge reports the effective source without exposing credentials; and
 - how settings behave in the Android/native shell.
+
+The current downstream slice uses browser local storage under
+`herdrWeb.worldSettings.v1`, keyed by bridge profile ID. The bridge exposes a
+small GET/PUT configuration route and owns the live provider instance; the
+browser re-applies the stored value after a bridge reconnect. This is a
+deliberately removable implementation seam rather than a generic Herdr Web
+settings protocol.
 
 ## 7. Privacy and security
 

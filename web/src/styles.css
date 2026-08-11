@@ -951,6 +951,28 @@ button {
   color: var(--red);
 }
 
+.world-provider-health {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--overlay1);
+}
+
+.world-provider-health span[data-status] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.world-provider-health span[data-status="available"] { color: var(--st-done); }
+.world-provider-health span[data-status="degraded"] { color: var(--yellow); }
+.world-provider-health span[data-status="unavailable"] { color: var(--red); }
+
+.world-provider-health strong {
+  color: inherit;
+  font-weight: 700;
+}
+
 .world-canvas-callout {
   position: absolute;
   z-index: 12;
@@ -3315,6 +3337,9 @@ button {
 }
 
 .modal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -3642,6 +3667,32 @@ button {
   padding-top: 0;
   border-top: 0;
 }
+
+.world-settings-modal {
+  width: min(520px, 100%);
+}
+
+.world-settings-content {
+  gap: 12px;
+}
+
+.settings-help {
+  margin: -4px 0 0;
+  color: var(--subtext0);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.world-settings-health {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--overlay1);
+  font-size: 12px;
+}
+
+.world-settings-health[data-status="available"] { color: var(--st-done); }
+.world-settings-health[data-status="unavailable"] { color: var(--overlay1); }
 
 .settings-label {
   font-size: 11px;

@@ -108,6 +108,10 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   selectedKey: null,
   observability: {
     health: "unavailable",
+    providerId: null,
+    sourceCount: 0,
+    configuredSourceCount: 0,
+    failedSourceCount: 0,
     observedAt: 0,
     windowSeconds: null,
     models: [],
@@ -622,6 +626,32 @@ function WorldStage({
     );
   })();
 
+  const onlineHosts = projection.hosts.filter(
+    ({ connectionState }) => connectionState === "compatible" || connectionState === "degraded",
+  ).length;
+  const hostHealthStatus = projection.hosts.length === 0
+    ? "unavailable"
+    : onlineHosts === projection.hosts.length
+      ? "available"
+      : onlineHosts > 0
+        ? "degraded"
+        : "unavailable";
+  const hostHealthText = projection.hosts.length === 0
+    ? "No Herdr hosts"
+    : `${onlineHosts}/${projection.hosts.length} connected${projection.coverage.staleHosts ? ` · ${projection.coverage.staleHosts} stale` : ""}`;
+  const economyHealthStatus = context.observability.health === "available"
+    ? "available"
+    : context.observability.health === "degraded"
+      ? "degraded"
+      : "unavailable";
+  const economyHealthText = context.observability.health === "available"
+    ? `${context.observability.providerId ?? "Provider"} connected`
+    : context.observability.configuredSourceCount === 0
+      ? "Not configured"
+      : context.observability.failedSourceCount > 0
+        ? "Provider unavailable"
+        : "No data available";
+
   return (
     <div ref={shellRef} className="world-stage-shell">
       <header className="stage-bar world-stage-bar">
@@ -682,6 +712,10 @@ function WorldStage({
         {context.handoffStatus ? (
           <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
         ) : null}
+        <span className="world-provider-health" aria-label="Office provider health">
+          <span data-status={hostHealthStatus}><strong>Herdr</strong> {hostHealthText}</span>
+          <span data-status={economyHealthStatus}><strong>Economy</strong> {economyHealthText}</span>
+        </span>
       </div>
       <div
         ref={scrollRef}

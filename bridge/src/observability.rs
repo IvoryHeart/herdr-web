@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -176,6 +176,13 @@ pub struct ObservabilityExtensionResponse {
     pub snapshot: ObservabilitySnapshot,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ObservabilityConfiguration {
+    pub provider_id: String,
+    pub configured: bool,
+    pub endpoint: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ObservabilityTransportMessage {
@@ -231,7 +238,8 @@ impl ObservabilityProvider for UnavailableObservabilityProvider {
 
 #[derive(Clone)]
 pub struct ObservabilityState {
-    provider: Arc<dyn ObservabilityProvider>,
+    provider: Arc<RwLock<Arc<dyn ObservabilityProvider>>>,
+    configuration: Arc<RwLock<ObservabilityConfiguration>>,
     event_tx: tokio::sync::broadcast::Sender<ObservabilityTransportMessage>,
     next_snapshot_sequence: Arc<AtomicU64>,
     #[allow(dead_code)]
@@ -244,24 +252,70 @@ impl ObservabilityState {
     }
 
     pub fn with_provider(provider: Arc<dyn ObservabilityProvider>) -> Self {
-        Self {
+        let descriptor = provider.descriptor();
+        Self::with_provider_and_configuration(
             provider,
+            ObservabilityConfiguration {
+                configured: descriptor.provider_id != "none",
+                provider_id: descriptor.provider_id,
+                endpoint: None,
+            },
+        )
+    }
+
+    pub fn with_provider_and_configuration(
+        provider: Arc<dyn ObservabilityProvider>,
+        configuration: ObservabilityConfiguration,
+    ) -> Self {
+        Self {
+            provider: Arc::new(RwLock::new(provider)),
+            configuration: Arc::new(RwLock::new(configuration)),
             event_tx: tokio::sync::broadcast::channel(256).0,
             next_snapshot_sequence: Arc::new(AtomicU64::new(0)),
             next_event_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
+    pub fn replace_provider(
+        &self,
+        provider: Arc<dyn ObservabilityProvider>,
+        configuration: ObservabilityConfiguration,
+    ) {
+        *self
+            .provider
+            .write()
+            .expect("observability provider lock poisoned") = provider;
+        *self
+            .configuration
+            .write()
+            .expect("observability configuration lock poisoned") = configuration;
+    }
+
+    pub fn configuration(&self) -> ObservabilityConfiguration {
+        self.configuration
+            .read()
+            .expect("observability configuration lock poisoned")
+            .clone()
+    }
+
     pub fn descriptor(&self) -> Result<ObservabilityDescriptor, ObservabilityValidationError> {
-        let descriptor = self.provider.descriptor();
+        let descriptor = self
+            .provider
+            .read()
+            .expect("observability provider lock poisoned")
+            .descriptor();
         validate_descriptor(&descriptor)?;
         Ok(descriptor)
     }
 
     pub fn snapshot(&self) -> Result<ObservabilityExtensionResponse, ObservabilityValidationError> {
-        let mut descriptor = self.provider.descriptor();
+        let provider = self
+            .provider
+            .read()
+            .expect("observability provider lock poisoned");
+        let mut descriptor = provider.descriptor();
         validate_descriptor(&descriptor)?;
-        let envelopes = match self.provider.snapshot() {
+        let envelopes = match provider.snapshot() {
             Ok(envelopes) => envelopes,
             Err(_) => {
                 if descriptor.health == ObservabilityHealth::Available {

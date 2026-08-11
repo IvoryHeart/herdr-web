@@ -452,6 +452,22 @@ test("inspects completed work from the shared sidebar and clears its unseen mark
     .toBe(0);
 });
 
+test("restores a still-live Office terminal after a page refresh", async ({ page }) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+
+  await page.reload();
+  await waitForOffice(page);
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+});
+
 test("deduplicates terminal windows and stops at the five-window Office cap", async ({
   page,
   request,

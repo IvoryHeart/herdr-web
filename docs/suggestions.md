@@ -137,7 +137,7 @@ of hidden requirements.
 
 ### SUG-005 — Office provider and host health panel
 
-- **Status:** open
+- **Status:** candidate
 - **Scope:** `office-view`, `observability`
 - **Value:** Make stale, disconnected, incompatible, or degraded data sources
   understandable without inspecting browser logs.
@@ -147,6 +147,9 @@ of hidden requirements.
 - **Dependencies:** Capability and health contract.
 - **Owner:** Open
 - **Added:** 2026-08-06
+- **Current slice:** The Office notice now shows compact colour-coded Herdr
+  host health and Economy provider state. A fuller freshness/details panel
+  remains open for a later pass.
 
 ### SUG-006 — Agent activity timeline
 
@@ -213,7 +216,7 @@ of hidden requirements.
 
 ### SUG-011 — Scoped Office and Herdr Web settings
 
-- **Status:** open
+- **Status:** promoted
 - **Scope:** `office-view`, `herdr-web`
 - **Value:** Let users tune the experience without mixing product preferences
   with Herdr runtime configuration.
@@ -222,9 +225,9 @@ of hidden requirements.
   defaults and per-device persistence.
 - **Dependencies:** Settings ownership model, packaging defaults, and mobile
   persistence decisions.
-- **Current refinement:** The first concrete candidate is an optional
-  Prometheus URL for the Office observability provider, with health feedback
-  and explicit bridge-boundary/security rules. See the draft
+- **Current refinement:** The first concrete candidate is implemented as a
+  removable Office-only settings slice: an optional Prometheus URL with health
+  feedback and explicit bridge-boundary/security rules. See
   [`006-office-observability-settings-spec.md`](specs/006-office-observability-settings-spec.md).
 - **Owner:** Open
 - **Added:** 2026-08-06
@@ -466,7 +469,7 @@ of hidden requirements.
 
 ### SUG-027 — Restore open terminal windows after refresh
 
-- **Status:** open
+- **Status:** candidate
 - **Scope:** `herdr-web`, `office-view`
 - **Value:** Prevent a browser refresh from losing the user's active terminal
   workspace and forcing them to rediscover each session.
@@ -484,6 +487,27 @@ of hidden requirements.
   mechanism for this UI state.
 - **Owner:** Open
 - **Added:** 2026-08-10
+- **Current slice:** Office keeps short-lived qualified pane descriptors in
+  `sessionStorage`, rebinds them to a new bridge generation, and drops them
+  when an admitted snapshot confirms the pane is gone. Geometry persistence
+  and cross-restart restoration remain intentionally deferred.
+
+### SUG-028 — Smooth Office terminal refit during resize
+
+- **Status:** candidate
+- **Scope:** `office-view`, `herdr-web`
+- **Value:** Keep the terminal canvas visually aligned with its Office
+  conversation window while the user drags or resizes it.
+- **Idea:** Reduce the visible catch-up blink between the outer conversation
+  geometry and the inner Ghostty terminal refit. Investigate a frame-aligned
+  measurement path and the stacked `ResizeObserver`/fit debounce without
+  increasing backend resize traffic or weakening terminal lifecycle guards.
+- **Dependencies:** Ghostty FitAddon behavior, ResizeObserver timing, pointer
+  and keyboard resize paths, and a reproducible CI trace for the existing
+  resize instability.
+- **Owner:** Open
+- **Added:** 2026-08-11
+- **Related:** [Issue #7](https://github.com/IvoryHeart/herdr-web/issues/7)
 
 ## Parked or declined
 
