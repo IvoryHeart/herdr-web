@@ -378,6 +378,16 @@ function WorldStage({
       if (event.key !== "Escape") {
         return;
       }
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const activeElement = document.activeElement;
+      const terminalHasFocus = Boolean(
+        eventTarget?.closest(".world-conversation-terminal")
+          || (activeElement instanceof Element
+            && activeElement.closest(".world-conversation-terminal")),
+      );
+      if (terminalHasFocus) {
+        return;
+      }
       const focusedId = [...conversationOrder].reverse().find((id) => panelIds.includes(id));
       if (!focusedId) {
         return;

@@ -251,10 +251,10 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(bubble).toBeVisible();
   await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
   await expect(bubble.getByRole("button", { name: "Close agent conversation" })).toBeVisible();
-  await expect(bubble.locator(".world-conversation-context")).toContainText("State");
-  await expect(bubble.locator(".world-conversation-context")).toContainText("Location");
-  await expect(bubble.locator(".world-conversation-context")).toContainText("Activity");
-  await expect(bubble.getByRole("button", { name: "Open in Spaces" })).toBeVisible();
+  await expect(bubble.locator(".world-conversation-context")).toContainText("working");
+  await expect(
+    bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
+  ).toBeVisible();
   await expect(bubble.locator(".terminal-stage")).toBeVisible();
   const connector = page.locator(".world-conversation-connector");
   await expect(connector).toBeVisible();
@@ -293,9 +293,15 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(2);
   await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(2);
 
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(1);
   await expect(page.getByRole("dialog", { name: "Codex A" })).toBeVisible();
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(0);
 });
@@ -545,6 +551,27 @@ test("uses the fixed mobile conversation layout without exposing desktop resize 
   await expect(page.locator(".world-conversation-slot")).toHaveAttribute("data-positioned", "false");
 });
 
+test("passes Escape through to a focused Office terminal", async ({ page, request }) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  const terminalInput = bubble.locator(".terminal-host textarea.ghostty-hidden-input");
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.focus();
+  await page.keyboard.press("Escape");
+
+  await expect(bubble).toBeVisible();
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].terminalInput.some(
+      (message: { type: string; data: string }) => message.type === "input" && message.data === "\u001b",
+    );
+  }).toBe(true);
+});
+
 test("opens the conversation target in the full Spaces terminal", async ({ page }) => {
   await page.goto("/world");
   await waitForOffice(page);
@@ -552,7 +579,7 @@ test("opens the conversation target in the full Spaces terminal", async ({ page 
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
-  await bubble.getByRole("button", { name: "Open in Spaces" }).click();
+  await bubble.getByRole("button", { name: "Open full terminal in Spaces" }).click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Codex A");
@@ -790,7 +817,9 @@ test("selects an Office agent semantically and launches a real new seat", async 
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   const bubble = page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" });
   await expect(bubble).toBeVisible();
-  await expect(bubble.getByRole("button", { name: "Open in Spaces" })).toBeEnabled();
+  await expect(
+    bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
+  ).toBeEnabled();
 
   await page.getByRole("button", { name: "New seat", exact: true }).click();
   const launchDialog = page.locator("form.launch-modal");

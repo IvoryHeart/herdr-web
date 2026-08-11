@@ -1,6 +1,5 @@
-import { ExternalLink, MessageCircle, X } from "lucide-react";
+import { Maximize2, MessageCircle, X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
-import type { ReactNode } from "react";
 import type { BridgeRuntime } from "../bridge";
 import { agentActivityKey } from "../agentActivity";
 import type { PaneInfo } from "../types";
@@ -19,7 +18,6 @@ import type { OfficeAgent } from "./herdrOfficeProjection";
 export function WorldConversationBubble({
   agent,
   targetLabel,
-  roomLabel,
   hostLabel,
   pane,
   runtime,
@@ -41,7 +39,6 @@ export function WorldConversationBubble({
 }: {
   agent: OfficeAgent | null;
   targetLabel: string;
-  roomLabel: string;
   hostLabel: string;
   pane: PaneInfo;
   runtime: BridgeRuntime;
@@ -103,40 +100,32 @@ export function WorldConversationBubble({
           </div>
         </div>
         {agent ? (
-          <dl
+          <span
             className="world-conversation-context"
-            tabIndex={0}
-            aria-label="Agent context"
+            aria-label="Agent state and activity"
           >
-            <ConversationHeaderDetail label="State">
-              {agent.stale ? "stale" : agent.semanticStatus}
-            </ConversationHeaderDetail>
-            <ConversationHeaderDetail label="Location">
-              {roomLabel} · {hostLabel}
-            </ConversationHeaderDetail>
-            <ConversationHeaderDetail label="Activity">
-              {formatOfficeActivityAge(
-                agentActivityTransitions.get(
-                  agentActivityKey(
-                    agent.hostKey,
-                    agent.currentPaneRef.nativeTargetId,
-                    agent.currentTerminalRef.nativeTargetId,
-                  ),
+            {agent.stale ? "stale" : agent.semanticStatus}
+            {" · "}
+            {formatOfficeActivityAge(
+              agentActivityTransitions.get(
+                agentActivityKey(
+                  agent.hostKey,
+                  agent.currentPaneRef.nativeTargetId,
+                  agent.currentTerminalRef.nativeTargetId,
                 ),
-              ) ?? "No transition data available"}
-            </ConversationHeaderDetail>
-          </dl>
+              ),
+            ) ?? "No transition data available"}
+          </span>
         ) : null}
         <div className="world-conversation-actions">
           <button
-            className="world-handoff world-conversation-open"
+            className="icon-btn"
             type="button"
-            aria-label="Open in Spaces"
-            title="Open in Spaces"
+            aria-label="Open full terminal in Spaces"
+            title="Open full terminal in Spaces"
             onClick={onOpenInSpaces}
           >
-            <ExternalLink size={14} aria-hidden="true" />
-            <span>Open in Spaces</span>
+            <Maximize2 size={17} />
           </button>
           <button
             className="icon-btn"
@@ -177,14 +166,5 @@ export function WorldConversationBubble({
         />
       </div>
     </section>
-  );
-}
-
-function ConversationHeaderDetail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
   );
 }
