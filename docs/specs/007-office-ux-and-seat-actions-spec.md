@@ -1,15 +1,14 @@
 # Office UX and seat actions
 
 - **Spec ID:** `007-office-ux-and-seat-actions`
-- **Status:** Draft
+- **Status:** Approved
 - **Created:** 2026-08-11
 - **Owner:** Herdr Web / Office
 - **Reviewers:** —
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Requester
+- **Approved at:** 2026-08-11
 
-> Draft only. This records the proposed first UX and Office seat slice and does
-> not authorize implementation until reviewed and approved.
+> Approved contract. Implementation is authorized within the scope below.
 
 ## 1. Purpose
 
