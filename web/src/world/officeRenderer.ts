@@ -70,7 +70,6 @@ const canvasActivationCandidates = new WeakMap<
     activate: (key: string) => void;
   }
 >();
-
 const THEMES = Object.freeze([
   { floorA: 0x0c1620, floorB: 0x0a121c, wall: 0x1e3050, accent: 0x4aa3d8 },
   { floorA: 0x120c20, floorB: 0x100a1e, wall: 0x34215a, accent: 0x9a6bd1 },
@@ -151,6 +150,12 @@ export type OfficeRendererAnchor = {
   y: number;
 };
 
+export type OfficeCanvasHover = {
+  key: string;
+  clientX: number;
+  clientY: number;
+};
+
 export type OfficeRendererAnchors = {
   agent: OfficeRendererAnchor | null;
   workbench: OfficeRendererAnchor | null;
@@ -165,6 +170,9 @@ export async function createOfficeRenderer(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
+  canCreateSeat: (roomKey: string) => boolean,
+  onNewSeat: (roomKey: string) => void,
+  onHover: (hover: OfficeCanvasHover | null) => void,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -256,6 +264,27 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
+  const hover = (event: PointerEvent) => {
+    let target: Container | null = app.renderer.events.rootBoundary.hitTest(
+      event.offsetX,
+      event.offsetY,
+    );
+    while (target && !target.label) {
+      target = target.parent;
+    }
+    if (!target?.label) {
+      onHover(null);
+      return;
+    }
+    onHover({
+      key: target.label,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+  };
+  const leave = () => onHover(null);
+  app.canvas.addEventListener("pointermove", hover);
+  app.canvas.addEventListener("pointerleave", leave);
   const onCanvasDoubleClick = (event: MouseEvent) => {
     const prior = canvasActivationCandidates.get(select);
     if (!prior) {
@@ -273,7 +302,7 @@ export async function createOfficeRenderer(
     }
   };
   app.canvas.addEventListener("dblclick", onCanvasDoubleClick);
-  diagnostics.activeListeners += 1;
+  diagnostics.activeListeners += 3;
 
   const renderScene = (layout: OfficeLayout) => {
     if (disposed) {
@@ -339,6 +368,8 @@ export async function createOfficeRenderer(
           select,
           activateAgent,
           activateRoom,
+          canCreateSeat,
+          onNewSeat,
         );
       }
     });
@@ -397,7 +428,9 @@ export async function createOfficeRenderer(
     const layout = resolveOfficeLayout(
       width,
       currentProjection.rooms.map((room) => ({
-        deskCount: room.desks.length,
+        deskCount: room.desks.length + (
+          canCreateSeat(room.key) && room.desks.length < OFFICE_GEOMETRY.desksPerRoom ? 1 : 0
+        ),
         standingCount: room.roomAgents.filter(({ placement }) => placement === "standing").length,
       })),
     );
@@ -475,7 +508,10 @@ export async function createOfficeRenderer(
     if (resizeTimer !== null) {
       window.clearTimeout(resizeTimer);
     }
-    resizeTimer = window.setTimeout(() => build(nextWidth), 80);
+    resizeTimer = window.setTimeout(() => {
+      resizeTimer = null;
+      build(nextWidth);
+    }, 80);
   });
   observer.observe(element);
   diagnostics.activeObservers += 1;
@@ -485,6 +521,8 @@ export async function createOfficeRenderer(
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
+    app.canvas.removeEventListener("pointermove", hover);
+    app.canvas.removeEventListener("pointerleave", leave);
     app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
     pointerSequences.delete(select);
     canvasActivationCandidates.delete(select);
@@ -496,7 +534,7 @@ export async function createOfficeRenderer(
     diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
     diagnostics.activeListeners = Math.max(
       0,
-      diagnostics.activeListeners - (scrollElement ? 3 : 2),
+      diagnostics.activeListeners - (scrollElement ? 5 : 4),
     );
     throw error;
   }
@@ -536,6 +574,8 @@ export async function createOfficeRenderer(
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
+      app.canvas.removeEventListener("pointermove", hover);
+      app.canvas.removeEventListener("pointerleave", leave);
       app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
       pointerSequences.delete(select);
       canvasActivationCandidates.delete(select);
@@ -553,7 +593,7 @@ export async function createOfficeRenderer(
       diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
       diagnostics.activeListeners = Math.max(
         0,
-        diagnostics.activeListeners - (scrollElement ? 3 : 2),
+        diagnostics.activeListeners - (scrollElement ? 5 : 4),
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
@@ -808,8 +848,8 @@ function drawLiveStateBlackboard(
   board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
   parent.addChild(board);
 
-  const heading = label("LIVE ADMITTED STATE", {
-    size: 10,
+  const heading = label("WORKFORCE", {
+    size: 12,
     color: 0xe2f1d1,
     anchor: 0.5,
   });
@@ -840,7 +880,7 @@ function drawLiveStateBlackboard(
     valueLabel.position.set(centerX, centerY);
     parent.addChild(valueLabel);
     const metricLabel = label(metric, {
-      size: 10,
+      size: 11,
       color: 0xa9c8a4,
       anchor: 0.5,
     });
@@ -870,7 +910,7 @@ function drawOtelCostBoard(
   board.rect(x + 8, y + height - 10, width - 16, 2).fill({ color: 0x8f6e3c, alpha: 0.58 });
   parent.addChild(board);
 
-  const heading = label("OTEL · LAST 24H", {
+  const heading = label("ECONOMY", {
     size: 12,
     color: 0xe2f1d1,
     anchor: 0.5,
@@ -879,7 +919,7 @@ function drawOtelCostBoard(
   parent.addChild(heading);
 
   const modelHeader = label("MODEL", {
-    size: 10,
+    size: 11,
     color: 0xa9c8a4,
     anchor: { x: 0, y: 0.5 },
     weight: "700",
@@ -887,13 +927,13 @@ function drawOtelCostBoard(
   modelHeader.position.set(x + 12, y + 26);
   parent.addChild(modelHeader);
   const tokenColumnX = x + 100;
-  const tokenIcon = new Graphics();
-  tokenIcon.roundRect(tokenColumnX - 8, y + 20, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.62 });
-  tokenIcon.roundRect(tokenColumnX - 8, y + 23, 16, 4, 1).fill({ color: 0xd4b66c, alpha: 0.82 });
-  tokenIcon.roundRect(tokenColumnX - 8, y + 26, 16, 4, 1).fill(0xf1e9bd);
-  tokenIcon.rect(tokenColumnX - 5, y + 27, 2, 2).fill({ color: 0x8a6b3d, alpha: 0.8 });
-  parent.addChild(tokenIcon);
-  const costHeader = label("$", {
+  const coinIcon = new Graphics();
+  coinIcon.circle(tokenColumnX - 4, y + 25, 5).fill({ color: 0xd4b66c, alpha: 0.62 });
+  coinIcon.circle(tokenColumnX + 3, y + 24, 5).fill({ color: 0xd4b66c, alpha: 0.82 });
+  coinIcon.circle(tokenColumnX, y + 28, 5).fill(0xf1e9bd);
+  coinIcon.circle(tokenColumnX, y + 28, 2).fill({ color: 0x8a6b3d, alpha: 0.8 });
+  parent.addChild(coinIcon);
+  const costHeader = label("$$$", {
     size: 12,
     color: 0xa9c8a4,
     anchor: { x: 1, y: 0.5 },
@@ -915,21 +955,21 @@ function drawOtelCostBoard(
   observability.models.slice(0, 4).forEach((model, index) => {
     const rowY = y + 48 + index * 22;
     const modelLabel = label(formatOfficeModelName(model.model), {
-      size: 10,
+      size: 11,
       color: 0xf0ece5,
       anchor: { x: 0, y: 0.5 },
     });
     modelLabel.position.set(x + 12, rowY);
     parent.addChild(modelLabel);
     const tokenLabel = label(formatOfficeUsage(officeModelUsageTotal(model.usage)), {
-      size: 11,
+      size: 12,
       color: 0xf1e9bd,
       anchor: 0.5,
     });
     tokenLabel.position.set(tokenColumnX, rowY);
     parent.addChild(tokenLabel);
     const costLabel = label(formatOfficeCost(model.costUsd, model.costKind), {
-      size: 11,
+      size: 12,
       color: 0xf1e9bd,
       anchor: { x: 1, y: 0.5 },
     });
@@ -939,7 +979,7 @@ function drawOtelCostBoard(
 
   board.rect(x + 10, y + height - 31, width - 20, 1).fill({ color: 0xd8e8c8, alpha: 0.2 });
   const totalLabel = label("TOTAL", {
-    size: 10,
+    size: 11,
     color: 0xa9c8a4,
     anchor: { x: 0, y: 0.5 },
     weight: "700",
@@ -1202,6 +1242,8 @@ function drawRoom(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
+  canCreateSeat: (roomKey: string) => boolean,
+  onNewSeat: (roomKey: string) => void,
 ) {
   const host = projection.hosts.find(({ key }) => key === room.hostKey);
   if (!host) {
@@ -1271,6 +1313,9 @@ function drawRoom(
         onActivateAgent,
       );
     });
+  if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom && canCreateSeat(room.key)) {
+    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
+  }
 
   const overflow: string[] = [];
   if (room.omittedDeskCount > 0) {
@@ -1295,6 +1340,40 @@ function drawRoom(
     parent.addChild(stale);
   }
   stage.addChild(parent);
+}
+
+function drawNewSeatAction(
+  parent: Container,
+  room: OfficeRoom,
+  rect: OfficeRoomRect,
+  index: number,
+  accent: number,
+  onNewSeat: (roomKey: string) => void,
+) {
+  const anchor = deskAnchor(rect, index);
+  const action = new Container();
+  action.label = room.key;
+  action.eventMode = "static";
+  action.cursor = "pointer";
+  action.on("pointertap", (event) => {
+    event.stopPropagation();
+    onNewSeat(room.key);
+  });
+  const plate = new Graphics();
+  plate.eventMode = "static";
+  plate.roundRect(anchor.x - 25, anchor.deskY, 50, 27, 5)
+    .fill({ color: accent, alpha: 0.1 })
+    .stroke({ width: 1, color: accent, alpha: 0.8 });
+  action.addChild(plate);
+  const plus = label("+", { size: 19, color: 0xf4e6c0, anchor: 0.5, weight: "700" });
+  plus.eventMode = "none";
+  plus.position.set(anchor.x, anchor.deskY + 13);
+  action.addChild(plus);
+  const hint = label("NEW SEAT", { size: 7, color: 0xa9c8a4, anchor: 0.5 });
+  hint.eventMode = "none";
+  hint.position.set(anchor.x, anchor.nameY + 7);
+  action.addChild(hint);
+  parent.addChild(action);
 }
 
 function drawTabDesk(
@@ -1751,6 +1830,7 @@ function drawDesk(
   if (working) {
     const glow = new Graphics();
     glow.roundRect(x + 16, y + 12, 17, 8, 1).fill({ color: 0xc9fff4, alpha: 0.18 });
+    glow.eventMode = "none";
     parent.addChild(glow);
     animated.push({ kind: "monitor", node: glow, baseAlpha: 0.18, phase: animated.length * 7 });
   }
@@ -1827,6 +1907,7 @@ function makeInteractive(
   onSelect: (key: string) => void,
   onActivate?: (key: string) => void,
 ) {
+  node.label = key;
   node.eventMode = "static";
   node.cursor = "pointer";
   node.on("pointertap", (event) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
+import type { OfficeCanvasHover } from "./officeRenderer";
 import type { OfficeObservability } from "./officeObservability";
 import { officeDebug } from "../officeDebug";
 
@@ -23,6 +24,8 @@ export type OfficeConversationAnchorTarget = {
   targetKey: string;
 };
 
+export type { OfficeCanvasHover };
+
 export type OfficeConversationAnchors = Record<string, OfficeCanvasAnchors>;
 
 export function PixelOfficeCanvas({
@@ -34,6 +37,9 @@ export function PixelOfficeCanvas({
   onSelect,
   onActivateAgent,
   onActivateRoom,
+  canCreateSeat,
+  onNewSeat,
+  onHover,
   onAnchorChange,
 }: {
   projection: HerdrOfficeProjection;
@@ -44,6 +50,9 @@ export function PixelOfficeCanvas({
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
+  canCreateSeat: (roomKey: string) => boolean;
+  onNewSeat: (roomKey: string) => void;
+  onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -57,6 +66,9 @@ export function PixelOfficeCanvas({
     onSelect,
     onActivateAgent,
     onActivateRoom,
+    canCreateSeat,
+    onNewSeat,
+    onHover,
     onAnchorChange,
   });
   const [failure, setFailure] = useState(false);
@@ -69,6 +81,9 @@ export function PixelOfficeCanvas({
     onSelect,
     onActivateAgent,
     onActivateRoom,
+    canCreateSeat,
+    onNewSeat,
+    onHover,
     onAnchorChange,
   };
 
@@ -167,6 +182,9 @@ export function PixelOfficeCanvas({
       (key) => latestRef.current.onSelect(key),
       (key) => latestRef.current.onActivateAgent(key),
       (key) => latestRef.current.onActivateRoom(key),
+      (roomKey) => latestRef.current.canCreateSeat(roomKey),
+      (roomKey) => latestRef.current.onNewSeat(roomKey),
+      (hover) => latestRef.current.onHover?.(hover),
     )
       .then((controller) => {
         if (disposed) {

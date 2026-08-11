@@ -78,3 +78,24 @@ test("captures the 375x812 switcher and usable terminal", async ({ page }) => {
     fullPage: true,
   });
 });
+
+test("keeps the terminal responsive through rapid window resizing", async ({ page }) => {
+  await page.addInitScript((store) => {
+    localStorage.setItem("herdrWeb.bridgeBackends.v2", JSON.stringify(store));
+  }, hostStore());
+  await page.goto("/");
+  await page.getByRole("button", { name: "Remote B, compatible" }).click();
+  await page.getByRole("button", { name: /^Codex B / }).click();
+  await expect(page.getByRole("button", { name: "Refit terminal" })).toBeVisible();
+
+  for (let cycle = 0; cycle < 8; cycle += 1) {
+    for (const width of [1180, 960, 1240, 820, 1100, 760, 1320, 700]) {
+      await page.setViewportSize({ width, height: 900 });
+    }
+  }
+
+  await expect(page.locator(".terminal-stage")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to switcher" })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".terminal-stage")).toBeVisible();
+});

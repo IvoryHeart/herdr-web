@@ -61,7 +61,7 @@ Stop the foreground Vite process with `Ctrl-C`; a bridge started by
 | Herdr server/session | Yes | Owns workspaces, tabs, panes, agents, and terminals | `~/.config/herdr/herdr.sock` |
 | `herdr-web-bridge` | Yes | Converts browser HTTP/WebSocket traffic to Herdr protocol traffic | `http://127.0.0.1:8787` |
 | Vite frontend | Only for HMR | Serves current React/TypeScript source during development | `http://127.0.0.1:5173` or next free port |
-| OTEL/Prometheus stack | Optional | Supplies the Office `OTEL · LAST 24H` metrics board | Prometheus `http://127.0.0.1:9101` |
+| OTEL/Prometheus stack | Optional | Supplies the Office `Economy` metrics board | Prometheus `http://127.0.0.1:9101` |
 
 Herdr session data and the live Office roster do not depend on OTEL. If the
 telemetry stack is absent, the Office metrics board reports unavailable while
@@ -125,6 +125,12 @@ new bridge environment variables to a process that is already running.
 The stack's useful local endpoints are Prometheus `9101`, Loki `3111`, and
 Grafana `3002`. OTLP receivers use `4317` and `4318` for telemetry producers.
 
+To configure the Office provider without restarting the bridge, open Herdr Web
+Settings, choose `Office`, and save the Prometheus URL. An invalid URL is
+reported through the Office provider health state; correcting it applies the
+configuration again and returns the provider to its available state. The
+setting is browser-local and scoped to the selected bridge profile.
+
 ## Fast diagnosis
 
 Check each layer in order:
@@ -150,6 +156,14 @@ The Office conversation resize test in
 variable is `true`. It still runs in local E2E runs. This is an explicit
 containment measure for intermittent CI instability; the root cause has not
 been identified and the skip must not be treated as a permanent pass.
+
+Local manual verification currently shows the related product behavior is
+usable: the conversation window follows the resize immediately, then the
+inner Ghostty canvas refits after a short catch-up interval and may blink once.
+This smoothing work is tracked separately as
+[SUG-028](suggestions.md#sug-028--smooth-office-terminal-refit-during-resize).
+It should be addressed together with the CI investigation rather than hidden
+behind a broader product-level resize change.
 
 Re-enable the test after a reproducible CI trace identifies and fixes the
 ResizeObserver, animation-frame, pointer/keyboard, viewport, or terminal-canvas

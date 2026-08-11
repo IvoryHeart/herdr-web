@@ -12,6 +12,7 @@ import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   OfficeConversationAnchors,
   OfficeConversationAnchorTarget,
+  OfficeCanvasHover,
 } from "./PixelOfficeCanvas";
 import {
   clampConversationGeometry,
@@ -22,6 +23,8 @@ import {
 import type { ConversationGeometry } from "./conversationGeometry";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
+import { officeCalloutForKey } from "./officeSelection";
+import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
 import {
   officeAgentHandoffRequest,
@@ -43,6 +46,9 @@ export type WorldSurfaceContext = {
   conversationBubbles: readonly WorldConversationBubblePanel[];
   onCloseConversation: (id: string) => void;
   onFocusConversation: (id: string) => void;
+  agentActivityTransitions: ReadonlyMap<string, number>;
+  canCreateSeat: (roomKey: string) => boolean;
+  onNewSeat: (roomKey?: string) => void;
 };
 
 export type WorldConversationBubblePanel = {
@@ -102,6 +108,10 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   selectedKey: null,
   observability: {
     health: "unavailable",
+    providerId: null,
+    sourceCount: 0,
+    configuredSourceCount: 0,
+    failedSourceCount: 0,
     observedAt: 0,
     windowSeconds: null,
     models: [],
@@ -118,6 +128,9 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   conversationBubbles: [],
   onCloseConversation: () => {},
   onFocusConversation: () => {},
+  agentActivityTransitions: new Map(),
+  canCreateSeat: () => false,
+  onNewSeat: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -173,6 +186,7 @@ function WorldStage({
     mode: "moving" | "resizing";
   } | null>(null);
   const [conversationOrder, setConversationOrder] = useState<string[]>([]);
+  const [canvasHover, setCanvasHover] = useState<(OfficeCanvasHover & { left: number; top: number }) | null>(null);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
   const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
@@ -183,9 +197,29 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
-
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
+  const selectedRoomKey = projection.rooms.find(({ key }) => key === context.selectedKey)?.key ??
+    projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
+    projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
+    null;
+
+  const onCanvasHover = (hover: OfficeCanvasHover | null) => {
+    if (!hover) {
+      setCanvasHover(null);
+      return;
+    }
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+    const shellRect = shell.getBoundingClientRect();
+    setCanvasHover({
+      ...hover,
+      left: hover.clientX - shellRect.left,
+      top: hover.clientY - shellRect.top,
+    });
+  };
 
   useEffect(() => () => {
     if (conversationGeometryFrameRef.current !== null) {
@@ -370,6 +404,16 @@ function WorldStage({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
+        return;
+      }
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const activeElement = document.activeElement;
+      const terminalHasFocus = Boolean(
+        eventTarget?.closest(".world-conversation-terminal")
+          || (activeElement instanceof Element
+            && activeElement.closest(".world-conversation-terminal")),
+      );
+      if (terminalHasFocus) {
         return;
       }
       const focusedId = [...conversationOrder].reverse().find((id) => panelIds.includes(id));
@@ -582,6 +626,32 @@ function WorldStage({
     );
   })();
 
+  const onlineHosts = projection.hosts.filter(
+    ({ connectionState }) => connectionState === "compatible" || connectionState === "degraded",
+  ).length;
+  const hostHealthStatus = projection.hosts.length === 0
+    ? "unavailable"
+    : onlineHosts === projection.hosts.length
+      ? "available"
+      : onlineHosts > 0
+        ? "degraded"
+        : "unavailable";
+  const hostHealthText = projection.hosts.length === 0
+    ? "No Herdr hosts"
+    : `${onlineHosts}/${projection.hosts.length} connected${projection.coverage.staleHosts ? ` · ${projection.coverage.staleHosts} stale` : ""}`;
+  const economyHealthStatus = context.observability.health === "available"
+    ? "available"
+    : context.observability.health === "degraded"
+      ? "degraded"
+      : "unavailable";
+  const economyHealthText = context.observability.health === "available"
+    ? `${context.observability.providerId ?? "Provider"} connected`
+    : context.observability.configuredSourceCount === 0
+      ? "Not configured"
+      : context.observability.failedSourceCount > 0
+        ? "Provider unavailable"
+        : "No data available";
+
   return (
     <div ref={shellRef} className="world-stage-shell">
       <header className="stage-bar world-stage-bar">
@@ -621,6 +691,14 @@ function WorldStage({
         >
           <RotateCcw size={16} />
         </button>
+        <button
+          className="world-new-seat btn"
+          type="button"
+          title={selectedRoomKey ? "Start a new Herdr-backed seat in the selected room" : "Start a new Herdr-backed seat"}
+          onClick={() => context.onNewSeat(selectedRoomKey ?? undefined)}
+        >
+          <span>New seat</span>
+        </button>
       </header>
       <div className="world-stage-notice" role="status">
         <span>Live admitted state is shown on the CEO Office blackboard</span>
@@ -634,6 +712,10 @@ function WorldStage({
         {context.handoffStatus ? (
           <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
         ) : null}
+        <span className="world-provider-health" aria-label="Office provider health">
+          <span data-status={hostHealthStatus}><strong>Herdr</strong> {hostHealthText}</span>
+          <span data-status={economyHealthStatus}><strong>Economy</strong> {economyHealthText}</span>
+        </span>
       </div>
       <div
         ref={scrollRef}
@@ -655,9 +737,19 @@ function WorldStage({
           onSelect={context.onSelect}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
+          canCreateSeat={context.canCreateSeat}
+          onNewSeat={context.onNewSeat}
+          onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
         />
       </div>
+      {canvasHover ? (
+        <WorldCanvasCallout
+          callout={officeCalloutForKey(projection, canvasHover.key)}
+          left={canvasHover.left}
+          top={canvasHover.top}
+        />
+      ) : null}
       {connector}
       {context.conversationBubbles.map((panel) => {
         const geometry = conversationGeometry[panel.id];
@@ -709,6 +801,32 @@ function WorldStage({
   );
 }
 
+function WorldCanvasCallout({
+  callout,
+  left,
+  top,
+}: {
+  callout: OfficeCallout | null;
+  left: number;
+  top: number;
+}) {
+  if (!callout) {
+    return null;
+  }
+  return (
+    <div
+      className="world-canvas-callout"
+      data-kind={callout.kind}
+      data-status={callout.status ?? undefined}
+      style={{ left: `${left}px`, top: `${top}px` }}
+      role="tooltip"
+    >
+      <strong>{callout.title}</strong>
+      <span>{callout.detail}</span>
+    </div>
+  );
+}
+
 function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
   if (!value || typeof value !== "object") {
     return false;
@@ -719,6 +837,8 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
+    typeof record.canCreateSeat === "function" &&
+    typeof record.onNewSeat === "function" &&
     Boolean(record.projection)
   );
 }

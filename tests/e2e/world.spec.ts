@@ -133,7 +133,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     activeApplications: 1,
     activeTickers: 1,
     activeObservers: 1,
-    activeListeners: 3,
+    activeListeners: 5,
     canvases: 1,
     ready: true,
   });
@@ -251,6 +251,10 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(bubble).toBeVisible();
   await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
   await expect(bubble.getByRole("button", { name: "Close agent conversation" })).toBeVisible();
+  await expect(bubble.locator(".world-conversation-context")).toContainText("working");
+  await expect(
+    bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
+  ).toBeVisible();
   await expect(bubble.locator(".terminal-stage")).toBeVisible();
   const connector = page.locator(".world-conversation-connector");
   await expect(connector).toBeVisible();
@@ -289,11 +293,71 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(2);
   await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(2);
 
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(1);
   await expect(page.getByRole("dialog", { name: "Codex A" })).toBeVisible();
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(0);
+});
+
+test("shows Office callouts and targets a new seat to the hovered room", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
+  await waitForLiveOffice(page);
+
+  const officeWidth = await page.evaluate(
+    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
+  );
+  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 2, standingCount: 0 }]);
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  const firstDesk = deskAnchor(layout.rooms[0], 0);
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + firstDesk.x,
+    (canvasBox?.y ?? 0) + firstDesk.nameY + 25,
+  );
+  await expect(page.getByRole("tooltip")).toContainText("Codex A");
+  await expect(page.getByRole("tooltip")).toContainText("Running");
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+
+  const nextSeat = deskAnchor(layout.rooms[0], 1);
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + nextSeat.x,
+    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
+  );
+  await expect(page.getByRole("tooltip")).toContainText("main");
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + nextSeat.x,
+    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
+  );
+  await expect(page.locator("form.launch-modal")).toBeVisible();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+  await page.locator("form.launch-modal").getByRole("button", { name: "Create", exact: true }).click();
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].launches;
+  }).toEqual([{
+    preset_id: "shell",
+    title: "Shell",
+    target: { mode: "tab", workspace_id: "main" },
+  }]);
 });
 
 test("keeps the live connector visible when the selected agent moves to the Agent Bar", async ({
@@ -386,6 +450,22 @@ test("inspects completed work from the shared sidebar and clears its unseen mark
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
     .toBe(0);
+});
+
+test("restores a still-live Office terminal after a page refresh", async ({ page }) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
+
+  await page.reload();
+  await waitForOffice(page);
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
+  ).toBeVisible();
 });
 
 test("deduplicates terminal windows and stops at the five-window Office cap", async ({
@@ -541,6 +621,27 @@ test("uses the fixed mobile conversation layout without exposing desktop resize 
   await expect(page.locator(".world-conversation-slot")).toHaveAttribute("data-positioned", "false");
 });
 
+test("passes Escape through to a focused Office terminal", async ({ page, request }) => {
+  await page.goto("/world");
+  await waitForOffice(page);
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+
+  const bubble = page.locator("[data-world-conversation='open']");
+  await expect(bubble).toBeVisible();
+  const terminalInput = bubble.locator(".terminal-host textarea.ghostty-hidden-input");
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.focus();
+  await page.keyboard.press("Escape");
+
+  await expect(bubble).toBeVisible();
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].terminalInput.some(
+      (message: { type: string; data: string }) => message.type === "input" && message.data === "\u001b",
+    );
+  }).toBe(true);
+});
+
 test("opens the conversation target in the full Spaces terminal", async ({ page }) => {
   await page.goto("/world");
   await waitForOffice(page);
@@ -575,9 +676,17 @@ test("opens the attached terminal when an occupied desk is selected", async ({
     ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
   ]);
   const desk = deskAnchor(layout.rooms[0], 0);
-  await page.locator("canvas[data-office-canvas='true']").click({
-    position: { x: desk.x, y: desk.deskY + 12 },
-  });
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.move(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
@@ -603,9 +712,13 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
     ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
   ]);
   const desk = deskAnchor(layout.rooms[0], 7);
-  await page.locator("canvas[data-office-canvas='true']").click({
-    position: { x: desk.x, y: desk.deskY + 12 },
-  });
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.click(
+    (canvasBox?.x ?? 0) + desk.x,
+    (canvasBox?.y ?? 0) + desk.nameY + 8,
+  );
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
@@ -774,6 +887,46 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await page.locator("canvas[data-office-canvas='true']").dblclick({ position });
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
+});
+
+test("selects an Office agent semantically and launches a real new seat", async ({
+  page,
+  request,
+}) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", launchCreatesSeat: true },
+  });
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
+  const bubble = page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" });
+  await expect(bubble).toBeVisible();
+  await expect(
+    bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
+  ).toBeEnabled();
+
+  await page.getByRole("button", { name: "New seat", exact: true }).click();
+  const launchDialog = page.locator("form.launch-modal");
+  await expect(launchDialog).toBeVisible();
+  await expect(launchDialog).toContainText("New tab");
+  await launchDialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(launchDialog).toHaveCount(0);
+
+  await expect.poll(async () => {
+    const logs = await (await request.get("http://127.0.0.1:4173/__fixture/requests")).json();
+    return logs["host-a"].launches;
+  }).toEqual([
+    {
+      preset_id: "shell",
+      title: "Shell",
+      target: { mode: "tab", workspace_id: "main" },
+    },
+  ]);
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(2);
+  await expect(
+    page.locator("[data-world-conversation='open']").filter({ hasText: "Shell" }),
+  ).toBeVisible();
 });
 
 test("opens the same standing room agent from its semantic row and canvas sprite", async ({

@@ -64,6 +64,10 @@ describe("Office observability projection", () => {
     ]);
 
     expect(result.health).toBe("available");
+    expect(result.providerId).toBe("prometheus.otel");
+    expect(result.sourceCount).toBe(2);
+    expect(result.configuredSourceCount).toBe(2);
+    expect(result.failedSourceCount).toBe(0);
     expect(result.observedAt).toBe(20);
     expect(result.totalCostUsd).toBe(0.4);
     expect(result.totalUsage).toBe(160);
@@ -92,6 +96,9 @@ describe("Office observability projection", () => {
     ]);
 
     expect(result.health).toBe("degraded");
+    expect(result.sourceCount).toBe(2);
+    expect(result.configuredSourceCount).toBe(1);
+    expect(result.failedSourceCount).toBe(1);
     expect(result.models).toHaveLength(1);
   });
 

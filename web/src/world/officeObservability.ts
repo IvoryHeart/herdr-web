@@ -22,6 +22,10 @@ export type OfficeCostKind =
 
 export type OfficeObservability = {
   health: ObservabilityHealth;
+  providerId: string | null;
+  sourceCount: number;
+  configuredSourceCount: number;
+  failedSourceCount: number;
   observedAt: number;
   windowSeconds: number | null;
   models: OfficeObservabilityModel[];
@@ -31,6 +35,10 @@ export type OfficeObservability = {
 
 export const EMPTY_OFFICE_OBSERVABILITY: OfficeObservability = {
   health: "unavailable",
+  providerId: null,
+  sourceCount: 0,
+  configuredSourceCount: 0,
+  failedSourceCount: 0,
   observedAt: 0,
   windowSeconds: null,
   models: [],
@@ -71,13 +79,21 @@ export function aggregateOfficeObservability(
   let windowSeconds: number | null = null;
   let available = false;
   let degraded = false;
+  let configuredSourceCount = 0;
+  let failedSourceCount = 0;
+  let providerId: string | null = null;
 
   for (const result of results) {
     if ("failed" in result) {
       degraded = true;
+      failedSourceCount += 1;
       continue;
     }
     const response = result.response;
+    if (response.descriptor.provider_id !== "none") {
+      configuredSourceCount += 1;
+      providerId ??= response.descriptor.provider_id;
+    }
     observedAt = Math.max(observedAt, response.descriptor.observed_at);
     if (response.descriptor.health === "available") {
       available = true;
@@ -127,6 +143,10 @@ export function aggregateOfficeObservability(
   const totalUsage = models.reduce((total, model) => total + officeModelUsageTotal(model.usage), 0);
   return {
     health: degraded ? "degraded" : available ? "available" : "unavailable",
+    providerId,
+    sourceCount: results.length,
+    configuredSourceCount,
+    failedSourceCount,
     observedAt,
     windowSeconds,
     models,

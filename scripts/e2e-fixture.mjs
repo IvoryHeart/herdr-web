@@ -116,7 +116,7 @@ async function startFixture(fixture) {
         json(response, 200, {});
         return;
       }
-      json(response, 200, snapshot(fixture, state.snapshotVariant));
+      json(response, 200, snapshot(fixture, state));
       return;
     }
     if (url.pathname === "/api/launcher-presets" && request.method === "GET") {
@@ -137,6 +137,10 @@ async function startFixture(fixture) {
     if (url.pathname === "/api/launcher-presets/launch" && request.method === "POST") {
       const body = await readJson(request);
       logs.get(fixture.id).launches.push(body);
+      const state = fixtureStates.get(fixture.id);
+      if (state.launchCreatesSeat) {
+        fixtureStates.set(fixture.id, { ...state, launchedSeat: true });
+      }
       json(response, 200, { pane_id: `${fixture.id}-launched`, preset_id: body.preset_id });
       return;
     }
@@ -289,6 +293,8 @@ function defaultFixtureState() {
     terminalProtocol: null,
     features: null,
     commands: null,
+    launchCreatesSeat: false,
+    launchedSeat: false,
   };
 }
 
@@ -302,6 +308,7 @@ function setFixtureState(hostId, value) {
   const terminalProtocol = value.terminalProtocol ?? current.terminalProtocol;
   const features = value.features ?? current.features;
   const commands = value.commands ?? current.commands;
+  const launchCreatesSeat = value.launchCreatesSeat ?? current.launchCreatesSeat;
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
     !["default", "empty", "large", "idle-desk"].includes(snapshotVariant) ||
@@ -309,7 +316,8 @@ function setFixtureState(hostId, value) {
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
     (commands !== null &&
-      (!Array.isArray(commands) || commands.some((command) => typeof command !== "string")))
+      (!Array.isArray(commands) || commands.some((command) => typeof command !== "string"))) ||
+    typeof launchCreatesSeat !== "boolean"
   ) {
     return false;
   }
@@ -319,11 +327,15 @@ function setFixtureState(hostId, value) {
     terminalProtocol,
     features,
     commands,
+    launchCreatesSeat,
+    launchedSeat: current.launchedSeat,
   });
   return true;
 }
 
-function snapshot(fixture, variant = "default") {
+function snapshot(fixture, stateOrVariant = "default") {
+  const state = typeof stateOrVariant === "string" ? null : stateOrVariant;
+  const variant = typeof stateOrVariant === "string" ? stateOrVariant : stateOrVariant.snapshotVariant;
   if (variant === "empty") {
     return { workspaces: [], tabs: [], panes: [], layouts: [] };
   }
@@ -334,7 +346,7 @@ function snapshot(fixture, variant = "default") {
     return idleDeskSnapshot(fixture);
   }
   const suffix = fixture.id.at(-1).toUpperCase();
-  return {
+  const result = {
     workspaces: [
       {
         workspace_id: "main",
@@ -380,6 +392,38 @@ function snapshot(fixture, variant = "default") {
     layouts: [],
     selected_pane_id: "p1",
   };
+  if (state?.launchedSeat) {
+    result.workspaces[0] = {
+      ...result.workspaces[0],
+      pane_count: 2,
+      tab_count: 2,
+      active_tab_id: "tab-launched",
+    };
+    result.tabs.push({
+      tab_id: "tab-launched",
+      workspace_id: "main",
+      number: 2,
+      label: "New seat",
+      focused: true,
+      pane_count: 1,
+      agent_status: "unknown",
+    });
+    result.panes.push({
+      pane_id: "p-launched",
+      terminal_id: "t-launched",
+      workspace_id: "main",
+      tab_id: "tab-launched",
+      focused: true,
+      cwd: `/fixture/${fixture.id}/new-seat`,
+      label: "Shell",
+      agent: null,
+      display_agent: null,
+      agent_status: "unknown",
+      revision: 1,
+    });
+    result.selected_pane_id = "p-launched";
+  }
+  return result;
 }
 
 function largeSnapshot(fixture) {
