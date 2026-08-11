@@ -70,11 +70,6 @@ const canvasActivationCandidates = new WeakMap<
     activate: (key: string) => void;
   }
 >();
-const hoverHandlers = new WeakMap<
-  (key: string) => void,
-  (key: string | null) => void
->();
-
 const THEMES = Object.freeze([
   { floorA: 0x0c1620, floorB: 0x0a121c, wall: 0x1e3050, accent: 0x4aa3d8 },
   { floorA: 0x120c20, floorB: 0x100a1e, wall: 0x34215a, accent: 0x9a6bd1 },
@@ -169,7 +164,6 @@ export async function createOfficeRenderer(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
-  onHover?: (key: string | null) => void,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -261,9 +255,6 @@ export async function createOfficeRenderer(
       onActivateRoom(key);
     }
   };
-  if (onHover) {
-    hoverHandlers.set(select, onHover);
-  }
   const onCanvasDoubleClick = (event: MouseEvent) => {
     const prior = canvasActivationCandidates.get(select);
     if (!prior) {
@@ -499,7 +490,6 @@ export async function createOfficeRenderer(
     app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
     pointerSequences.delete(select);
     canvasActivationCandidates.delete(select);
-    hoverHandlers.delete(select);
     app.ticker.remove(ticker);
     app.destroy(true, { children: true });
     destroyTextures(textures);
@@ -551,7 +541,6 @@ export async function createOfficeRenderer(
       app.canvas.removeEventListener("dblclick", onCanvasDoubleClick);
       pointerSequences.delete(select);
       canvasActivationCandidates.delete(select);
-      hoverHandlers.delete(select);
       app.ticker.remove(ticker);
       app.destroy(true, { children: true });
       destroyTextures(textures);
@@ -1842,17 +1831,6 @@ function makeInteractive(
 ) {
   node.eventMode = "static";
   node.cursor = "pointer";
-  const onHover = hoverHandlers.get(onSelect);
-  if (onHover) {
-    node.on("pointerover", (event) => {
-      event.stopPropagation();
-      onHover(key);
-    });
-    node.on("pointerout", (event) => {
-      event.stopPropagation();
-      onHover(null);
-    });
-  }
   node.on("pointertap", (event) => {
     event.stopPropagation();
     officeDebug("renderer:pointertap", {

@@ -251,6 +251,10 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(bubble).toBeVisible();
   await expect(bubble).toHaveAttribute("data-agent-key", /.+/);
   await expect(bubble.getByRole("button", { name: "Close agent conversation" })).toBeVisible();
+  await expect(bubble.locator(".world-conversation-context")).toContainText("State");
+  await expect(bubble.locator(".world-conversation-context")).toContainText("Location");
+  await expect(bubble.locator(".world-conversation-context")).toContainText("Activity");
+  await expect(bubble.getByRole("button", { name: "Open in Spaces" })).toBeVisible();
   await expect(bubble.locator(".terminal-stage")).toBeVisible();
   const connector = page.locator(".world-conversation-connector");
   await expect(connector).toBeVisible();
@@ -548,7 +552,7 @@ test("opens the conversation target in the full Spaces terminal", async ({ page 
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
-  await bubble.getByRole("button", { name: "Open full terminal in Spaces" }).click();
+  await bubble.getByRole("button", { name: "Open in Spaces" }).click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Codex A");
@@ -776,29 +780,17 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
 });
 
-test("shows an accessible Office selection inspector and launches a real new seat", async ({
+test("selects an Office agent semantically and launches a real new seat", async ({
   page,
   request,
 }) => {
   await page.goto("/world");
   await waitForOffice(page);
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 1, standingCount: 0 }]);
-  const agent = deskAnchor(layout.rooms[0], 0);
-  await page.locator("canvas[data-office-canvas='true']").hover({
-    position: { x: agent.x, y: agent.characterFeetY - 34 },
-  });
-  const selection = page.getByRole("region", { name: "Codex A" });
-  await expect(selection).toBeVisible();
-  await expect(selection).toContainText("Codex A");
-
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
-  await expect(selection).toBeVisible();
-  await expect(selection.getByRole("button", { name: "Open in Spaces" })).toBeEnabled();
-  await expect(selection.getByRole("button", { name: "Clear Office selection" })).toBeVisible();
+  const bubble = page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" });
+  await expect(bubble).toBeVisible();
+  await expect(bubble.getByRole("button", { name: "Open in Spaces" })).toBeEnabled();
 
   await page.getByRole("button", { name: "New seat", exact: true }).click();
   const launchDialog = page.locator("form.launch-modal");

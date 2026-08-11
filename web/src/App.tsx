@@ -262,6 +262,7 @@ type WorldConversationView = {
   windowId: string;
   agent: OfficeAgent | null;
   targetLabel: string;
+  roomLabel: string;
   hostLabel: string;
   pane: PaneInfo;
   runtime: BridgeRuntime;
@@ -4584,6 +4585,7 @@ export function App() {
               pane.title ??
               pane.terminal_title ??
               "Shell",
+            roomLabel: agentEntry?.roomLabel ?? deskEntry?.roomLabel ?? "Office",
             hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? "Host",
             pane,
             runtime,
@@ -4608,6 +4610,7 @@ export function App() {
           ...cached,
           agent: agent ?? cached.agent,
           targetLabel: agent?.displayLabel ?? cached.targetLabel,
+          roomLabel: agentEntry?.roomLabel ?? deskEntry?.roomLabel ?? cached.roomLabel,
           hostLabel: agentEntry?.hostLabel ?? deskEntry?.hostLabel ?? cached.hostLabel,
         }];
       }
@@ -4669,6 +4672,7 @@ export function App() {
           key={`${worldConversation.windowId}:${worldConversation.session.sessionKey}`}
           agent={worldConversation.agent}
           targetLabel={worldConversation.targetLabel}
+          roomLabel={worldConversation.roomLabel}
           hostLabel={worldConversation.hostLabel}
           pane={worldConversation.pane}
           runtime={worldConversation.runtime}
@@ -4681,6 +4685,7 @@ export function App() {
               worldConversation.pane,
             )
           }
+          agentActivityTransitions={agentActivityTransitions}
           touchInput={isTouchInput}
           terminalFontSizePx={terminalFontSizePx}
           mobileControlsScalePercent={mobileControlsScalePercent}

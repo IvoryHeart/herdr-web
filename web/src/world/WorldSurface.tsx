@@ -2,11 +2,9 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ChevronLeft,
-  ExternalLink,
   PanelLeft,
   Plus,
   RotateCcw,
-  X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -31,12 +29,6 @@ import {
   officeRoomHandoffRequest,
 } from "./herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
-import { agentActivityKey } from "../agentActivity";
-import {
-  findOfficeSelection,
-  formatOfficeActivityAge,
-} from "./officeSelection";
-import type { OfficeSelection } from "./officeSelection";
 
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
@@ -198,39 +190,6 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const selection = findOfficeSelection(projection, hoveredKey ?? context.selectedKey);
-  const hoverClearTimerRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (hoverClearTimerRef.current !== null) {
-      window.clearTimeout(hoverClearTimerRef.current);
-    }
-  }, []);
-
-  const cancelHoverClear = () => {
-    if (hoverClearTimerRef.current !== null) {
-      window.clearTimeout(hoverClearTimerRef.current);
-      hoverClearTimerRef.current = null;
-    }
-  };
-  const handleHover = (key: string | null) => {
-    cancelHoverClear();
-    if (key !== null) {
-      setHoveredKey(key);
-      return;
-    }
-    hoverClearTimerRef.current = window.setTimeout(() => {
-      hoverClearTimerRef.current = null;
-      setHoveredKey(null);
-    }, 180);
-  };
-  const clearSelection = () => {
-    cancelHoverClear();
-    setHoveredKey(null);
-    context.onSelect(null);
-  };
-
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
 
@@ -631,10 +590,7 @@ function WorldStage({
 
   return (
     <div ref={shellRef} className="world-stage-shell">
-      <header
-        className="stage-bar world-stage-bar"
-        data-selection={selection ? "true" : undefined}
-      >
+      <header className="stage-bar world-stage-bar">
         <button
           className="icon-btn"
           type="button"
@@ -646,23 +602,8 @@ function WorldStage({
         </button>
         <div className="stage-id">
           <span className="stage-title">Pixel Office</span>
-          <span className="stage-sub">
-            {selection
-              ? `Selected ${selection.kind} · ${selectionTitle(selection)} · ${selectionSummary(selection, context.agentActivityTransitions)}`
-              : "Shared Herdr state · live board in CEO Office"}
-          </span>
+          <span className="stage-sub">Shared Herdr state · live board in CEO Office</span>
         </div>
-        {selection ? (
-          <WorldSelectionTitlebar
-            selection={selection}
-            activityTransitions={context.agentActivityTransitions}
-            onActivateAgent={onActivateAgent}
-            onActivateRoom={onActivateRoom}
-            onClear={clearSelection}
-            onHoverStart={cancelHoverClear}
-            onHoverEnd={() => handleHover(null)}
-          />
-        ) : null}
         <button
           className="icon-btn"
           type="button"
@@ -728,7 +669,6 @@ function WorldStage({
             targetKey: panel.targetKey,
           }))}
           onSelect={context.onSelect}
-          onHover={handleHover}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
@@ -781,185 +721,6 @@ function WorldStage({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function selectionTitle(selection: OfficeSelection) {
-  return selection.kind === "agent"
-    ? selection.agent.displayLabel
-    : selection.kind === "desk"
-      ? selection.desk.desk.displayLabel
-      : selection.kind === "room"
-        ? selection.room.displayLabel
-        : selection.host.displayLabel;
-}
-
-function selectionSummary(
-  selection: OfficeSelection,
-  activityTransitions: ReadonlyMap<string, number>,
-) {
-  if (selection.kind === "agent") {
-    const status = selection.agent.stale ? "stale" : selection.agent.semanticStatus;
-    const activity = formatOfficeActivityAge(
-      activityTransitions.get(
-        agentActivityKey(
-          selection.agent.hostKey,
-          selection.agent.currentPaneRef.nativeTargetId,
-          selection.agent.currentTerminalRef.nativeTargetId,
-        ),
-      ),
-    ) ?? "activity unavailable";
-    return `${status} · ${selection.entry.roomLabel} · ${activity}`;
-  }
-  if (selection.kind === "desk") {
-    return `${selection.desk.desk.occupantAgentKey ? "occupied" : "empty"} · ${selection.desk.hostLabel}`;
-  }
-  if (selection.kind === "room") {
-    return `${selection.room.stale ? "stale" : "live"} · ${selection.room.hostLabel}`;
-  }
-  return `${selection.host.connectionState} · ${selection.host.compatibleWithWorld ? "Office compatible" : "Office unavailable"}`;
-}
-
-function WorldSelectionTitlebar({
-  selection,
-  activityTransitions,
-  onActivateAgent,
-  onActivateRoom,
-  onClear,
-  onHoverStart,
-  onHoverEnd,
-}: {
-  selection: OfficeSelection;
-  activityTransitions: ReadonlyMap<string, number>;
-  onActivateAgent: (key: string) => void;
-  onActivateRoom: (key: string) => void;
-  onClear: () => void;
-  onHoverStart: () => void;
-  onHoverEnd: () => void;
-}) {
-  const kindLabel = selection.kind === "agent"
-    ? "Agent"
-    : selection.kind === "desk"
-      ? "Desk"
-      : selection.kind === "room"
-        ? "Room"
-        : "Host";
-
-  return (
-    <section
-      className="world-selection-titlebar"
-      aria-label={selectionTitle(selection)}
-      onPointerEnter={onHoverStart}
-      onPointerLeave={onHoverEnd}
-    >
-      <div className="world-selection-titlebar-label">
-        <span className="world-selection-eyebrow">Selected {kindLabel}</span>
-        <strong>{selectionTitle(selection)}</strong>
-      </div>
-      <dl
-        className="world-selection-titlebar-details"
-        tabIndex={0}
-        aria-label="Selected context details"
-      >
-        {selection.kind === "agent" ? (
-          <>
-            <SelectionDetail label="State">
-              {selection.agent.stale ? "stale" : selection.agent.semanticStatus}
-            </SelectionDetail>
-            <SelectionDetail label="Location">
-              {selection.entry.roomLabel} · {selection.entry.hostLabel}
-            </SelectionDetail>
-            <SelectionDetail label="Activity">
-              {formatOfficeActivityAge(
-                activityTransitions.get(
-                  agentActivityKey(
-                    selection.agent.hostKey,
-                    selection.agent.currentPaneRef.nativeTargetId,
-                    selection.agent.currentTerminalRef.nativeTargetId,
-                  ),
-                ),
-              ) ?? "No transition data available"}
-            </SelectionDetail>
-            {selection.agent.stateLabels[selection.agent.semanticStatus] ? (
-              <SelectionDetail label="Status label">
-                {selection.agent.stateLabels[selection.agent.semanticStatus]}
-              </SelectionDetail>
-            ) : null}
-            {!selection.agent.canOpenInSpaces ? (
-              <SelectionDetail label="Handoff">Unavailable</SelectionDetail>
-            ) : null}
-          </>
-        ) : selection.kind === "desk" ? (
-          <>
-            <SelectionDetail label="Host">
-              {selection.desk.hostLabel}
-            </SelectionDetail>
-            <SelectionDetail label="Occupant">
-              {selection.desk.desk.occupantAgentKey ? "Occupied" : "Empty"}
-            </SelectionDetail>
-            {selection.desk.desk.completionAgentKeys.length > 0 ? (
-              <SelectionDetail label="Completed">
-                {selection.desk.desk.completionAgentKeys.length}
-              </SelectionDetail>
-            ) : null}
-          </>
-        ) : selection.kind === "room" ? (
-          <>
-            <SelectionDetail label="Host">{selection.room.hostLabel}</SelectionDetail>
-            <SelectionDetail label="State">
-              {selection.room.stale ? "stale" : "live"}
-            </SelectionDetail>
-          </>
-        ) : (
-          <>
-            <SelectionDetail label="Connection">
-              {selection.host.connectionState}
-            </SelectionDetail>
-            <SelectionDetail label="Office">
-              {selection.host.compatibleWithWorld ? "compatible" : "unavailable"}
-            </SelectionDetail>
-          </>
-        )}
-      </dl>
-      <div className="world-selection-titlebar-actions">
-        {selection.kind === "agent" && selection.agent.canOpenInSpaces ? (
-          <button className="world-handoff" type="button" onClick={() => onActivateAgent(selection.agent.key)}>
-            <ExternalLink size={14} aria-hidden="true" />
-            Open in Spaces
-          </button>
-        ) : null}
-        {selection.kind === "desk" && selection.desk.desk.canOpenInSpaces ? (
-          <button className="world-handoff" type="button" onClick={() => onActivateRoom(selection.desk.desk.roomKey)}>
-            <ExternalLink size={14} aria-hidden="true" />
-            Open room in Spaces
-          </button>
-        ) : null}
-        {selection.kind === "room" && selection.room.canOpenInSpaces ? (
-          <button className="world-handoff" type="button" onClick={() => onActivateRoom(selection.room.key)}>
-            <ExternalLink size={14} aria-hidden="true" />
-            Open in Spaces
-          </button>
-        ) : null}
-        <button
-          className="icon-btn"
-          type="button"
-          aria-label="Clear Office selection"
-          title="Clear selection"
-          onClick={onClear}
-        >
-          <X size={16} />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function SelectionDetail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
     </div>
   );
 }
