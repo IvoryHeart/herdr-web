@@ -75,7 +75,7 @@ describe("Pixel Office geometry", () => {
         .filter(({ row }) => row === firstRoom.row)
         .map(({ y, height }) => y + height),
     );
-    expect(finalRowRoom.y - firstRowBottom).toBe(OFFICE_GEOMETRY.roomGap);
+    expect(finalRowRoom.y - firstRowBottom).toBe(OFFICE_GEOMETRY.roomRowGap);
     expect(deskAnchor(finalRowRoom, 0).stationSpan)
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });

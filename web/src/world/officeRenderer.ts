@@ -324,7 +324,8 @@ export async function createOfficeRenderer(
       ...layout.rooms.map(({ height }) => height),
     );
     const overscan =
-      (largestRoomHeight + OFFICE_GEOMETRY.roomGap) * VIRTUAL_ROOM_ROW_OVERSCAN;
+      (largestRoomHeight + Math.max(OFFICE_GEOMETRY.roomGap, OFFICE_GEOMETRY.roomRowGap)) *
+      VIRTUAL_ROOM_ROW_OVERSCAN;
     const visibleRooms = layout.rooms.filter(
       (room) => room.y + room.height >= scrollTop - overscan
         && room.y <= scrollTop + viewportHeight + overscan,

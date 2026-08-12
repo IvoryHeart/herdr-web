@@ -97,6 +97,8 @@
 - Fixed Office room roads being visually swallowed by room borders by widening
   the packed room gap to the road width, and corrected vertical-road lane marks
   to run vertically while horizontal-road marks remain horizontal.
+- Increased the vertical gap between room rows so row headings no longer cover
+  the horizontal road separator.
 - Fixed development-mode Office renderer cleanup so an older asynchronous Pixi
   initialization cannot remove the active canvas created by a newer initialization.
 

@@ -24,6 +24,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   roomPadding: 16,
   tile: 20,
   roomGap: 16,
+  roomRowGap: 28,
   maxRooms: 128,
   desksPerRoom: 8,
   deskColumns: 4,
@@ -174,7 +175,7 @@ export function resolveOfficeLayout(
   let nextY = roomStartY;
   for (const height of rowHeights) {
     rowYs.push(nextY);
-    nextY += height + OFFICE_GEOMETRY.roomGap;
+    nextY += height + OFFICE_GEOMETRY.roomRowGap;
   }
   const roomPositions = new Map<number, OfficeRoomRect>();
   packedRows.forEach((row, rowIndex) => {
