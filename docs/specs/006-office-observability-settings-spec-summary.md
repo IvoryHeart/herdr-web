@@ -15,9 +15,9 @@
   added `WorldSettingsDialog.tsx` and a single removable Office entry point in
   the generic Settings dialog. The bridge now exposes a bounded GET/PUT
   observability configuration route and can replace the live Prometheus
-  provider without restarting. The Office notice shows colour-coded Herdr
-  host and Economy provider health, including unconfigured and failed-source
-  explanations.
+  provider without restarting. Provider health remains available through the
+  Office settings surface and existing CEO boards/sidebar; the persistent
+  notice strip is intentionally removed to preserve canvas real estate.
 - **Evidence:** 331 frontend unit tests passed; frontend lint and production
   build passed; 15 bridge observability tests passed; bridge `cargo check` and
   formatting checks passed; the live bridge configuration route returned 400

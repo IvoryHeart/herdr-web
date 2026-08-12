@@ -18,6 +18,7 @@ describe("Herdr Office projection", () => {
       [
         pane("terminal-working", "pane-working", "workspace-a", "tab-working", "working", {
           display_agent: "Codex",
+          task_summary: "Reviewing the office persistence changes",
           state_labels: { working: "Reviewing", idle: "Pretend idle" },
         }),
         pane("terminal-idle", "pane-idle", "workspace-a", "tab-idle", "idle", {
@@ -52,6 +53,8 @@ describe("Herdr Office projection", () => {
     });
     expect(projection.rooms[0].roomAgents.map(({ semanticStatus }) => semanticStatus))
       .toEqual(["working", "unknown"]);
+    expect(projection.roster.find(({ agent }) => agent.displayLabel === "Codex")?.agent.taskSummary)
+      .toBe("Reviewing the office persistence changes");
     expect(projection.receptions[0].waitingAgents.map(({ semanticStatus }) => semanticStatus))
       .toEqual(["blocked"]);
     expect(projection.barAgents.map(({ semanticStatus }) => semanticStatus))

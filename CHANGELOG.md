@@ -6,6 +6,12 @@
 
 ### Added
 
+- Added a bounded Office productivity slice: browser-local restoration of Office window geometry,
+  ordering, and scroll position; responsive room sizing; persistent selected-agent callouts for
+  optional harness task summaries; and direct-federation Enable all / Disable all bridge controls.
+  [PR #9](https://github.com/IvoryHeart/herdr-web/pull/9)
+- Added animation-frame terminal refits during Office window resizing to remove the extra inner
+  canvas catch-up delay. [PR #9](https://github.com/IvoryHeart/herdr-web/pull/9)
 - Added an isolated Office settings surface for an optional Prometheus URL,
   with bridge-owned live configuration, per-bridge browser persistence, and
   clear provider health feedback. The generic Herdr Web settings remain the
@@ -14,6 +20,11 @@
 - Added short-lived Office terminal restoration across browser refreshes by
   persisting only qualified pane descriptors and revalidating them against an
   admitted snapshot.
+- Restored the graphical Agent Bar as a separate room beside the CEO Office,
+  including the Party board, single counter, and compact full-size agent
+  sprites, while retaining a semantic keyboard and screen-reader overlay.
+  Office room create, rename, and close actions remain capability-gated against
+  Herdr workspace lifecycle commands.
 - Added a documented `npm run dev:local` workflow that checks the Herdr socket,
   reuses or starts the bridge, and launches the web client with the correct
   development proxy.
@@ -34,9 +45,37 @@
 
 ### Changed
 
-- Added compact colour-coded Herdr host and Economy provider state to the
-  Office notice, and made Office canvas hover resolution and in-room `+`
-  actions use explicit canvas hit targets.
+- Removed the persistent Office notice/status strip to return its vertical
+  space to the canvas; provider details remain available through Office
+  settings and the existing CEO boards/sidebar.
+- Positioned the graphical Agent Bar beside the CEO Office with a dedicated
+  pixel-road separator. CEO furniture and agent sprites remain at their native
+  scale; only inter-block spacing and bar spacing are compacted. Room lifecycle
+  actions remain disabled when the selected host does not advertise the
+  required Herdr commands.
+- Made the Office canvas follow the available viewport width and changed room
+  placement from a fixed two-column cluster to an elastic full-width grid.
+  Moved room rename/close controls into room title bars, moved room creation to
+  an in-scene `+`, and removed the global `New seat` control in favour of the
+  room-local desk actions.
+- Distributed CEO-room boards and reception furniture across the available CEO
+  area, expanded the desktop Agent Bar to 560px when space permits, and kept
+  furniture spacing stable for rooms in a partial final row.
+- Matched the Agent Bar Party count to the rendered bar occupancy, packed the
+  first agent row against the counter, added drinks to the counter, and kept a
+  disabled `+ / ROOM FULL` affordance visible after the eighth desk.
+- Changed room placement to sequential natural-width row packing: each row fits
+  as many 2–8-seat room templates as it can, later rows are not constrained by
+  a wide room above them, and all room gaps remain snug and consistent.
+- Added a persisted Office layout preference for left, center, or right room-row
+  alignment, with left alignment as the default; CEO Office and Agent Bar placement
+  remain dedicated and unaffected.
+- Added pixel-road separators between responsive room rows and columns, nudged
+  reception tables inward at the CEO boundary, and gave each visible Agent Bar
+  agent an aligned glass alongside a rear shelf of drinks.
+- Refined the Agent Bar composition by raising the counter and visible agents,
+  keeping their glasses on the counter, and moving the bottle row into the
+  lower edge of the room.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state
@@ -44,7 +83,7 @@
   boards, shifted room furniture down within the existing wall clearance, and refreshed the Agent
   Bar with a warm Claw-Empire-inspired bar setting using the existing character art. The board now
   uses a legible three-column/two-row metric grid with a compact single-dot state cue, and the
-  Agent Bar now stacks agents/stools, counter, and drinks shelf from front to back.
+  Agent Bar now packs full-size agents around one counter.
 - Remodeled Pixel Office around qualified Herdr topology: tabs are desks; `working` and `unknown`
   agents work or stand in their exact workspace; `blocked` agents wait at horizontal host reception
   conference tables; and `idle` and `done` agents move to the shared Agent Bar. The reception floor
@@ -58,6 +97,11 @@
 
 ### Fixed
 
+- Fixed Office room roads being visually swallowed by room borders by widening
+  the packed room gap to the road width, and corrected vertical-road lane marks
+  to run vertically while horizontal-road marks remain horizontal.
+- Increased the vertical gap between room rows so row headings no longer cover
+  the horizontal road separator.
 - Fixed development-mode Office renderer cleanup so an older asynchronous Pixi
   initialization cannot remove the active canvas created by a newer initialization.
 

@@ -62,6 +62,7 @@ export type OfficeAgent = {
   roomKey: string;
   hostKey: string;
   displayLabel: string;
+  taskSummary?: string;
   semanticStatus: AgentStatus;
   stateLabels: Partial<Record<AgentStatus, string>>;
   focused: boolean;
@@ -546,6 +547,7 @@ function projectAgent(
   const key = qualifiedRuntimeKey(terminalRef);
   const deskKey = qualifiedRuntimeKey(tabRef);
   const destination = statusDestination(pane.agent_status);
+  const taskSummary = boundedSummary(pane.task_summary);
   return {
     key,
     currentPaneRef: qualifyRuntimeTarget(source.profile.profileId, "pane", pane.pane_id),
@@ -556,6 +558,7 @@ function projectAgent(
     roomKey,
     hostKey: host.key,
     displayLabel: boundedLabel(pane.display_agent || pane.agent, "Agent"),
+    ...(taskSummary ? { taskSummary } : {}),
     semanticStatus: pane.agent_status,
     stateLabels: boundedStateLabels(pane.state_labels),
     focused: pane.focused,
@@ -572,6 +575,14 @@ function statusDestination(status: AgentStatus): OfficeAgentDestination {
     return "room";
   }
   return status === "blocked" ? "reception" : "bar";
+}
+
+function boundedSummary(value: string | undefined) {
+  const summary = value?.trim();
+  if (!summary) {
+    return null;
+  }
+  return summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
 }
 
 function compareSourceHosts(left: HerdrOfficeSourceHost, right: HerdrOfficeSourceHost) {

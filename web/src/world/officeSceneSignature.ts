@@ -23,7 +23,6 @@ export function officeSceneSignature({
     layout: {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,
-      barBandY: layout.barBandY,
       rooms: visibleRoomIndices.map((index) => layout.rooms[index] ?? null),
     },
     hosts: projection.hosts,

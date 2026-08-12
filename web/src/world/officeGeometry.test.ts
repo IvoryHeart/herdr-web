@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deskAnchor,
+  agentBarSlot,
   minimumOfficeWidthForReceptions,
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
@@ -11,23 +12,41 @@ import {
 } from "./officeGeometry";
 
 describe("Pixel Office geometry", () => {
-  it("keeps a two-column horizontally scrollable office at a readable logical width", () => {
+  it("uses an elastic room grid at a readable logical width", () => {
     const narrow = resolveOfficeLayout(375, Array.from({ length: 6 }, () => ({
       deskCount: 1,
       standingCount: 0,
     })));
     expect(narrow).toMatchObject({
       officeWidth: 1000,
-      columns: 2,
-      rows: 3,
+      columns: 3,
+      rows: 2,
     });
     expect(narrow.rooms).toHaveLength(6);
     expect(narrow.roomStartY).toBe(
       OFFICE_GEOMETRY.ceoBandHeight + OFFICE_GEOMETRY.hallwayHeight,
     );
-    expect(narrow.barBandY).toBeGreaterThan(
+    expect(narrow.totalHeight).toBeGreaterThan(
       narrow.rooms.at(-1)!.y + narrow.rooms.at(-1)!.height,
     );
+  });
+
+  it("fits three ordinary rooms across one full-width row", () => {
+    const layout = resolveOfficeLayout(1200, Array.from({ length: 3 }, () => ({
+      deskCount: 2,
+      standingCount: 0,
+    })), "center");
+    expect(layout.columns).toBe(3);
+    expect(layout.rows).toBe(1);
+    expect(layout.rooms[0].x).toBe(200);
+    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(1000);
+    expect(layout.rooms[1].x - (layout.rooms[0].x + layout.rooms[0].width))
+      .toBe(OFFICE_GEOMETRY.roomGap);
+    expect(layout.rooms.map(({ width }) => width)).toEqual([
+      layout.rooms[0].width,
+      layout.rooms[0].width,
+      layout.rooms[0].width,
+    ]);
   });
 
   it("expands rooms deterministically for second desk and standing rows", () => {
@@ -42,35 +61,118 @@ describe("Pixel Office geometry", () => {
     expect(layout.rooms[2].height).toBeGreaterThan(OFFICE_GEOMETRY.minRoomHeight);
   });
 
+  it("keeps furniture spacing stable in a partial final room row", () => {
+    const layout = resolveOfficeLayout(1400, Array.from({ length: 7 }, () => ({
+      deskCount: 2,
+      standingCount: 0,
+    })));
+    const firstRoom = layout.rooms[0];
+    const finalRowRoom = layout.rooms[layout.columns];
+    expect(finalRowRoom.width).toBe(firstRoom.width);
+    expect(finalRowRoom.x).toBe(firstRoom.x);
+    const firstRowBottom = Math.max(
+      ...layout.rooms
+        .filter(({ row }) => row === firstRoom.row)
+        .map(({ y, height }) => y + height),
+    );
+    expect(finalRowRoom.y - firstRowBottom).toBe(OFFICE_GEOMETRY.roomRowGap);
+    expect(deskAnchor(finalRowRoom, 0).stationSpan)
+      .toBe(deskAnchor(firstRoom, 0).stationSpan);
+  });
+
+  it("does not inherit a dense room width in the next row", () => {
+    const layout = resolveOfficeLayout(1400, [
+      { deskCount: 8, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+    ]);
+    const denseRoom = layout.rooms[0];
+    const nextRowRoom = layout.rooms[layout.columns];
+    expect(nextRowRoom.width).toBeLessThan(denseRoom.width);
+    expect(deskAnchor(nextRowRoom, 0).stationSpan)
+      .toBe(deskAnchor(denseRoom, 0).stationSpan);
+  });
+
+  it("packs later rows independently of a dense room in the first row", () => {
+    const layout = resolveOfficeLayout(1700, [
+      { deskCount: 8, standingCount: 0 },
+      ...Array.from({ length: 11 }, () => ({ deskCount: 2, standingCount: 0 })),
+    ]);
+    expect(layout.rooms.slice(0, layout.columns).some(({ deskColumns }) => deskColumns === 4))
+      .toBe(true);
+    expect(layout.rooms.filter(({ row }) => row === 1)).toHaveLength(6);
+  });
+
+  it("supports left, center, and right room-row alignment", () => {
+    const rooms = Array.from({ length: 2 }, () => ({ deskCount: 2, standingCount: 0 }));
+    const left = resolveOfficeLayout(1200, rooms, "left");
+    const center = resolveOfficeLayout(1200, rooms, "center");
+    const right = resolveOfficeLayout(1200, rooms, "right");
+    expect(left.rooms[0].x).toBe(12);
+    expect(center.rooms[0].x).toBeGreaterThan(left.rooms[0].x);
+    expect(right.rooms.at(-1)!.x + right.rooms.at(-1)!.width).toBe(1188);
+  });
+
+  it("spreads the CEO blocks and doubles the wide-screen Agent Bar", () => {
+    const blocks = resolveCeoBlockLayout(1700, 1);
+    expect(blocks.agentBarWidth).toBe(OFFICE_GEOMETRY.agentBarPreferredWidth);
+    expect(blocks.blockGap).toBeGreaterThan(OFFICE_GEOMETRY.ceoCompactBlockGap);
+    expect(blocks.agentBarX + blocks.agentBarWidth)
+      .toBe(1700 - OFFICE_GEOMETRY.ceoEdgePadding);
+  });
+
+  it("packs the first Agent Bar row beside the counter", () => {
+    const blocks = resolveCeoBlockLayout(1700, 1);
+    const counterRow = agentBarSlot(blocks, 0);
+    const backRow = agentBarSlot(blocks, counterRow.columns);
+    expect(counterRow.rowY).toBeGreaterThan(backRow.rowY);
+    expect(counterRow.characterFeetY).toBeGreaterThan(backRow.characterFeetY);
+  });
+
   it("keeps CEO and all host reception desks on one bounded horizontal row", () => {
     const officeWidth = minimumOfficeWidthForReceptions(6);
     const blocks = resolveCeoBlockLayout(officeWidth, 6);
     const receptions = blocks.receptions;
     expect(officeWidth).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minOfficeWidth);
     expect(receptions).toHaveLength(6);
+    expect(blocks.ceoScale).toBe(1);
+    expect(blocks.localBlockGap).toBe(OFFICE_GEOMETRY.ceoCompactBlockGap);
     expect(blocks.ceoX).toBe(OFFICE_GEOMETRY.ceoEdgePadding);
     expect(blocks.otelBoardX).toBe(
-      blocks.ceoX + OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
+      blocks.ceoX + blocks.ceoScale * OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
     );
     expect(blocks.boardX).toBe(
-      blocks.otelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blocks.blockGap,
+      blocks.otelBoardX + blocks.ceoScale * OFFICE_GEOMETRY.ceoOtelBoardWidth + blocks.blockGap,
     );
     expect(receptions[0].x).toBe(
-      blocks.boardX + OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,
+      blocks.boardX + blocks.ceoScale * OFFICE_GEOMETRY.ceoBoardWidth + blocks.blockGap,
     );
     expect(new Set(receptions.map(({ y }) => y))).toEqual(new Set([36]));
     expect(receptions.every(({ width }) =>
-      width === OFFICE_GEOMETRY.receptionStationMinWidth)).toBe(true);
+      width <= OFFICE_GEOMETRY.receptionStationMinWidth)).toBe(true);
     expect(receptions.every(({ gapBefore }) => gapBefore === blocks.blockGap)).toBe(true);
     expect(receptions[1].x - (receptions[0].x + receptions[0].width))
-      .toBe(blocks.blockGap);
+      .toBeCloseTo(blocks.blockGap);
     expect(receptions.at(-1)!.x + receptions.at(-1)!.width).toBeLessThanOrEqual(officeWidth - 12);
+    expect(blocks.agentBarX).toBeGreaterThan(
+      receptions.at(-1)!.x + receptions.at(-1)!.width,
+    );
+    expect(blocks.agentBarX + blocks.agentBarWidth).toBe(
+      officeWidth - OFFICE_GEOMETRY.ceoEdgePadding,
+    );
     const agents = Array.from({ length: 4 }, (_, index) =>
       receptionAgentAnchor(receptions[0], index));
     expect(new Set(agents.map(({ x }) => x)).size).toBe(4);
-    expect(agents[1].x - agents[0].x).toBe(agents[0].stationSpan);
+    expect(agents[1].x - agents[0].x).toBeCloseTo(agents[0].stationSpan);
     const table = receptionTableRect(receptions[0]);
-    expect(table.width).toBe(OFFICE_GEOMETRY.receptionTableWidth);
+    const centeredTableX = receptions[0].x +
+      (receptions[0].width - table.width) / 2;
+    expect(table.width).toBeLessThanOrEqual(OFFICE_GEOMETRY.receptionTableWidth);
+    expect(table.x).toBe(centeredTableX + OFFICE_GEOMETRY.receptionTableNudgeX);
     expect(table.x).toBeGreaterThan(receptions[0].x);
     expect(table.x + table.width).toBeLessThan(receptions[0].x + receptions[0].width);
   });

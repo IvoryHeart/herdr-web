@@ -16,6 +16,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import {
   duplicateBackend,
+  allAvailableBridgeIds,
   fallbackBackendColor,
   normalizeBridgeBaseUrl,
   normalizeBackendColor,
@@ -287,6 +288,11 @@ export function BackendSettingsDialog({
   const sameOriginUrl = sameOriginDisplayUrl();
   const sameOriginLabel = sameOriginHostLabel();
   const showSameOrigin = bridge.sameOriginAvailable;
+  const availableBridgeIds = allAvailableBridgeIds(bridge.store.backends, showSameOrigin);
+  const enabledBridgeCount = availableBridgeIds.filter((id) =>
+    bridge.store.enabledBridgeIds.includes(id),
+  ).length;
+  const allBridgesEnabled = availableBridgeIds.length > 0 && enabledBridgeCount === availableBridgeIds.length;
   const areas: { id: SettingsArea; label: string; icon: typeof Server }[] = [
     { id: "bridge", label: "Bridge", icon: Server },
     { id: "features", label: "Features", icon: StickyNote },
@@ -365,6 +371,30 @@ export function BackendSettingsDialog({
               <>
                 <div className="bridge-settings-grid">
                   <div className="backend-list" role="list" aria-label="Saved bridges">
+                    <div className="backend-fleet-summary">
+                      <div>
+                        <strong>Bridge fleet</strong>
+                        <small>{enabledBridgeCount}/{availableBridgeIds.length} included in Office</small>
+                      </div>
+                      <div className="backend-fleet-actions">
+                        <button
+                          className="settings-inline-action"
+                          type="button"
+                          disabled={allBridgesEnabled}
+                          onClick={() => bridge.setAllBridgesEnabled(true)}
+                        >
+                          Enable all
+                        </button>
+                        <button
+                          className="settings-inline-action"
+                          type="button"
+                          disabled={enabledBridgeCount === 0}
+                          onClick={() => bridge.setAllBridgesEnabled(false)}
+                        >
+                          Disable all
+                        </button>
+                      </div>
+                    </div>
                     {showSameOrigin ? (
                       <BackendToggleRow
                         active={selectionMode === "same-origin"}

@@ -19,6 +19,7 @@ import type {
   OfficeRoom,
 } from "./herdrOfficeProjection";
 import {
+  agentBarSlot,
   deskAnchor,
   minimumOfficeWidthForReceptions,
   OFFICE_GEOMETRY,
@@ -29,8 +30,10 @@ import {
   standingAnchor,
 } from "./officeGeometry";
 import type {
+  OfficeCeoBlockLayout,
   OfficeLayout,
   OfficeReceptionRect,
+  OfficeRoomAlignment,
   OfficeRoomRect,
 } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
@@ -118,7 +121,6 @@ export type OfficeRendererDiagnostics = {
     rooms: number;
     characterHeight: number;
     ceoBandHeight: number;
-    barBandHeight: number;
     viewportHeight: number;
   };
   completionMarkers: number;
@@ -137,6 +139,7 @@ export type OfficeRendererController = {
     selectedKey: string | null,
     completionSeenKeys?: ReadonlySet<string>,
     observability?: OfficeObservability,
+    roomAlignment?: OfficeRoomAlignment,
   ) => void;
   getAnchors: (
     selectedKey: string | null,
@@ -173,6 +176,8 @@ export async function createOfficeRenderer(
   canCreateSeat: (roomKey: string) => boolean,
   onNewSeat: (roomKey: string) => void,
   onHover: (hover: OfficeCanvasHover | null) => void,
+  onLayoutChange: (layout: OfficeLayout | null) => void,
+  roomAlignment: OfficeRoomAlignment,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -194,6 +199,7 @@ export async function createOfficeRenderer(
   let currentSelectedKey = selectedKey;
   let currentCompletionSeenKeys = completionSeenKeys;
   let currentObservability = observability;
+  let currentRoomAlignment = roomAlignment;
   let currentLayout: OfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
@@ -318,7 +324,8 @@ export async function createOfficeRenderer(
       ...layout.rooms.map(({ height }) => height),
     );
     const overscan =
-      (largestRoomHeight + OFFICE_GEOMETRY.roomGap) * VIRTUAL_ROOM_ROW_OVERSCAN;
+      (largestRoomHeight + Math.max(OFFICE_GEOMETRY.roomGap, OFFICE_GEOMETRY.roomRowGap)) *
+      VIRTUAL_ROOM_ROW_OVERSCAN;
     const visibleRooms = layout.rooms.filter(
       (room) => room.y + room.height >= scrollTop - overscan
         && room.y <= scrollTop + viewportHeight + overscan,
@@ -373,16 +380,6 @@ export async function createOfficeRenderer(
         );
       }
     });
-    drawAgentBar(
-      app.stage,
-      layout,
-      currentProjection,
-      currentSelectedKey,
-      textures,
-      animated,
-      select,
-      activateAgent,
-    );
     if (!diagnostics.ready) {
       officeDebug("renderer:scene-ready", {
         rooms: layout.rooms.length,
@@ -421,9 +418,10 @@ export async function createOfficeRenderer(
     if (disposed) {
       return;
     }
+    const viewportWidth = scrollElement?.clientWidth ?? element.clientWidth;
     const width = Math.max(
       minimumOfficeWidthForReceptions(currentProjection.receptions.length),
-      Math.floor(requestedWidth || 0),
+      Math.floor(viewportWidth || requestedWidth || 0),
     );
     const layout = resolveOfficeLayout(
       width,
@@ -433,12 +431,14 @@ export async function createOfficeRenderer(
         ),
         standingCount: room.roomAgents.filter(({ placement }) => placement === "standing").length,
       })),
+      currentRoomAlignment,
     );
     const viewportHeight = Math.min(
       layout.totalHeight,
       Math.max(1, scrollElement?.clientHeight ?? layout.totalHeight),
     );
     currentLayout = layout;
+    onLayoutChange(layout);
     lastWidth = layout.officeWidth;
     if (
       lastRendererSize.width !== layout.officeWidth ||
@@ -457,7 +457,6 @@ export async function createOfficeRenderer(
       rooms: layout.rooms.length,
       characterHeight: OFFICE_GEOMETRY.characterHeight,
       ceoBandHeight: OFFICE_GEOMETRY.ceoBandHeight,
-      barBandHeight: OFFICE_GEOMETRY.barBandHeight,
       viewportHeight,
     };
   };
@@ -513,7 +512,7 @@ export async function createOfficeRenderer(
       build(nextWidth);
     }, 80);
   });
-  observer.observe(element);
+  observer.observe(scrollElement ?? element);
   diagnostics.activeObservers += 1;
   try {
     build();
@@ -545,7 +544,12 @@ export async function createOfficeRenderer(
       nextSelectedKey,
       nextCompletionSeenKeys = currentCompletionSeenKeys,
       nextObservability = currentObservability,
+      nextRoomAlignment = currentRoomAlignment,
     ) {
+      if (nextRoomAlignment !== currentRoomAlignment) {
+        currentRoomAlignment = nextRoomAlignment;
+        lastSceneSignature = null;
+      }
       currentProjection = nextProjection;
       currentSelectedKey = nextSelectedKey;
       currentCompletionSeenKeys = nextCompletionSeenKeys;
@@ -597,6 +601,7 @@ export async function createOfficeRenderer(
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
+      onLayoutChange(null);
     },
   };
 }
@@ -613,6 +618,9 @@ function resolveOfficeAnchors(
   const directDesk = conversationTargetKey
     ? projection.deskRoster.find(({ desk }) => desk.key === conversationTargetKey)?.desk ?? null
     : null;
+  const selectedDesk = !agentEntry && selectedKey
+    ? projection.deskRoster.find(({ desk }) => desk.key === selectedKey)?.desk ?? null
+    : null;
   const agentDesk = agentEntry?.agent.deskKey
     ? projection.deskRoster.find(({ desk }) => desk.key === agentEntry.agent.deskKey)?.desk ?? null
     : null;
@@ -620,7 +628,7 @@ function resolveOfficeAnchors(
     agent: agentEntry
       ? resolveOfficeAgentAnchor(projection, layout, agentEntry.agent.key)
       : null,
-    workbench: resolveOfficeDeskAnchor(projection, layout, directDesk ?? agentDesk),
+    workbench: resolveOfficeDeskAnchor(projection, layout, directDesk ?? agentDesk ?? selectedDesk),
   };
 }
 
@@ -674,20 +682,15 @@ function resolveOfficeAgentAnchor(
     return { x: anchor.x, y: anchor.characterFeetY - 42 };
   }
   if (agent.destination === "bar") {
-    const index = projection.barAgents.findIndex(({ key: agentKey }) => agentKey === key);
-    if (index < 0) {
+    const barIndex = projection.barAgents.findIndex(({ key: agentKey }) => agentKey === key);
+    if (barIndex < 0) {
       return null;
     }
-    const x = Math.floor(layout.officeWidth / 2) + 4;
-    const width = layout.officeWidth - x - 4;
-    const boardX = x + 16;
-    const barX = boardX + 120 + 16;
-    const barWidth = x + width - 16 - barX;
-    const stationSpan = barWidth / 5;
-    return {
-      x: barX + stationSpan * (index + 0.5),
-      y: layout.barBandY + 136 - 42,
-    };
+    const slot = agentBarSlot(
+      resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length),
+      barIndex,
+    );
+    return { x: slot.x, y: slot.characterFeetY - 42 };
   }
   const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
   const room = projection.rooms[roomIndex];
@@ -743,23 +746,38 @@ function drawCeoReception(
   onActivateAgent: (key: string) => void,
 ) {
   const band = new Container();
+  const ceoBlocks = resolveCeoBlockLayout(
+    layout.officeWidth,
+    projection.receptions.length,
+  );
+  const ceoRoomRight = ceoBlocks.agentBarX - OFFICE_GEOMETRY.agentBarGap;
   const floor = new Graphics();
   drawTiledFloor(
     floor,
     4,
     4,
-    layout.officeWidth - 8,
+    ceoRoomRight - 4,
     OFFICE_GEOMETRY.ceoBandHeight - 4,
     0x131328,
     0x0e0e1d,
   );
   floor
-    .roundRect(4, 4, layout.officeWidth - 8, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
+    .roundRect(4, 4, ceoRoomRight - 4, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
-  addSign(
+  drawVerticalRoad(
     band,
-    layout.officeWidth / 2 - 88,
+    ceoRoomRight,
+    4,
+    OFFICE_GEOMETRY.agentBarGap,
+    OFFICE_GEOMETRY.ceoBandHeight - 4,
+  );
+  const ceoContent = new Container();
+  ceoContent.position.x = ceoBlocks.ceoOriginX;
+  ceoContent.scale.x = ceoBlocks.ceoScale;
+  addSign(
+    ceoContent,
+    ceoBlocks.ceoContentWidth / 2 - 88,
     8,
     "CEO OFFICE",
     0x76571c,
@@ -769,22 +787,17 @@ function drawCeoReception(
     undefined,
     13,
   );
-
-  const ceoBlocks = resolveCeoBlockLayout(
-    layout.officeWidth,
-    projection.receptions.length,
-  );
-  drawCeo(band, textures, ceoBlocks.ceoX);
-  drawOtelCostBoard(band, observability, ceoBlocks.otelBoardX);
-  drawLiveStateBlackboard(band, projection, ceoBlocks.boardX);
-  const receptionRects = ceoBlocks.receptions;
+  drawCeo(ceoContent, textures, ceoBlocks.localCeoX);
+  drawOtelCostBoard(ceoContent, observability, ceoBlocks.localOtelBoardX);
+  drawLiveStateBlackboard(ceoContent, projection, ceoBlocks.localBoardX);
+  const receptionRects = ceoBlocks.localReceptions;
   projection.receptions.forEach((reception, index) => {
     const rect = receptionRects[index];
     if (!rect) {
       return;
     }
     drawReceptionDesk(
-      band,
+      ceoContent,
       reception,
       projection,
       rect,
@@ -801,10 +814,38 @@ function drawCeoReception(
       color: 0xd7c394,
       anchor: { x: 1, y: 0 },
     });
-    overflow.position.set(layout.officeWidth - 18, 13);
-    band.addChild(overflow);
+    overflow.position.set(ceoBlocks.ceoContentWidth - 18, 13);
+    ceoContent.addChild(overflow);
   }
+  band.addChild(ceoContent);
+  drawAgentBar(
+    band,
+    ceoBlocks,
+    projection,
+    selectedKey,
+    textures,
+    animated,
+    onSelect,
+    onActivateAgent,
+  );
   stage.addChild(band);
+}
+
+function drawVerticalRoad(
+  parent: Container,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const road = new Graphics();
+  road.rect(x, y, width, height).fill(0x252537);
+  road.rect(x, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
+  road.rect(x + width - 1, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
+  for (let markerY = y + 14; markerY < y + height - 8; markerY += 18) {
+    road.rect(x + width / 2, markerY, 1, 6).fill({ color: 0x77749a, alpha: 0.38 });
+  }
+  parent.addChild(road);
 }
 
 function drawCeo(parent: Container, textures: readonly Texture[], deskX: number) {
@@ -1117,14 +1158,64 @@ function drawReceptionDesk(
 
 function drawHallways(stage: Container, layout: OfficeLayout) {
   const hall = new Graphics();
-  for (const y of [OFFICE_GEOMETRY.ceoBandHeight, layout.barBandY - OFFICE_GEOMETRY.hallwayHeight]) {
-    hall.rect(4, y, layout.officeWidth - 8, OFFICE_GEOMETRY.hallwayHeight).fill(0x252537);
-    hall.rect(4, y, layout.officeWidth - 8, 1).fill({ color: 0x6c6990, alpha: 0.35 });
-    for (let x = 20; x < layout.officeWidth - 20; x += 18) {
-      hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
-    }
+  const y = OFFICE_GEOMETRY.ceoBandHeight;
+  hall.rect(4, y, layout.officeWidth - 8, OFFICE_GEOMETRY.hallwayHeight).fill(0x252537);
+  hall.rect(4, y, layout.officeWidth - 8, 1).fill({ color: 0x6c6990, alpha: 0.35 });
+  for (let x = 20; x < layout.officeWidth - 20; x += 18) {
+    hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
   }
   stage.addChild(hall);
+  drawRoomRoads(stage, layout);
+}
+
+function drawRoomRoads(stage: Container, layout: OfficeLayout) {
+  const road = new Graphics();
+  const rows = new Map<number, OfficeRoomRect[]>();
+  layout.rooms.forEach((room) => {
+    const row = rows.get(room.row) ?? [];
+    row.push(room);
+    rows.set(room.row, row);
+  });
+  const sortedRows = [...rows.values()]
+    .map((row) => row.sort((left, right) => left.x - right.x))
+    .sort((left, right) => left[0].y - right[0].y);
+
+  sortedRows.forEach((row) => {
+    row.slice(0, -1).forEach((room, index) => {
+      const next = row[index + 1];
+      const gap = next.x - (room.x + room.width);
+      if (gap > 0) {
+        drawVerticalRoad(road, room.x + room.width, room.y, gap, Math.min(room.height, next.height));
+      }
+    });
+  });
+  sortedRows.slice(0, -1).forEach((row, index) => {
+    const nextRow = sortedRows[index + 1];
+    const rowBottom = Math.max(...row.map(({ y, height }) => y + height));
+    const nextRowTop = Math.min(...nextRow.map(({ y }) => y));
+    if (nextRowTop > rowBottom) {
+      drawHorizontalRoad(road, 4, rowBottom, layout.officeWidth - 8, nextRowTop - rowBottom);
+    }
+  });
+  stage.addChild(road);
+}
+
+function drawHorizontalRoad(
+  parent: Graphics,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  parent.rect(x, y, width, height).fill(0x252537);
+  parent.rect(x, y, width, 1).fill({ color: 0x6c6990, alpha: 0.35 });
+  parent.rect(x, y + height - 1, width, 1).fill({ color: 0x6c6990, alpha: 0.35 });
+  for (let markerX = x + 14; markerX < x + width - 8; markerX += 18) {
+    parent.rect(markerX, y + height / 2, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
+  }
 }
 
 function roomHasActivity(room: OfficeRoom) {
@@ -1313,8 +1404,12 @@ function drawRoom(
         onActivateAgent,
       );
     });
-  if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom && canCreateSeat(room.key)) {
-    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
+  if (canCreateSeat(room.key)) {
+    if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom) {
+      drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
+    } else {
+      drawFullRoomAction(parent, rect, theme.accent);
+    }
   }
 
   const overflow: string[] = [];
@@ -1360,6 +1455,9 @@ function drawNewSeatAction(
     onNewSeat(room.key);
   });
   const plate = new Graphics();
+  // Keep the visible + target self-describing for Pixi's hit-test walk so
+  // hover callouts work on the empty-seat action as well as on desks.
+  plate.label = room.key;
   plate.eventMode = "static";
   plate.roundRect(anchor.x - 25, anchor.deskY, 50, 27, 5)
     .fill({ color: accent, alpha: 0.1 })
@@ -1374,6 +1472,27 @@ function drawNewSeatAction(
   hint.position.set(anchor.x, anchor.nameY + 7);
   action.addChild(hint);
   parent.addChild(action);
+}
+
+function drawFullRoomAction(
+  parent: Container,
+  rect: OfficeRoomRect,
+  accent: number,
+) {
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height - 40;
+  const plate = new Graphics();
+  plate.roundRect(x - 25, y, 50, 27, 5)
+    .fill({ color: accent, alpha: 0.04 })
+    .stroke({ width: 1, color: accent, alpha: 0.38 });
+  parent.addChild(plate);
+  const plus = label("+", { size: 19, color: 0x9c947f, anchor: 0.5 });
+  plus.alpha = 0.62;
+  plus.position.set(x, y + 13);
+  parent.addChild(plus);
+  const hint = label("ROOM FULL", { size: 7, color: 0x8e958a, anchor: 0.5 });
+  hint.position.set(x, y + 35);
+  parent.addChild(hint);
 }
 
 function drawTabDesk(
@@ -1556,8 +1675,8 @@ function drawStandingAgent(
 }
 
 function drawAgentBar(
-  stage: Container,
-  layout: OfficeLayout,
+  parent: Container,
+  blocks: OfficeCeoBlockLayout,
   projection: HerdrOfficeProjection,
   selectedKey: string | null,
   textures: readonly Texture[],
@@ -1565,57 +1684,58 @@ function drawAgentBar(
   onSelect: (key: string) => void,
   onActivateAgent: (key: string) => void,
 ) {
-  const x = Math.floor(layout.officeWidth / 2) + 4;
-  const y = layout.barBandY;
-  const width = layout.officeWidth - x - 4;
+  const x = blocks.agentBarX;
+  const y = 4;
+  const width = blocks.agentBarWidth;
+  const height = OFFICE_GEOMETRY.ceoBandHeight - 4;
   const room = new Container();
   const floor = new Graphics();
-  drawTiledFloor(floor, x, y, width, OFFICE_GEOMETRY.barBandHeight, 0x17140f, 0x11100d);
-  floor.rect(x, y, width, 42).fill({ color: 0x3c2d22, alpha: 0.9 });
-  floor.roundRect(x, y, width, OFFICE_GEOMETRY.barBandHeight, 4)
+  drawTiledFloor(floor, x, y, width, height, 0x17140f, 0x11100d);
+  floor.roundRect(x, y, width, height, 4)
     .stroke({ width: 2, color: 0xb59048, alpha: 0.72 });
   room.addChild(floor);
   addSign(
     room,
-    x + width / 2 - 72,
-    y - 5,
+    x + width / 2 - 58,
+    y + 8,
     "AGENT BAR",
     0xa17d37,
-    144,
+    116,
     undefined,
     undefined,
     undefined,
-    OFFICE_HEADING_TEXT_SIZE,
+    10,
   );
 
-  const boardX = x + 16;
-  const boardY = y + 44;
-  const boardWidth = 120;
-  const boardHeight = OFFICE_GEOMETRY.barBandHeight - 60;
-  const barX = boardX + boardWidth + 16;
-  const barWidth = x + width - 16 - barX;
-  const columns = 5;
-  const stationSpan = barWidth / columns;
-  const labelY = y + 47;
-  const characterFeetY = y + 136;
-  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
-  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
-  projection.barAgents.slice(0, columns).forEach((agent, index) => {
-    const px = barX + stationSpan * (index + 0.5);
+  const boardX = x + 10;
+  const boardY = y + 42;
+  const boardWidth = Math.min(76, width * 0.25);
+  const boardHeight = height - 86;
+  const firstSlot = agentBarSlot(blocks, 0);
+  const barX = boardX + boardWidth + 10;
+  const barWidth = Math.max(0, x + width - 10 - barX);
+  const counterY = y + height - OFFICE_GEOMETRY.agentBarCounterBottomClearance;
+  const capacity = firstSlot.capacity;
+  const visibleBarAgents = projection.barAgents.slice(0, capacity);
+  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, visibleBarAgents.length);
+  visibleBarAgents.forEach((agent, index) => {
+    const slot = agentBarSlot(blocks, index);
+    const px = slot.x;
+    const rowY = slot.rowY;
     const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
-    const name = label(shortLabel(agent.displayLabel, 14), {
-      size: 10,
+    const name = label(shortLabel(agent.displayLabel, 10), {
+      size: 8,
       color: 0xf0ece5,
       anchor: 0.5,
     });
-    name.position.set(px, labelY);
+    name.position.set(px, rowY + 1);
     makeInteractive(name, agent.key, onSelect, onActivateAgent);
     room.addChild(name);
-    const state = label(cue.label, { size: 8, color: cue.color, anchor: 0.5 });
-    state.position.set(px, labelY + 14);
+    const state = label(cue.label, { size: 6, color: cue.color, anchor: 0.5 });
+    state.position.set(px, rowY + 12);
     makeInteractive(state, agent.key, onSelect, onActivateAgent);
     room.addChild(state);
-    drawBarStool(room, px, characterFeetY - 3, cue.color);
+    const characterFeetY = slot.characterFeetY;
     const character = drawCharacter(
       room,
       textures[agent.characterIndex] ?? Texture.EMPTY,
@@ -1631,19 +1751,25 @@ function drawAgentBar(
     );
     character.alpha = agent.stale ? 0.56 : 1;
   });
-  drawBarCounter(room, barX, y + 138, barWidth);
-  drawBarBackWall(room, barX, y + 180, barWidth);
-  const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - columns);
+  drawBarCounter(
+    room,
+    barX,
+    counterY,
+    barWidth,
+    visibleBarAgents.map((_, index) => agentBarSlot(blocks, index).x),
+  );
+  drawBarBottleRow(room, barX, y + height, barWidth);
+  const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - capacity);
   if (overflowCount > 0) {
-    const overflow = label(`+${overflowCount} more in roster`, {
-      size: 9,
+    const overflow = label(`+${overflowCount} more`, {
+      size: 8,
       color: 0xe5cf98,
       anchor: { x: 1, y: 0 },
     });
-    overflow.position.set(x + width - 16, y + 20);
+    overflow.position.set(x + width - 10, y + 12);
     room.addChild(overflow);
   }
-  stage.addChild(room);
+  parent.addChild(room);
 }
 
 function drawPartyBoard(
@@ -1661,11 +1787,11 @@ function drawPartyBoard(
   board.roundRect(x + 4, y + 4, width - 8, height - 8, 2)
     .stroke({ width: 1, color: 0x9b7542, alpha: 0.72 });
   parent.addChild(board);
-  const heading = label("PARTY", { size: 14, color: 0xf2d78f, anchor: 0.5 });
-  heading.position.set(x + width / 2, y + 20);
+  const heading = label("PARTY", { size: 11, color: 0xf2d78f, anchor: 0.5 });
+  heading.position.set(x + width / 2, y + 17);
   parent.addChild(heading);
-  const value = label(String(idleCount), { size: 32, color: 0xf1e9bd, anchor: 0.5 });
-  value.position.set(x + width / 2, y + height / 2 - 6);
+  const value = label(String(idleCount), { size: 26, color: 0xf1e9bd, anchor: 0.5 });
+  value.position.set(x + width / 2, y + height / 2 - 4);
   parent.addChild(value);
   drawPartyDecorations(parent, x, y, width, height);
 }
@@ -1673,70 +1799,81 @@ function drawPartyBoard(
 function drawPartyDecorations(parent: Container, x: number, y: number, width: number, height: number) {
   const decorations = new Graphics();
   const confetti = [
-    [18, 31, 0xe29b66], [width - 24, 28, 0x8fb9d8], [28, 68, 0x9fceac],
-    [width - 32, 78, 0xdca4c7], [16, height - 50, 0xf3c07e], [width - 20, height - 48, 0xe29b66],
+    [10, 25, 0xe29b66], [width - 14, 23, 0x8fb9d8], [16, 58, 0x9fceac],
+    [width - 20, 68, 0xdca4c7], [10, height - 32, 0xf3c07e], [width - 14, height - 30, 0xe29b66],
   ] as const;
   confetti.forEach(([offsetX, offsetY, color], index) => {
     if (index % 2 === 0) {
-      decorations.rect(x + offsetX, y + offsetY, 4, 8).fill(color);
+      decorations.rect(x + offsetX, y + offsetY, 3, 7).fill(color);
     } else {
-      decorations.circle(x + offsetX, y + offsetY, 3).fill(color);
+      decorations.circle(x + offsetX, y + offsetY, 2.5).fill(color);
     }
   });
   const glassX = x + width / 2 - 4;
-  const glassY = y + height - 37;
-  decorations.roundRect(glassX - 7, glassY, 14, 10, 3)
-    .stroke({ width: 2, color: 0xf1d19a, alpha: 0.9 });
-  decorations.rect(glassX - 1, glassY + 10, 2, 10).fill(0xf1d19a);
-  decorations.rect(glassX - 8, glassY + 20, 16, 2).fill(0xf1d19a);
-  decorations.circle(glassX - 3, glassY - 3, 2).fill({ color: 0xf8df99, alpha: 0.9 });
-  decorations.circle(glassX + 3, glassY - 5, 2).fill({ color: 0xf8df99, alpha: 0.9 });
+  const glassY = y + height - 30;
+  decorations.roundRect(glassX - 6, glassY, 12, 9, 3)
+    .stroke({ width: 1.5, color: 0xf1d19a, alpha: 0.9 });
+  decorations.rect(glassX - 1, glassY + 9, 2, 9).fill(0xf1d19a);
+  decorations.rect(glassX - 7, glassY + 18, 14, 2).fill(0xf1d19a);
   parent.addChild(decorations);
 }
-function drawBarBackWall(parent: Container, x: number, y: number, width: number) {
-  const wall = new Graphics();
-  wall.roundRect(x, y, width, 44, 4).fill(0x271b18);
-  wall.roundRect(x + 4, y + 4, width - 8, 36, 3).fill(0x34221c);
-  wall.roundRect(x + 8, y + 8, width - 16, 2, 1).fill({ color: 0xb59048, alpha: 0.5 });
-  wall.roundRect(x + 8, y + 29, width - 16, 2, 1).fill({ color: 0x8d6335, alpha: 0.64 });
-  for (let index = 0; index < Math.floor((width - 28) / 22); index += 1) {
-    const bottleX = x + 14 + index * 22;
-    const color = [0xe29b66, 0x8fb9d8, 0x9fceac, 0xdca4c7, 0xf3c07e][index % 5];
-    wall.roundRect(bottleX, y + 14, 7, 13, 2).fill(color);
-    wall.rect(bottleX + 2, y + 10, 3, 5).fill(blendColor(color, 0xf6e5b7, 0.3));
-    wall.rect(bottleX + 1, y + 28, 5, 1).fill({ color: 0xffffff, alpha: 0.18 });
+
+function drawBarBottleRow(parent: Container, x: number, roomBottom: number, width: number) {
+  const shelf = new Graphics();
+  const bottleY = roomBottom - 30;
+  const shelfY = bottleY + 18;
+  const shelfWidth = Math.max(0, width - 16);
+  shelf.rect(x + 8, shelfY, shelfWidth, 3)
+    .fill({ color: 0x5b3c2b, alpha: 0.72 });
+  shelf.rect(x + 8, shelfY + 3, shelfWidth, 1)
+    .fill({ color: 0xd0a878, alpha: 0.36 });
+  parent.addChild(shelf);
+  const drinks = new Graphics();
+  const count = Math.max(3, Math.min(12, Math.floor(width / 42)));
+  for (let index = 0; index < count; index += 1) {
+    const drinkX = x + 14 + ((shelfWidth - 12) * index) / Math.max(1, count - 1);
+    const drinkY = bottleY;
+    const liquid = [0xd36e57, 0x7ab9c4, 0xd6a24e, 0xb884d6][index % 4];
+    drinks.roundRect(drinkX - 4, drinkY, 8, 13, 2)
+      .fill({ color: liquid, alpha: 0.86 })
+      .stroke({ width: 1, color: 0xf1d19a, alpha: 0.78 });
+    drinks.rect(drinkX - 2, drinkY - 4, 4, 4).fill(0xf1d19a);
   }
-  parent.addChild(wall);
-  const neon = label("AFTER HOURS", { size: 8, color: 0xf0c878, anchor: 0.5 });
-  neon.position.set(x + width / 2, y + 6);
-  parent.addChild(neon);
+  parent.addChild(drinks);
 }
 
-function drawBarCounter(parent: Container, x: number, y: number, width: number) {
+function drawBarCounter(
+  parent: Container,
+  x: number,
+  y: number,
+  width: number,
+  glassXs: readonly number[],
+) {
   const counter = new Graphics();
-  counter.roundRect(x + 3, y + 6, width, 38, 8).fill({ color: 0x000000, alpha: 0.28 });
-  counter.roundRect(x, y, width, 36, 7).fill(0x4c3122);
-  counter.roundRect(x + 4, y + 4, width - 8, 10, 4).fill(0x8b5b35);
+  counter.roundRect(x + 3, y + 6, width, 34, 8).fill({ color: 0x000000, alpha: 0.28 });
+  counter.roundRect(x, y, width, 32, 7).fill(0x4c3122);
+  counter.roundRect(x + 4, y + 4, width - 8, 9, 4).fill(0x8b5b35);
   counter.rect(x + 8, y + 7, width - 16, 2).fill({ color: 0xd0a878, alpha: 0.54 });
-  counter.roundRect(x + 8, y + 17, width - 16, 14, 4).fill(0x38231d);
-  for (let panel = x + 28; panel < x + width - 18; panel += 58) {
-    counter.rect(panel, y + 20, 1, 8).fill({ color: 0xb07945, alpha: 0.4 });
+  counter.roundRect(x + 8, y + 16, width - 16, 12, 4).fill(0x38231d);
+  for (let panel = x + 24; panel < x + width - 18; panel += 52) {
+    counter.rect(panel, y + 19, 1, 7).fill({ color: 0xb07945, alpha: 0.4 });
   }
-  for (let tap = x + 28; tap < x + width - 20; tap += 82) {
-    counter.circle(tap, y + 11, 3).fill(0xd0a878);
-    counter.rect(tap - 1, y + 10, 2, 8).fill(0x5b3c2b);
+  for (let tap = x + 24; tap < x + width - 20; tap += 74) {
+    counter.circle(tap, y + 10, 3).fill(0xd0a878);
+    counter.rect(tap - 1, y + 9, 2, 7).fill(0x5b3c2b);
   }
   parent.addChild(counter);
-}
-
-function drawBarStool(parent: Container, x: number, y: number, accent: number) {
-  const stool = new Graphics();
-  stool.ellipse(x, y + 8, 18, 4).fill({ color: 0x000000, alpha: 0.26 });
-  stool.roundRect(x - 13, y - 4, 26, 8, 4).fill(blendColor(accent, 0x2b1f1c, 0.58));
-  stool.roundRect(x - 10, y - 2, 20, 4, 2).fill(blendColor(accent, 0xf1d19a, 0.16));
-  stool.rect(x - 2, y + 3, 4, 11).fill(0x8d6335);
-  stool.rect(x - 10, y + 13, 20, 2).fill(0x6b482e);
-  parent.addChild(stool);
+  const drinks = new Graphics();
+  glassXs.forEach((drinkX, index) => {
+    const drinkY = y - 9;
+    const liquid = [0xd36e57, 0x7ab9c4, 0xd6a24e, 0xb884d6][index % 4];
+    drinks.roundRect(drinkX - 5, drinkY, 10, 8, 2)
+      .fill({ color: liquid, alpha: 0.9 })
+      .stroke({ width: 1, color: 0xf1d19a, alpha: 0.9 });
+    drinks.rect(drinkX - 1, drinkY + 8, 2, 7).fill(0xf1d19a);
+    drinks.rect(drinkX - 6, drinkY + 15, 12, 2).fill(0xf1d19a);
+  });
+  parent.addChild(drinks);
 }
 
 function drawCharacter(

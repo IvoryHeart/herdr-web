@@ -58,6 +58,7 @@ describe("parseActivityMessage", () => {
           agent: "codex",
           title: null,
           display_agent: null,
+          task_summary: "Reviewing the office persistence changes",
           state_labels: {},
         }),
       ),
@@ -66,6 +67,7 @@ describe("parseActivityMessage", () => {
       pane_id: "pane-1",
       agent_status: "working",
       title: null,
+      task_summary: "Reviewing the office persistence changes",
     });
   });
 
@@ -110,6 +112,7 @@ describe("applyActivityMessage", () => {
       agent: "codex",
       title: "Reviewing",
       display_agent: "Codex",
+      task_summary: "Updating the Office view",
       state_labels: { working: "Running" },
     });
 
@@ -119,6 +122,7 @@ describe("applyActivityMessage", () => {
       agent: "codex",
       title: "Reviewing",
       display_agent: "Codex",
+      task_summary: "Updating the Office view",
       state_labels: { working: "Running" },
     });
     expect(result.snapshot?.workspaces[0].agent_status).toBe("working");
@@ -132,6 +136,7 @@ describe("applyActivityMessage", () => {
         agent: "codex",
         title: "Old",
         display_agent: "Codex",
+        task_summary: "Old summary",
         state_labels: { idle: "Waiting" },
       },
     ]);
@@ -143,6 +148,7 @@ describe("applyActivityMessage", () => {
       agent: null,
       title: null,
       display_agent: null,
+      task_summary: null,
       state_labels: {},
     });
 
@@ -150,7 +156,29 @@ describe("applyActivityMessage", () => {
     expect(result.snapshot?.panes[0].agent).toBeUndefined();
     expect(result.snapshot?.panes[0].title).toBeUndefined();
     expect(result.snapshot?.panes[0].display_agent).toBeUndefined();
+    expect(result.snapshot?.panes[0].task_summary).toBeUndefined();
     expect(result.snapshot?.panes[0].state_labels).toEqual({});
+  });
+
+  it("preserves a summary for legacy activity messages that omit the optional field", () => {
+    const data = snapshot([{
+      ...pane("pane-1"),
+      task_summary: "Keep this until the bridge reports a replacement",
+    }]);
+    const result = applyActivityMessage(data, {
+      type: "pane.agent_status_changed",
+      pane_id: "pane-1",
+      workspace_id: "workspace-1",
+      agent_status: "working",
+      agent: null,
+      title: null,
+      display_agent: null,
+      state_labels: {},
+    });
+
+    expect(result.status).toBe("applied");
+    expect(result.snapshot?.panes[0].task_summary)
+      .toBe("Keep this until the bridge reports a replacement");
   });
 
   it("requests resync for unknown panes and resync controls", () => {

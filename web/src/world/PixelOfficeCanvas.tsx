@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
 import type { OfficeCanvasHover } from "./officeRenderer";
 import type { OfficeObservability } from "./officeObservability";
+import type { OfficeLayout, OfficeRoomAlignment } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
@@ -41,6 +42,10 @@ export function PixelOfficeCanvas({
   onNewSeat,
   onHover,
   onAnchorChange,
+  onSelectedAnchorChange,
+  onLayoutChange,
+  roomAlignment,
+  children,
 }: {
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
@@ -54,6 +59,10 @@ export function PixelOfficeCanvas({
   onNewSeat: (roomKey: string) => void;
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
+  onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
+  onLayoutChange?: (layout: OfficeLayout | null) => void;
+  roomAlignment: OfficeRoomAlignment;
+  children?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<OfficeRendererController | null>(null);
@@ -70,6 +79,9 @@ export function PixelOfficeCanvas({
     onNewSeat,
     onHover,
     onAnchorChange,
+    onSelectedAnchorChange,
+    onLayoutChange,
+    roomAlignment,
   });
   const [failure, setFailure] = useState(false);
   latestRef.current = {
@@ -85,11 +97,15 @@ export function PixelOfficeCanvas({
     onNewSeat,
     onHover,
     onAnchorChange,
+    onSelectedAnchorChange,
+    onLayoutChange,
+    roomAlignment,
   };
 
   const reportAnchors = () => {
     const callback = latestRef.current.onAnchorChange;
-    if (!callback) {
+    const selectedCallback = latestRef.current.onSelectedAnchorChange;
+    if (!callback && !selectedCallback) {
       return;
     }
     const controller = controllerRef.current;
@@ -97,7 +113,8 @@ export function PixelOfficeCanvas({
     const scroll = host?.closest<HTMLElement>(".world-stage-scroll");
     const canvas = host?.querySelector<HTMLCanvasElement>("canvas[data-office-canvas='true']");
     if (!scroll || !canvas || !controller) {
-      callback(null);
+      callback?.(null);
+      selectedCallback?.(null);
       return;
     }
     const canvasRect = canvas.getBoundingClientRect();
@@ -157,7 +174,9 @@ export function PixelOfficeCanvas({
         workbench: toViewportAnchor(sceneAnchors.workbench),
       };
     }
-    callback(anchors);
+    callback?.(anchors);
+    const selectedAnchors = controller.getAnchors(latestRef.current.selectedKey, null);
+    selectedCallback?.(toViewportAnchor(selectedAnchors.agent ?? selectedAnchors.workbench));
   };
   const reportAnchorsRef = useRef(reportAnchors);
   reportAnchorsRef.current = reportAnchors;
@@ -185,6 +204,8 @@ export function PixelOfficeCanvas({
       (roomKey) => latestRef.current.canCreateSeat(roomKey),
       (roomKey) => latestRef.current.onNewSeat(roomKey),
       (hover) => latestRef.current.onHover?.(hover),
+      (layout) => latestRef.current.onLayoutChange?.(layout),
+      latestRef.current.roomAlignment,
     )
       .then((controller) => {
         if (disposed) {
@@ -203,6 +224,7 @@ export function PixelOfficeCanvas({
           latest.selectedKey,
           latest.completionSeenKeys,
           latest.observability,
+          latest.roomAlignment,
         );
         window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
@@ -229,7 +251,7 @@ export function PixelOfficeCanvas({
   useEffect(() => {
     controllerRef.current?.update(projection, selectedKey, completionSeenKeys, observability);
     window.requestAnimationFrame(() => reportAnchorsRef.current());
-  }, [completionSeenKeys, conversationTargets, observability, projection, selectedKey]);
+  }, [completionSeenKeys, conversationTargets, observability, projection, roomAlignment, selectedKey]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -260,6 +282,7 @@ export function PixelOfficeCanvas({
         data-renderer={failure ? "unavailable" : "pixi"}
         hidden={failure}
       />
+      {children}
     </div>
   );
 }

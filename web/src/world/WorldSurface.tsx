@@ -1,17 +1,19 @@
 import {
-  AlertTriangle,
-  ArrowDownToLine,
   ChevronLeft,
   PanelLeft,
+  Pencil,
+  Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   OfficeConversationAnchors,
   OfficeConversationAnchorTarget,
+  OfficeCanvasAnchor,
   OfficeCanvasHover,
 } from "./PixelOfficeCanvas";
 import {
@@ -26,6 +28,17 @@ import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
 import { officeCalloutForKey } from "./officeSelection";
 import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
+import {
+  agentBarWidthForOffice,
+  deskAnchor,
+  OFFICE_GEOMETRY,
+} from "./officeGeometry";
+import type { OfficeLayout, OfficeRoomAlignment } from "./officeGeometry";
+import {
+  MAX_SAVED_WORLD_WINDOWS,
+  readWorldViewPrefs,
+  writeWorldViewPrefs,
+} from "./worldViewPrefs";
 import {
   officeAgentHandoffRequest,
   officeRoomHandoffRequest,
@@ -47,8 +60,15 @@ export type WorldSurfaceContext = {
   onCloseConversation: (id: string) => void;
   onFocusConversation: (id: string) => void;
   agentActivityTransitions: ReadonlyMap<string, number>;
+  roomAlignment: OfficeRoomAlignment;
   canCreateSeat: (roomKey: string) => boolean;
   onNewSeat: (roomKey?: string) => void;
+  canCreateRoom: (roomKey?: string) => boolean;
+  onCreateRoom: (roomKey?: string) => void;
+  canRenameRoom: (roomKey: string) => boolean;
+  onRenameRoom: (roomKey: string) => void;
+  canCloseRoom: (roomKey: string) => boolean;
+  onCloseRoom: (roomKey: string) => void;
 };
 
 export type WorldConversationBubblePanel = {
@@ -129,8 +149,15 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onCloseConversation: () => {},
   onFocusConversation: () => {},
   agentActivityTransitions: new Map(),
+  roomAlignment: "left",
   canCreateSeat: () => false,
   onNewSeat: () => {},
+  canCreateRoom: () => false,
+  onCreateRoom: () => {},
+  canRenameRoom: () => false,
+  onRenameRoom: () => {},
+  canCloseRoom: () => false,
+  onCloseRoom: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -177,7 +204,12 @@ function WorldStage({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const conversationRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [initialSavedView] = useState(readWorldViewPrefs);
+  const savedViewRef = useRef(initialSavedView);
+  const scrollRestoreRef = useRef(false);
+  const scrollSaveTimerRef = useRef<number | null>(null);
   const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
+  const [officeLayout, setOfficeLayout] = useState<OfficeLayout | null>(null);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
   const [conversationGeometry, setConversationGeometry] = useState<Record<string, ConversationGeometry>>({});
@@ -185,8 +217,11 @@ function WorldStage({
     id: string;
     mode: "moving" | "resizing";
   } | null>(null);
-  const [conversationOrder, setConversationOrder] = useState<string[]>([]);
+  const [conversationOrder, setConversationOrder] = useState<string[]>(() =>
+    savedViewRef.current.order,
+  );
   const [canvasHover, setCanvasHover] = useState<(OfficeCanvasHover & { left: number; top: number }) | null>(null);
+  const [selectedCanvasAnchor, setSelectedCanvasAnchor] = useState<(OfficeCanvasAnchor & { left: number; top: number }) | null>(null);
   const conversationGeometryRef = useRef<Record<string, ConversationGeometry>>({});
   const conversationGeometryFrameRef = useRef<number | null>(null);
   const conversationInteractionRef = useRef<{
@@ -197,13 +232,38 @@ function WorldStage({
     startY: number;
     geometry: ConversationGeometry;
   } | null>(null);
+
+  const persistWorldView = useCallback(() => {
+    const geometry = {
+      ...savedViewRef.current.geometry,
+      ...conversationGeometryRef.current,
+    };
+    savedViewRef.current = {
+      geometry,
+      order: conversationOrder.filter(Boolean).slice(0, MAX_SAVED_WORLD_WINDOWS),
+      scrollTop: Math.max(0, scrollRef.current?.scrollTop ?? savedViewRef.current.scrollTop),
+    };
+    writeWorldViewPrefs(savedViewRef.current);
+  }, [conversationOrder]);
+
+  const scheduleWorldViewPersist = useCallback(() => {
+    if (scrollSaveTimerRef.current !== null) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+    }
+    scrollSaveTimerRef.current = window.setTimeout(() => {
+      scrollSaveTimerRef.current = null;
+      persistWorldView();
+    }, 120);
+  }, [persistWorldView]);
   const panelIds = context.conversationBubbles.map(({ id }) => id);
   const panelIdsKey = panelIds.join("|");
   const selectedRoomKey = projection.rooms.find(({ key }) => key === context.selectedKey)?.key ??
     projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
     projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
     null;
-
+  const agentBarWidth = officeLayout
+    ? agentBarWidthForOffice(officeLayout.officeWidth, projection.receptions.length)
+    : OFFICE_GEOMETRY.agentBarPreferredWidth;
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
       setCanvasHover(null);
@@ -221,10 +281,31 @@ function WorldStage({
     });
   };
 
+  const onSelectedCanvasAnchorChange = (anchor: OfficeCanvasAnchor | null) => {
+    if (!anchor) {
+      setSelectedCanvasAnchor(null);
+      return;
+    }
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+    const shellRect = shell.getBoundingClientRect();
+    setSelectedCanvasAnchor({
+      ...anchor,
+      left: anchor.x - shellRect.left,
+      top: anchor.y - shellRect.top,
+    });
+  };
+
   useEffect(() => () => {
     if (conversationGeometryFrameRef.current !== null) {
       window.cancelAnimationFrame(conversationGeometryFrameRef.current);
       conversationGeometryFrameRef.current = null;
+    }
+    if (scrollSaveTimerRef.current !== null) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = null;
     }
   }, []);
 
@@ -362,6 +443,38 @@ function WorldStage({
     };
   }, [context.compact, panelIdsKey]);
 
+  useEffect(() => {
+    if (context.compact || scrollRestoreRef.current) {
+      return;
+    }
+    const scroll = scrollRef.current;
+    if (!scroll) {
+      return;
+    }
+    const restore = () => {
+      scroll.scrollTop = savedViewRef.current.scrollTop;
+      scrollRestoreRef.current = true;
+    };
+    const frame = window.requestAnimationFrame(() => {
+      restore();
+      window.requestAnimationFrame(restore);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [context.compact, projection.generatedAt]);
+
+  useEffect(() => {
+    if (context.compact) {
+      return;
+    }
+    const scroll = scrollRef.current;
+    if (!scroll) {
+      return;
+    }
+    const onScroll = () => scheduleWorldViewPersist();
+    scroll.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroll.removeEventListener("scroll", onScroll);
+  }, [context.compact, scheduleWorldViewPersist]);
+
   useLayoutEffect(() => {
     const nextRects: Record<string, DOMRect> = {};
     for (const panel of context.conversationBubbles) {
@@ -380,7 +493,10 @@ function WorldStage({
       setConversationGeometry({});
     } else {
       const nextGeometry = Object.fromEntries(
-        Object.entries(conversationGeometryRef.current).filter(([id]) => ids.has(id)),
+        panelIds.flatMap((id) => {
+          const geometry = conversationGeometryRef.current[id] ?? savedViewRef.current.geometry[id];
+          return geometry ? [[id, geometry] as const] : [];
+        }),
       );
       conversationGeometryRef.current = nextGeometry;
       setConversationGeometry(nextGeometry);
@@ -392,14 +508,20 @@ function WorldStage({
       Object.entries(current).filter(([id]) => ids.has(id)),
     ));
     setConversationOrder((current) => [
-      ...current.filter((id) => ids.has(id)),
-      ...panelIds.filter((id) => !current.includes(id)),
+      ...(current.length > 0 ? current : savedViewRef.current.order).filter((id) => ids.has(id)),
+      ...panelIds.filter((id) => !(current.length > 0 ? current : savedViewRef.current.order).includes(id)),
     ]);
     if (panelIds.length === 0) {
       conversationInteractionRef.current = null;
       setConversationInteraction(null);
     }
   }, [context.compact, panelIdsKey]);
+
+  useEffect(() => {
+    if (!context.compact) {
+      persistWorldView();
+    }
+  }, [context.compact, conversationGeometry, conversationOrder, persistWorldView]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -626,32 +748,6 @@ function WorldStage({
     );
   })();
 
-  const onlineHosts = projection.hosts.filter(
-    ({ connectionState }) => connectionState === "compatible" || connectionState === "degraded",
-  ).length;
-  const hostHealthStatus = projection.hosts.length === 0
-    ? "unavailable"
-    : onlineHosts === projection.hosts.length
-      ? "available"
-      : onlineHosts > 0
-        ? "degraded"
-        : "unavailable";
-  const hostHealthText = projection.hosts.length === 0
-    ? "No Herdr hosts"
-    : `${onlineHosts}/${projection.hosts.length} connected${projection.coverage.staleHosts ? ` · ${projection.coverage.staleHosts} stale` : ""}`;
-  const economyHealthStatus = context.observability.health === "available"
-    ? "available"
-    : context.observability.health === "degraded"
-      ? "degraded"
-      : "unavailable";
-  const economyHealthText = context.observability.health === "available"
-    ? `${context.observability.providerId ?? "Provider"} connected`
-    : context.observability.configuredSourceCount === 0
-      ? "Not configured"
-      : context.observability.failedSourceCount > 0
-        ? "Provider unavailable"
-        : "No data available";
-
   return (
     <div ref={shellRef} className="world-stage-shell">
       <header className="stage-bar world-stage-bar">
@@ -671,52 +767,13 @@ function WorldStage({
         <button
           className="icon-btn"
           type="button"
-          aria-label="Scroll to Agent Bar"
-          title="Agent Bar"
-          onClick={() => scrollRef.current?.scrollTo({
-            top: scrollRef.current.scrollHeight,
-            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-              ? "auto"
-              : "smooth",
-          })}
-        >
-          <ArrowDownToLine size={17} />
-        </button>
-        <button
-          className="icon-btn"
-          type="button"
           aria-label="Reset office view"
           title="Reset view"
           onClick={() => scrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })}
         >
           <RotateCcw size={16} />
         </button>
-        <button
-          className="world-new-seat btn"
-          type="button"
-          title={selectedRoomKey ? "Start a new Herdr-backed seat in the selected room" : "Start a new Herdr-backed seat"}
-          onClick={() => context.onNewSeat(selectedRoomKey ?? undefined)}
-        >
-          <span>New seat</span>
-        </button>
       </header>
-      <div className="world-stage-notice" role="status">
-        <span>Live admitted state is shown on the CEO Office blackboard</span>
-        <span>Double-click a room or agent to open it in Spaces</span>
-        {projection.coverage.staleHosts ? (
-          <span className="world-notice-stale">
-            <AlertTriangle size={13} aria-hidden="true" />
-            {projection.coverage.staleHosts} stale host · animation and handoff suppressed
-          </span>
-        ) : null}
-        {context.handoffStatus ? (
-          <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
-        ) : null}
-        <span className="world-provider-health" aria-label="Office provider health">
-          <span data-status={hostHealthStatus}><strong>Herdr</strong> {hostHealthText}</span>
-          <span data-status={economyHealthStatus}><strong>Economy</strong> {economyHealthText}</span>
-        </span>
-      </div>
       <div
         ref={scrollRef}
         className="world-stage-scroll"
@@ -739,11 +796,39 @@ function WorldStage({
           onActivateRoom={onActivateRoom}
           canCreateSeat={context.canCreateSeat}
           onNewSeat={context.onNewSeat}
+          onLayoutChange={setOfficeLayout}
+          roomAlignment={context.roomAlignment}
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
-        />
+          onSelectedAnchorChange={onSelectedCanvasAnchorChange}
+        >
+          <WorldAgentBar
+            className="world-canvas-agent-bar"
+            projection={projection}
+            selectedKey={context.selectedKey}
+            barWidth={agentBarWidth}
+            onSelect={context.onSelect}
+            onActivateAgent={onActivateAgent}
+          />
+          {officeLayout ? (
+            <WorldRoomActions
+              layout={officeLayout}
+              projection={projection}
+              selectedRoomKey={selectedRoomKey}
+              context={context}
+            />
+          ) : null}
+        </PixelOfficeCanvas>
       </div>
-      {canvasHover ? (
+      {context.selectedKey && selectedCanvasAnchor ? (
+        <WorldCanvasCallout
+          callout={officeCalloutForKey(projection, context.selectedKey)}
+          left={selectedCanvasAnchor.left}
+          top={selectedCanvasAnchor.top}
+          persistent
+        />
+      ) : null}
+      {canvasHover && !(canvasHover.key === context.selectedKey && officeCalloutForKey(projection, canvasHover.key)?.summary) ? (
         <WorldCanvasCallout
           callout={officeCalloutForKey(projection, canvasHover.key)}
           left={canvasHover.left}
@@ -805,24 +890,118 @@ function WorldCanvasCallout({
   callout,
   left,
   top,
+  persistent = false,
 }: {
   callout: OfficeCallout | null;
   left: number;
   top: number;
+  persistent?: boolean;
 }) {
   if (!callout) {
     return null;
   }
   return (
     <div
-      className="world-canvas-callout"
+      className={`world-canvas-callout${persistent ? " world-canvas-callout-persistent" : ""}`}
       data-kind={callout.kind}
       data-status={callout.status ?? undefined}
       style={{ left: `${left}px`, top: `${top}px` }}
-      role="tooltip"
+      role={persistent ? "status" : "tooltip"}
+      aria-live={persistent ? "polite" : undefined}
     >
       <strong>{callout.title}</strong>
+      {callout.summary ? <span className="world-canvas-callout-summary">{callout.summary}</span> : null}
       <span>{callout.detail}</span>
+    </div>
+  );
+}
+
+function WorldRoomActions({
+  layout,
+  projection,
+  selectedRoomKey,
+  context,
+}: {
+  layout: OfficeLayout;
+  projection: HerdrOfficeProjection;
+  selectedRoomKey: string | null;
+  context: WorldSurfaceContext;
+}) {
+  const roomBottom = layout.rooms.reduce(
+    (bottom, room) => Math.max(bottom, room.y + room.height),
+    layout.roomStartY,
+  );
+  return (
+    <div className="world-room-actions-overlay" aria-label="Office room actions">
+      {projection.rooms.map((room, index) => {
+        const rect = layout.rooms[index];
+        if (!rect) {
+          return null;
+        }
+        return (
+          <div
+            key={room.key}
+            className="world-room-actions"
+            style={{ left: `${rect.x + rect.width - 62}px`, top: `${rect.y - 5}px` }}
+          >
+            <button
+              className="world-room-overlay-action"
+              type="button"
+              aria-label={`Rename room ${room.displayLabel}`}
+              title={`Rename ${room.displayLabel}`}
+              disabled={!context.canRenameRoom(room.key)}
+              onClick={() => context.onRenameRoom(room.key)}
+            >
+              <Pencil size={12} aria-hidden="true" />
+            </button>
+            <button
+              className="world-room-overlay-action world-room-overlay-action-danger"
+              type="button"
+              aria-label={`Close room ${room.displayLabel}`}
+              title={`Close ${room.displayLabel}`}
+              disabled={!context.canCloseRoom(room.key)}
+              onClick={() => context.onCloseRoom(room.key)}
+            >
+              <Trash2 size={12} aria-hidden="true" />
+            </button>
+          </div>
+        );
+      })}
+      {projection.rooms.map((room, index) => {
+        const rect = layout.rooms[index];
+        if (!rect || !context.canCreateSeat(room.key)) {
+          return null;
+        }
+        const full = room.desks.length >= OFFICE_GEOMETRY.desksPerRoom;
+        const anchor = full
+          ? { x: rect.x + rect.width / 2, deskY: rect.y + rect.height - 40 }
+          : deskAnchor(rect, room.desks.length);
+        return (
+          <button
+            key={`${room.key}:new-seat`}
+            className={`world-new-seat-canvas-action${full ? " world-new-seat-canvas-action-full" : ""}`}
+            type="button"
+            aria-label={full ? `${room.displayLabel} room full` : `New seat in ${room.displayLabel}`}
+            title={full ? `${room.displayLabel} is full` : `Start a new seat in ${room.displayLabel}`}
+            disabled={full}
+            style={{ left: `${anchor.x - 25}px`, top: `${anchor.deskY}px` }}
+            onClick={() => context.onNewSeat(room.key)}
+          />
+        );
+      })}
+      {context.canCreateRoom(selectedRoomKey ?? undefined) ? (
+        <button
+          className="world-new-room-canvas-action"
+          type="button"
+          aria-label="New room"
+          title="Create a new Herdr workspace"
+          style={{ left: `${layout.officeWidth / 2 - 28}px`, top: `${roomBottom + 8}px` }}
+          onClick={() => context.onCreateRoom(selectedRoomKey ?? undefined)}
+        >
+          <Plus size={24} aria-hidden="true" />
+          <span>NEW ROOM</span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -837,8 +1016,91 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
+    (record.roomAlignment === "left" ||
+      record.roomAlignment === "center" ||
+      record.roomAlignment === "right") &&
     typeof record.canCreateSeat === "function" &&
     typeof record.onNewSeat === "function" &&
+    typeof record.canCreateRoom === "function" &&
+    typeof record.onCreateRoom === "function" &&
+    typeof record.canRenameRoom === "function" &&
+    typeof record.onRenameRoom === "function" &&
+    typeof record.canCloseRoom === "function" &&
+    typeof record.onCloseRoom === "function" &&
     Boolean(record.projection)
+  );
+}
+
+function WorldAgentBar({
+  className,
+  projection,
+  selectedKey,
+  barWidth,
+  onSelect,
+  onActivateAgent,
+}: {
+  className?: string;
+  projection: HerdrOfficeProjection;
+  selectedKey: string | null;
+  barWidth: number;
+  onSelect: (key: string) => void;
+  onActivateAgent: (key: string) => void;
+}) {
+  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
+  const blockedCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "blocked").length;
+  const overflowCount = projection.coverage.omittedBarAgents;
+  const columns = Math.max(3, Math.floor(Math.max(0, barWidth - 106) / 56));
+  return (
+    <section
+      className={`world-office-overview${className ? ` ${className}` : ""}`}
+      aria-label="Agent Bar"
+      style={{ width: `${barWidth}px` }}
+    >
+      <div className="world-overview-heading">
+        <strong>Agent Bar</strong>
+        <span>{projection.barAgents.length} visible · {idleCount} idle · {blockedCount} needs input</span>
+      </div>
+      <ul
+        className="world-agent-bar"
+        aria-label="Agent Bar"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {projection.barAgents.length === 0 ? (
+          <li className="world-agent-bar-empty">No completed or waiting agents</li>
+        ) : (
+          projection.barAgents.map((agent) => {
+            const status = agent.stale ? "stale" : agent.semanticStatus;
+            const statusLabel = agent.stale
+              ? "STALE"
+              : agent.stateLabels[agent.semanticStatus] ?? agent.semanticStatus.toUpperCase();
+            return (
+              <li key={agent.key} className="world-agent-bar-item-shell">
+                <button
+                  className="world-agent-bar-item"
+                  type="button"
+                  aria-pressed={selectedKey === agent.key}
+                  data-status={status}
+                  title={agent.taskSummary ?? `${agent.displayLabel} · ${statusLabel}`}
+                  onClick={() => onSelect(agent.key)}
+                  onDoubleClick={() => onActivateAgent(agent.key)}
+                >
+                  <img
+                    className="world-agent-bar-avatar"
+                    src={`/world/characters/${agent.characterIndex + 1}-D-1.png`}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span className="world-agent-bar-name">{agent.displayLabel}</span>
+                  <span className="world-agent-bar-state">{statusLabel}</span>
+                </button>
+              </li>
+            );
+          })
+        )}
+        {overflowCount > 0 ? (
+          <li className="world-agent-bar-overflow">+{overflowCount} more in roster</li>
+        ) : null}
+      </ul>
+    </section>
   );
 }

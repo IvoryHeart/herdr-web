@@ -51,6 +51,7 @@ export function parseActivityEventData(data: unknown): ActivityParseResult {
     !isNullableString(parsed.agent) ||
     !isNullableString(parsed.title) ||
     !isNullableString(parsed.display_agent) ||
+    !isOptionalNullableString(parsed.task_summary) ||
     !isStringRecord(parsed.state_labels)
   ) {
     return { status: "invalid_known" };
@@ -65,6 +66,7 @@ export function parseActivityEventData(data: unknown): ActivityParseResult {
       agent: parsed.agent,
       title: parsed.title,
       display_agent: parsed.display_agent,
+      ...(parsed.task_summary === undefined ? {} : { task_summary: parsed.task_summary }),
       state_labels: parsed.state_labels,
     },
   };
@@ -117,6 +119,9 @@ function applyPaneAgentStatusChanged(
           agent: nullableToOptional(message.agent),
           title: nullableToOptional(message.title),
           display_agent: nullableToOptional(message.display_agent),
+          task_summary: message.task_summary === undefined
+            ? currentPane.task_summary
+            : nullableToOptional(message.task_summary),
           state_labels: message.state_labels,
         }
       : pane,
@@ -151,7 +156,7 @@ function applyPaneAgentStatusChanged(
   };
 }
 
-function nullableToOptional(value: string | null) {
+function nullableToOptional(value: string | null | undefined) {
   return value ?? undefined;
 }
 
@@ -161,6 +166,10 @@ function isAgentStatus(value: unknown): value is AgentStatus {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function isOptionalNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || isNullableString(value);
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

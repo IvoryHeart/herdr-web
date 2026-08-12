@@ -507,7 +507,6 @@ export function TerminalView({
     let disposeInput: (() => void) | null = null;
     let disposeScroll: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let resizeTimer: number | null = null;
     let resizeFrame: number | null = null;
     let lastMeasuredHostSize = { width: host.clientWidth, height: host.clientHeight };
     const generation = rendererGenerationRef.current + 1;
@@ -598,16 +597,13 @@ export function TerminalView({
             requestReconnectRef.current("resize");
           }
         };
+        // Ghostty's FitAddon already guards its own resize work. An additional
+        // trailing debounce makes the outer Office bubble visibly outrun the
+        // inner canvas during a drag, so keep refits frame-aligned instead.
         const scheduleResize = () => {
-          if (resizeTimer !== null) {
-            window.clearTimeout(resizeTimer);
+          if (resizeFrame === null) {
+            resizeFrame = window.requestAnimationFrame(flushResize);
           }
-          resizeTimer = window.setTimeout(() => {
-            resizeTimer = null;
-            if (resizeFrame === null) {
-              resizeFrame = window.requestAnimationFrame(flushResize);
-            }
-          }, 50);
         };
         resizeObserver = new ResizeObserver(scheduleResize);
         resizeObserver.observe(host);
@@ -639,10 +635,6 @@ export function TerminalView({
       disposeInput?.();
       disposeScroll?.();
       resizeObserver?.disconnect();
-      if (resizeTimer !== null) {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = null;
-      }
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = null;

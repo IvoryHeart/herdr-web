@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasStoredWorldSettings,
   normalizeWorldPrometheusUrl,
+  normalizeWorldRoomAlignment,
   readWorldSettings,
+  readWorldRoomAlignment,
+  writeWorldRoomAlignment,
   writeWorldSettings,
 } from "./worldSettings";
 
@@ -46,5 +49,21 @@ describe("Office settings", () => {
     expect(readWorldSettings("bridge-a")).toEqual({ prometheusUrl: "http://127.0.0.1:9101/" });
     expect(readWorldSettings("bridge-b")).toEqual({ prometheusUrl: null });
     expect(hasStoredWorldSettings("bridge-b")).toBe(true);
+  });
+
+  it("persists a validated Office room alignment preference", () => {
+    let value: string | null = null;
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => value),
+      setItem: vi.fn((_key: string, next: string) => {
+        value = next;
+      }),
+    });
+
+    expect(readWorldRoomAlignment()).toBe("left");
+    expect(normalizeWorldRoomAlignment("center")).toBe("center");
+    expect(normalizeWorldRoomAlignment("unexpected")).toBe("left");
+    writeWorldRoomAlignment("right");
+    expect(readWorldRoomAlignment()).toBe("right");
   });
 });

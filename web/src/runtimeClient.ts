@@ -298,6 +298,7 @@ function parsePane(value: unknown): PaneInfo {
     ...optionalStringField("terminal_title", record.terminal_title),
     ...optionalStringField("terminal_title_stripped", record.terminal_title_stripped),
     ...optionalStringField("display_agent", record.display_agent),
+    ...optionalStringField("task_summary", record.task_summary),
     agent_status: requiredAgentStatus(record.agent_status),
     ...(stateLabels === undefined ? {} : { state_labels: stateLabels }),
     revision: requiredNonNegativeInteger(record.revision),
