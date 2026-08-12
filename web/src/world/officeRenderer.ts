@@ -1342,8 +1342,12 @@ function drawRoom(
         onActivateAgent,
       );
     });
-  if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom && canCreateSeat(room.key)) {
-    drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
+  if (canCreateSeat(room.key)) {
+    if (room.desks.length < OFFICE_GEOMETRY.desksPerRoom) {
+      drawNewSeatAction(parent, room, rect, room.desks.length, theme.accent, onNewSeat);
+    } else {
+      drawFullRoomAction(parent, rect, theme.accent);
+    }
   }
 
   const overflow: string[] = [];
@@ -1406,6 +1410,27 @@ function drawNewSeatAction(
   hint.position.set(anchor.x, anchor.nameY + 7);
   action.addChild(hint);
   parent.addChild(action);
+}
+
+function drawFullRoomAction(
+  parent: Container,
+  rect: OfficeRoomRect,
+  accent: number,
+) {
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height - 40;
+  const plate = new Graphics();
+  plate.roundRect(x - 25, y, 50, 27, 5)
+    .fill({ color: accent, alpha: 0.04 })
+    .stroke({ width: 1, color: accent, alpha: 0.38 });
+  parent.addChild(plate);
+  const plus = label("+", { size: 19, color: 0x9c947f, anchor: 0.5 });
+  plus.alpha = 0.62;
+  plus.position.set(x, y + 13);
+  parent.addChild(plus);
+  const hint = label("ROOM FULL", { size: 7, color: 0x8e958a, anchor: 0.5 });
+  hint.position.set(x, y + 35);
+  parent.addChild(hint);
 }
 
 function drawTabDesk(
@@ -1629,9 +1654,9 @@ function drawAgentBar(
   const barWidth = Math.max(0, x + width - 10 - barX);
   const counterY = y + height - 40;
   const capacity = firstSlot.capacity;
-  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
-  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
-  projection.barAgents.slice(0, capacity).forEach((agent, index) => {
+  const visibleBarAgents = projection.barAgents.slice(0, capacity);
+  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, visibleBarAgents.length);
+  visibleBarAgents.forEach((agent, index) => {
     const slot = agentBarSlot(blocks, index);
     const px = slot.x;
     const rowY = slot.rowY;
@@ -1739,6 +1764,18 @@ function drawBarCounter(parent: Container, x: number, y: number, width: number) 
     counter.rect(tap - 1, y + 9, 2, 7).fill(0x5b3c2b);
   }
   parent.addChild(counter);
+  const drinks = new Graphics();
+  [0.22, 0.5, 0.78].forEach((position, index) => {
+    const drinkX = x + width * position;
+    const drinkY = y - 9;
+    const liquid = [0xd36e57, 0x7ab9c4, 0xd6a24e][index];
+    drinks.roundRect(drinkX - 5, drinkY, 10, 8, 2)
+      .fill({ color: liquid, alpha: 0.9 })
+      .stroke({ width: 1, color: 0xf1d19a, alpha: 0.9 });
+    drinks.rect(drinkX - 1, drinkY + 8, 2, 7).fill(0xf1d19a);
+    drinks.rect(drinkX - 6, drinkY + 15, 12, 2).fill(0xf1d19a);
+  });
+  parent.addChild(drinks);
 }
 
 function drawCharacter(

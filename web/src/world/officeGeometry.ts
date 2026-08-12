@@ -181,42 +181,39 @@ export function resolveOfficeLayout(
     rowYs.push(nextY);
     nextY += height + OFFICE_GEOMETRY.roomGap;
   }
-  const columnPreferredWidths = Array.from({ length: columns }, (_, column) =>
-    Math.max(
-      OFFICE_GEOMETRY.minRoomWidth,
-      ...roomMetrics
-        .filter((_, index) => index % columns === column)
-        .map(({ preferredWidth }) => preferredWidth),
-    ),
-  );
-  const roomWidthBudget = Math.max(
-    0,
-    availableRoomWidth - OFFICE_GEOMETRY.roomGap * Math.max(0, columns - 1),
-  );
-  const preferredWidthTotal = columnPreferredWidths.reduce((sum, width) => sum + width, 0);
-  const scale = roomWidthBudget / Math.max(1, preferredWidthTotal);
-  const columnWidths = columnPreferredWidths.map((preferredWidth) =>
-    Math.floor(preferredWidth * scale),
-  );
-  let remainingWidth = roomWidthBudget - columnWidths.reduce((sum, width) => sum + width, 0);
-  for (let column = 0; column < columnWidths.length && remainingWidth > 0; column += 1) {
-    columnWidths[column] += 1;
-    remainingWidth -= 1;
-  }
+  const rowLayouts = Array.from({ length: rows }, (_, row) => {
+    const metrics = roomMetrics.slice(row * columns, row * columns + columns);
+    const widths = metrics.map(({ preferredWidth }) => preferredWidth);
+    const naturalWidth = widths.reduce((sum, width) => sum + width, 0);
+    const naturalGap = OFFICE_GEOMETRY.roomGap * Math.max(0, widths.length - 1);
+    const isFullRow = widths.length === columns;
+    const distributableSpace = isFullRow
+      ? Math.max(0, availableRoomWidth - naturalWidth - naturalGap)
+      : 0;
+    const gap = widths.length > 1
+      ? OFFICE_GEOMETRY.roomGap + distributableSpace / (widths.length - 1)
+      : 0;
+    return {
+      widths,
+      gap,
+      width: naturalWidth + gap * Math.max(0, widths.length - 1),
+    };
+  });
   const rowStartX = (officeWidth - availableRoomWidth) / 2;
   const rooms = presentations.map((_, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
-    const x = rowStartX + columnWidths
+    const rowLayout = rowLayouts[row];
+    const x = rowStartX + rowLayout.widths
       .slice(0, column)
-      .reduce((sum, width) => sum + width + OFFICE_GEOMETRY.roomGap, 0);
+      .reduce((sum, width) => sum + width + rowLayout.gap, 0);
     return {
       index,
       column,
       row,
       x,
       y: rowYs[row],
-      width: columnWidths[column],
+      width: rowLayout.widths[column],
       height: roomMetrics[index].height,
       deskColumns: roomMetrics[index].deskColumns,
       standingColumns: roomMetrics[index].standingColumns,
@@ -279,8 +276,8 @@ export function agentBarSlot(blocks: OfficeCeoBlockLayout, index: number) {
   const rowHeight = agentAreaHeight / 2;
   const safeIndex = Math.max(0, Math.floor(index));
   const column = safeIndex % columns;
-  const row = Math.floor(safeIndex / columns);
-  const rowY = agentAreaY + row * rowHeight;
+  const row = Math.min(1, Math.floor(safeIndex / columns));
+  const rowY = agentAreaY + (1 - row) * rowHeight;
   return {
     x: barX + (barWidth / columns) * (column + 0.5),
     rowY,

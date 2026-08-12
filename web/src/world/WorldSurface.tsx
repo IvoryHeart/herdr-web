@@ -966,21 +966,21 @@ function WorldRoomActions({
       })}
       {projection.rooms.map((room, index) => {
         const rect = layout.rooms[index];
-        if (
-          !rect ||
-          room.desks.length >= OFFICE_GEOMETRY.desksPerRoom ||
-          !context.canCreateSeat(room.key)
-        ) {
+        if (!rect || !context.canCreateSeat(room.key)) {
           return null;
         }
-        const anchor = deskAnchor(rect, room.desks.length);
+        const full = room.desks.length >= OFFICE_GEOMETRY.desksPerRoom;
+        const anchor = full
+          ? { x: rect.x + rect.width / 2, deskY: rect.y + rect.height - 40 }
+          : deskAnchor(rect, room.desks.length);
         return (
           <button
             key={`${room.key}:new-seat`}
-            className="world-new-seat-canvas-action"
+            className={`world-new-seat-canvas-action${full ? " world-new-seat-canvas-action-full" : ""}`}
             type="button"
-            aria-label={`New seat in ${room.displayLabel}`}
-            title={`Start a new seat in ${room.displayLabel}`}
+            aria-label={full ? `${room.displayLabel} room full` : `New seat in ${room.displayLabel}`}
+            title={full ? `${room.displayLabel} is full` : `Start a new seat in ${room.displayLabel}`}
+            disabled={full}
             style={{ left: `${anchor.x - 25}px`, top: `${anchor.deskY}px` }}
             onClick={() => context.onNewSeat(room.key)}
           />

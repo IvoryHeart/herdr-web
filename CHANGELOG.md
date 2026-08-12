@@ -61,6 +61,9 @@
 - Distributed CEO-room boards and reception furniture across the available CEO
   area, expanded the desktop Agent Bar to 560px when space permits, and kept
   furniture spacing stable for rooms in a partial final row.
+- Matched the Agent Bar Party count to the rendered bar occupancy, packed the
+  first agent row against the counter, added drinks to the counter, and kept a
+  disabled `+ / ROOM FULL` affordance visible after the eighth desk.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

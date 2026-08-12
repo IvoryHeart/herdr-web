@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deskAnchor,
+  agentBarSlot,
   minimumOfficeWidthForReceptions,
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
@@ -71,12 +72,37 @@ describe("Pixel Office geometry", () => {
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });
 
+  it("does not inherit a dense room width in the next row", () => {
+    const layout = resolveOfficeLayout(1400, [
+      { deskCount: 8, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+      { deskCount: 2, standingCount: 0 },
+    ]);
+    const denseRoom = layout.rooms[0];
+    const nextRowRoom = layout.rooms[layout.columns];
+    expect(nextRowRoom.width).toBeLessThan(denseRoom.width);
+    expect(deskAnchor(nextRowRoom, 0).stationSpan)
+      .toBe(deskAnchor(denseRoom, 0).stationSpan);
+  });
+
   it("spreads the CEO blocks and doubles the wide-screen Agent Bar", () => {
     const blocks = resolveCeoBlockLayout(1700, 1);
     expect(blocks.agentBarWidth).toBe(OFFICE_GEOMETRY.agentBarPreferredWidth);
     expect(blocks.blockGap).toBeGreaterThan(OFFICE_GEOMETRY.ceoCompactBlockGap);
     expect(blocks.agentBarX + blocks.agentBarWidth)
       .toBe(1700 - OFFICE_GEOMETRY.ceoEdgePadding);
+  });
+
+  it("packs the first Agent Bar row beside the counter", () => {
+    const blocks = resolveCeoBlockLayout(1700, 1);
+    const counterRow = agentBarSlot(blocks, 0);
+    const backRow = agentBarSlot(blocks, counterRow.columns);
+    expect(counterRow.rowY).toBeGreaterThan(backRow.rowY);
+    expect(counterRow.characterFeetY).toBeGreaterThan(backRow.characterFeetY);
   });
 
   it("keeps CEO and all host reception desks on one bounded horizontal row", () => {

@@ -1035,6 +1035,11 @@ button {
   outline-offset: 2px;
 }
 
+.world-new-seat-canvas-action-full {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
 .world-new-room-canvas-action {
   position: absolute;
   display: grid;
