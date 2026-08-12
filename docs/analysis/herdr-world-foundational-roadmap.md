@@ -31,6 +31,26 @@ The current daily-use Office experience remains stable throughout this work.
 Foundational changes must preserve core Herdr Web operation when World,
 Office, or optional providers are absent.
 
+## Progress on this roadmap
+
+The first non-licensing tranche is now prepared on this branch:
+
+- P0-D active legacy-reference cleanup is complete for operational docs and
+  the World E2E network guard. The historical analysis remains the sole audit
+  record for the former workspace relationship.
+- Draft Spec 004 has been revised with package ownership, clean-checkout
+  independence, identity separation, core-only proof, contract drift gates,
+  and traceable assembly-manifest requirements.
+- Draft Spec 011 defines the typed surface host context, trusted assembly
+  registration, slot/route ownership, admission states, and core-only proof.
+- Draft Spec 010 remains intentionally unimplemented until the surface and
+  bridge extension boundaries are reviewed; no registry runtime behavior has
+  been added by this branch.
+
+The next action requiring product-code changes is approval of the revised
+packaging and surface drafts. Until then, implementation remains limited to
+mechanical documentation/test corrections and reviewable planning artifacts.
+
 ## Current baseline
 
 Already delivered and treated as compatibility constraints:

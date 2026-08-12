@@ -1,10 +1,12 @@
 # Pixel Office asset provenance
 
-The Herdr Web Pixel Office port uses repository-owner-provided reference material from the
-read-only workspace path
-`/home/ny/Forge/ai-observability/visualizations/public/office/`. Herdr Web has no build or runtime
-dependency on that checkout. The copied character sprites now live under
-`web/public/world/characters/`.
+The Herdr Web Pixel Office port uses repository-owner-provided reference
+material from a read-only reference workspace. Herdr Web has no build or
+runtime dependency on that workspace. The copied character sprites now live
+under `web/public/world/characters/`.
+
+The reference workspace is historical provenance only; contributors do not
+need to clone or start another repository to build, test, or run Herdr Web.
 
 The reference Office directory was untracked in the source checkout at port time, so there is no
 source commit to cite. The immutable Extension 001 approval commit authorizing this port is

@@ -32,9 +32,9 @@ resync message; consumers recover by requesting a fresh snapshot.
 
 ## Local Prometheus provider
 
-Enable the first provider by setting the bridge environment variable to the
-existing Prometheus HTTP API. The current local ai-observability stack exposes
-that API on port `9101`:
+Enable the first provider by setting the bridge environment variable to an
+operator-managed Prometheus-compatible HTTP API. For example, a local
+deployment might expose that API on port `9101`:
 
 ```bash
 HERDR_WORLD_OTEL_PROMETHEUS_URL=http://127.0.0.1:9101 \

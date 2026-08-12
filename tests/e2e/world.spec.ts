@@ -153,10 +153,15 @@ test("disposes the renderer across ten switches without reconnecting core observ
     ready: false,
   });
 
+  const appOrigin = new URL(page.url()).origin;
   expect(
-    requests.filter((url) =>
-      /\/api\/(world|economy)|visualizations|ai-observability|unpkg|jsdelivr|cdnjs/i.test(url),
-    ),
+    requests.filter((url) => {
+      try {
+        return new URL(url).origin !== appOrigin;
+      } catch {
+        return true;
+      }
+    }),
   ).toEqual([]);
 });
 

@@ -100,18 +100,14 @@ HERDR_SOCKET_PATH=/absolute/path/to/herdr.sock scripts/run-bridge.sh
 
 ## Optional Office telemetry
 
-The separate `ai-observability` repository contains the optional OTEL
-Collector, Prometheus, Loki, and Grafana stack. It is not required for Herdr
-Web sessions or the live Office state.
+The Office `Economy` board can read from any operator-managed Prometheus-
+compatible HTTP API. The telemetry service is optional and is not required for
+Herdr Web sessions, the live Office roster, or room interactions. Herdr Web
+does not assume ownership of the collector, storage, dashboards, or their
+deployment lifecycle.
 
-From a sibling checkout, start it with:
-
-```bash
-cd /home/ny/Forge/ai-palace/ai-observability
-docker compose up -d
-```
-
-Then restart the Herdr Web bridge with the Prometheus provider enabled:
+When a Prometheus-compatible service is available, restart the Herdr Web
+bridge with its API URL:
 
 ```bash
 cd /home/ny/Forge/ai-palace/herdr-web
@@ -122,8 +118,9 @@ HERDR_WORLD_OTEL_PROMETHEUS_URL=http://127.0.0.1:9101 npm run dev:local
 `dev:local` deliberately reuses a healthy existing bridge, so it cannot apply
 new bridge environment variables to a process that is already running.
 
-The stack's useful local endpoints are Prometheus `9101`, Loki `3111`, and
-Grafana `3002`. OTLP receivers use `4317` and `4318` for telemetry producers.
+The URL above is only an example. Use the endpoint exposed by the telemetry
+deployment in your environment; OTLP receiver, log-storage, and dashboard
+endpoints are outside the Herdr Web startup contract.
 
 To configure the Office provider without restarting the bridge, open Herdr Web
 Settings, choose `Office`, and save the Prometheus URL. An invalid URL is
