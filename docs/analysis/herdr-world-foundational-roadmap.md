@@ -90,15 +90,14 @@ images, fonts, generated artifacts, vendored Herdr compatibility code, and
 bundled dependencies. Add a deterministic check that validates hashes,
 required fields, and redistribution status.
 
-The Pixel Office sprites and adapted source remain `blocked` until either:
-
-1. the exact files/hashes receive explicit redistribution permission and
-   attribution terms; or
-2. they are replaced and the adapted implementation is independently
-   reimplemented with documented provenance.
-
-Until that decision, the release gate must reject artifacts containing the
-blocked Office package. Private local development may continue.
+The exact Pixel Office character assets are now traceable to Claw-Empire
+revision `66a24ea7df2435ef897c48c147deb7ec572c01c2`, whose repository carries
+an Apache-2.0 license and copyright notice for GreenSheep01201. The remaining
+work is to encode that evidence in the repository's provenance manifest,
+retain the Apache license in the release notice bundle, identify the adapted
+files, and add required modified-file notices. The release gate must still
+reject artifacts when attribution, modified-file notices, or packaging
+compliance is absent; the rights decision itself is no longer the blocker.
 
 ### P0-B: notices, licenses, and SBOM
 
@@ -126,7 +125,8 @@ so it describes the current World and observability delta.
 
 - Clean checkout builds and tests without an external legacy checkout.
 - No active documentation or test requires an absolute workstation path.
-- Blocked assets cannot enter a public package.
+- Assets without the required attribution, modified-file notices, or
+  packaging evidence cannot enter a public package.
 - Every distributed item has verified provenance and applicable notices.
 - Names, versions, routes, package identities, and storage migration are
   documented before implementation of public-release machinery.
@@ -150,8 +150,9 @@ Create and approve a new surface specification defining:
 - typed host context and the smallest read/command capabilities;
 - route, navigation, stage, sidebar, settings, and lifecycle ownership;
 - loading, error, unavailable, and degraded surface states;
-- host-scope and capability admission;
-- assembly-owned downstream surface registration; and
+- selected/all scope, per-host minimums, and layered capability admission;
+- assembly-owned downstream surface registration;
+- synthetic-surface validation independent of the provider registry; and
 - a core-only build/test proof with no Office imports or assets.
 
 Implement the seam around the existing registry incrementally. Do not move
@@ -181,7 +182,12 @@ Generate or mechanically compare declared versions, limits, and enum values.
 
 ## P2 — reconstruct upstream contribution units
 
-Only after P1 boundaries exist:
+Upstream discussion begins while the P1 drafts are in review, before the
+surface contract is frozen. The goal is to collect upstream constraints early;
+no upstream implementation branch is cut until the relevant draft is
+approved and the proposed slice has a concrete upstream target.
+
+During and after P1 boundary work:
 
 1. fetch and audit current `upstream/main` and Herdr compatibility revisions;
 2. create one branch from current upstream per independent concern;
@@ -193,7 +199,9 @@ Only after P1 boundaries exist:
 6. record accepted, declined, or superseded outcomes in the assembly manifest.
 
 The extension registry is discussed with upstream at this stage, not assumed
-to be an upstream contract merely because it is generic in shape.
+to be an upstream contract merely because it is generic in shape. A second
+projection or synthetic surface can validate Spec 011 independently; it does
+not wait for the P3 bridge-extension registry.
 
 ## P3 — generic registry and provider expansion
 
@@ -216,7 +224,8 @@ projections be considered.
 Define a separate release specification for versioning, signing, SBOMs,
 provenance attestations, compatibility support, upgrade/storage migration,
 rollback, offline notices, and security reporting. Produce public artifacts
-only after P0 gates pass and the Office rights decision is resolved.
+only after P0 gates pass and the Office attribution/packaging evidence is
+complete.
 
 ## Proposed reviewable work units
 
@@ -225,9 +234,9 @@ Each unit should be its own branch/PR and should not mix Office UX changes:
 1. **P0 documentation/spec gate:** revise spec 004, create the surface spec,
    and record identity/provenance decisions.
 2. **P0 provenance and release gate:** manifests, notices, SBOM generation,
-   blocked-asset enforcement, and legacy-reference cleanup.
+   attribution/modified-file enforcement, and legacy-reference cleanup.
 3. **P1 surface boundary:** typed surface host, assembly-owned registration,
-   and core-only proof.
+   synthetic-surface validation, and core-only proof.
 4. **P1 bridge boundary:** core/extension/provider split with compatibility
    tests.
 5. **P1 contract drift gate:** canonical schema and cross-language fixture
@@ -235,7 +244,8 @@ Each unit should be its own branch/PR and should not mix Office UX changes:
 6. **P2 upstream branches:** one upstream concern per branch, based on current
    upstream.
 7. **P3 registry:** revise and implement spec 010 after upstream discussion.
-8. **P4 release:** public distribution only after rights and release gates.
+8. **P4 release:** public distribution only after attribution and release
+   gates.
 
 ## Non-negotiable acceptance policy
 
