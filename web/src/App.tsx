@@ -174,6 +174,7 @@ import { WorldSettingsDialog } from "./world/WorldSettingsDialog";
 import {
   hasStoredWorldSettings,
   readWorldSettings,
+  readWorldRoomAlignment,
   updateWorldObservabilityConfiguration,
 } from "./world/worldSettings";
 import {
@@ -1223,6 +1224,7 @@ export function App() {
   const [worldObservability, setWorldObservability] = useState<OfficeObservability>(
     EMPTY_OFFICE_OBSERVABILITY,
   );
+  const [worldRoomAlignment, setWorldRoomAlignment] = useState(() => readWorldRoomAlignment());
   const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>(
     () => readWorldConversationTargets(),
   );
@@ -1301,6 +1303,7 @@ export function App() {
   }, []);
   const markWorldSettingsSaved = useCallback(() => {
     setWorldObservabilityRevision((revision) => revision + 1);
+    setWorldRoomAlignment(readWorldRoomAlignment());
   }, []);
   useEffect(() => {
     for (const runtime of bridge.enabledRuntimes) {
@@ -5144,6 +5147,7 @@ export function App() {
     onCloseConversation: closeWorldConversation,
     onFocusConversation: focusWorldConversation,
     agentActivityTransitions,
+    roomAlignment: worldRoomAlignment,
     canCreateSeat: canCreateWorldSeat,
     onNewSeat: openNewWorldSeat,
     canCreateRoom: canCreateWorldRoom,

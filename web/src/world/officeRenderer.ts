@@ -33,6 +33,7 @@ import type {
   OfficeCeoBlockLayout,
   OfficeLayout,
   OfficeReceptionRect,
+  OfficeRoomAlignment,
   OfficeRoomRect,
 } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
@@ -138,6 +139,7 @@ export type OfficeRendererController = {
     selectedKey: string | null,
     completionSeenKeys?: ReadonlySet<string>,
     observability?: OfficeObservability,
+    roomAlignment?: OfficeRoomAlignment,
   ) => void;
   getAnchors: (
     selectedKey: string | null,
@@ -175,6 +177,7 @@ export async function createOfficeRenderer(
   onNewSeat: (roomKey: string) => void,
   onHover: (hover: OfficeCanvasHover | null) => void,
   onLayoutChange: (layout: OfficeLayout | null) => void,
+  roomAlignment: OfficeRoomAlignment,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -196,6 +199,7 @@ export async function createOfficeRenderer(
   let currentSelectedKey = selectedKey;
   let currentCompletionSeenKeys = completionSeenKeys;
   let currentObservability = observability;
+  let currentRoomAlignment = roomAlignment;
   let currentLayout: OfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
@@ -426,6 +430,7 @@ export async function createOfficeRenderer(
         ),
         standingCount: room.roomAgents.filter(({ placement }) => placement === "standing").length,
       })),
+      currentRoomAlignment,
     );
     const viewportHeight = Math.min(
       layout.totalHeight,
@@ -538,7 +543,12 @@ export async function createOfficeRenderer(
       nextSelectedKey,
       nextCompletionSeenKeys = currentCompletionSeenKeys,
       nextObservability = currentObservability,
+      nextRoomAlignment = currentRoomAlignment,
     ) {
+      if (nextRoomAlignment !== currentRoomAlignment) {
+        currentRoomAlignment = nextRoomAlignment;
+        lastSceneSignature = null;
+      }
       currentProjection = nextProjection;
       currentSelectedKey = nextSelectedKey;
       currentCompletionSeenKeys = nextCompletionSeenKeys;

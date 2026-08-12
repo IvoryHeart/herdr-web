@@ -6,11 +6,14 @@ import {
   fetchWorldObservabilityConfiguration,
   hasStoredWorldSettings,
   normalizeWorldPrometheusUrl,
+  readWorldRoomAlignment,
   readWorldSettings,
   updateWorldObservabilityConfiguration,
+  writeWorldRoomAlignment,
   writeWorldSettings,
 } from "./worldSettings";
 import type { WorldObservabilityConfiguration } from "./worldSettings";
+import type { OfficeRoomAlignment } from "./officeGeometry";
 
 type Props = {
   onClose: () => void;
@@ -29,6 +32,7 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
     () => bridge.lastSelectedBridgeId ?? bridgeIds[0] ?? null,
   );
   const [prometheusUrl, setPrometheusUrl] = useState("");
+  const [roomAlignment, setRoomAlignment] = useState<OfficeRoomAlignment>(readWorldRoomAlignment);
   const [configuration, setConfiguration] = useState<WorldObservabilityConfiguration | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,19 +90,22 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
   }, [runtime]);
 
   const save = async () => {
-    if (!runtime) {
-      return;
-    }
     setBusy(true);
     setMessage(null);
     try {
-      const normalized = normalizeWorldPrometheusUrl(prometheusUrl);
-      const next = await updateWorldObservabilityConfiguration(runtime, normalized);
-      writeWorldSettings(runtime.id, { prometheusUrl: normalized });
-      setPrometheusUrl(next.endpoint ?? "");
-      setConfiguration(next);
+      let normalized: string | null = null;
+      if (runtime) {
+        normalized = normalizeWorldPrometheusUrl(prometheusUrl);
+        const next = await updateWorldObservabilityConfiguration(runtime, normalized);
+        writeWorldSettings(runtime.id, { prometheusUrl: normalized });
+        setPrometheusUrl(next.endpoint ?? "");
+        setConfiguration(next);
+      }
+      writeWorldRoomAlignment(roomAlignment);
       onSaved?.();
-      setMessage(normalized ? "Prometheus URL saved." : "Prometheus provider disabled.");
+      setMessage(runtime
+        ? normalized ? "Prometheus URL saved." : "Prometheus provider disabled."
+        : "Office layout saved.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save Office settings");
     } finally {
@@ -190,11 +197,29 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
                   : "Not configured; Economy will show no data"}
             </span>
           </div>
+          <div className="settings-label">Office layout</div>
+          <p className="settings-help">
+            Choose how room rows align inside the Office scene. This affects rooms only; the CEO
+            Office and Agent Bar keep their dedicated positions.
+          </p>
+          <label className="field-label">
+            <span>Room alignment</span>
+            <select
+              className="field"
+              value={roomAlignment}
+              disabled={busy}
+              onChange={(event) => setRoomAlignment(event.target.value as OfficeRoomAlignment)}
+            >
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
           {message ? <div className="modal-message">{message}</div> : null}
         </div>
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={!runtime || busy || loading}>
+          <button type="submit" className="btn btn-primary" disabled={busy || loading}>
             {busy ? "Saving…" : "Save"}
           </button>
         </div>

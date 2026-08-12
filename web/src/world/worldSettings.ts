@@ -1,8 +1,10 @@
 import type { BridgeId, BridgeRuntime } from "../bridge";
 import { apiErrorMessage } from "../bridgeApi";
 import { fetchWithTimeout } from "../fetchWithTimeout";
+import type { OfficeRoomAlignment } from "./officeGeometry";
 
 const WORLD_SETTINGS_STORAGE_KEY = "herdrWeb.worldSettings.v1";
+const WORLD_LAYOUT_SETTINGS_STORAGE_KEY = "herdrWeb.worldLayout.v1";
 
 export type WorldSettings = {
   prometheusUrl: string | null;
@@ -13,6 +15,34 @@ export type WorldObservabilityConfiguration = {
   configured: boolean;
   endpoint: string | null;
 };
+
+export function normalizeWorldRoomAlignment(value: unknown): OfficeRoomAlignment {
+  return value === "center" || value === "right" ? value : "left";
+}
+
+export function readWorldRoomAlignment(): OfficeRoomAlignment {
+  try {
+    const raw = globalThis.localStorage?.getItem(WORLD_LAYOUT_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return "left";
+    }
+    const parsed = JSON.parse(raw) as { roomAlignment?: unknown };
+    return normalizeWorldRoomAlignment(parsed.roomAlignment);
+  } catch {
+    return "left";
+  }
+}
+
+export function writeWorldRoomAlignment(roomAlignment: OfficeRoomAlignment) {
+  try {
+    globalThis.localStorage?.setItem(
+      WORLD_LAYOUT_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ roomAlignment: normalizeWorldRoomAlignment(roomAlignment) }),
+    );
+  } catch {
+    // Browser storage can be unavailable in private or locked-down contexts.
+  }
+}
 
 export function normalizeWorldPrometheusUrl(value: string) {
   const trimmed = value.trim();

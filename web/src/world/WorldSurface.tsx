@@ -33,7 +33,7 @@ import {
   deskAnchor,
   OFFICE_GEOMETRY,
 } from "./officeGeometry";
-import type { OfficeLayout } from "./officeGeometry";
+import type { OfficeLayout, OfficeRoomAlignment } from "./officeGeometry";
 import {
   MAX_SAVED_WORLD_WINDOWS,
   readWorldViewPrefs,
@@ -60,6 +60,7 @@ export type WorldSurfaceContext = {
   onCloseConversation: (id: string) => void;
   onFocusConversation: (id: string) => void;
   agentActivityTransitions: ReadonlyMap<string, number>;
+  roomAlignment: OfficeRoomAlignment;
   canCreateSeat: (roomKey: string) => boolean;
   onNewSeat: (roomKey?: string) => void;
   canCreateRoom: (roomKey?: string) => boolean;
@@ -148,6 +149,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onCloseConversation: () => {},
   onFocusConversation: () => {},
   agentActivityTransitions: new Map(),
+  roomAlignment: "left",
   canCreateSeat: () => false,
   onNewSeat: () => {},
   canCreateRoom: () => false,
@@ -795,6 +797,7 @@ function WorldStage({
           canCreateSeat={context.canCreateSeat}
           onNewSeat={context.onNewSeat}
           onLayoutChange={setOfficeLayout}
+          roomAlignment={context.roomAlignment}
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
           onSelectedAnchorChange={onSelectedCanvasAnchorChange}
@@ -1013,6 +1016,9 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
+    (record.roomAlignment === "left" ||
+      record.roomAlignment === "center" ||
+      record.roomAlignment === "right") &&
     typeof record.canCreateSeat === "function" &&
     typeof record.onNewSeat === "function" &&
     typeof record.canCreateRoom === "function" &&

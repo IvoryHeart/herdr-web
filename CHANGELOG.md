@@ -67,6 +67,9 @@
 - Changed room placement to sequential natural-width row packing: each row fits
   as many 2–8-seat room templates as it can, later rows are not constrained by
   a wide room above them, and all room gaps remain snug and consistent.
+- Added a persisted Office layout preference for left, center, or right room-row
+  alignment, with left alignment as the default; CEO Office and Agent Bar placement
+  remain dedicated and unaffected.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

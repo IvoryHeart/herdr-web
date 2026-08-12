@@ -35,7 +35,7 @@ describe("Pixel Office geometry", () => {
     const layout = resolveOfficeLayout(1200, Array.from({ length: 3 }, () => ({
       deskCount: 2,
       standingCount: 0,
-    })));
+    })), "center");
     expect(layout.columns).toBe(3);
     expect(layout.rows).toBe(1);
     expect(layout.rooms[0].x).toBe(208);
@@ -67,7 +67,7 @@ describe("Pixel Office geometry", () => {
     const firstRoom = layout.rooms[0];
     const finalRowRoom = layout.rooms[layout.columns];
     expect(finalRowRoom.width).toBe(firstRoom.width);
-    expect(finalRowRoom.x).not.toBe(firstRoom.x);
+    expect(finalRowRoom.x).toBe(firstRoom.x);
     expect(deskAnchor(finalRowRoom, 0).stationSpan)
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });
@@ -97,6 +97,16 @@ describe("Pixel Office geometry", () => {
     expect(layout.rooms.slice(0, layout.columns).some(({ deskColumns }) => deskColumns === 4))
       .toBe(true);
     expect(layout.rooms.filter(({ row }) => row === 1)).toHaveLength(6);
+  });
+
+  it("supports left, center, and right room-row alignment", () => {
+    const rooms = Array.from({ length: 2 }, () => ({ deskCount: 2, standingCount: 0 }));
+    const left = resolveOfficeLayout(1200, rooms, "left");
+    const center = resolveOfficeLayout(1200, rooms, "center");
+    const right = resolveOfficeLayout(1200, rooms, "right");
+    expect(left.rooms[0].x).toBe(12);
+    expect(center.rooms[0].x).toBeGreaterThan(left.rooms[0].x);
+    expect(right.rooms.at(-1)!.x + right.rooms.at(-1)!.width).toBe(1188);
   });
 
   it("spreads the CEO blocks and doubles the wide-screen Agent Bar", () => {

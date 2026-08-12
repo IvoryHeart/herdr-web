@@ -39,6 +39,9 @@ export type OfficeRoomPresentation = {
   standingCount: number;
 };
 
+export type OfficeRoomAlignment = "left" | "center" | "right";
+export const DEFAULT_OFFICE_ROOM_ALIGNMENT: OfficeRoomAlignment = "left";
+
 export type OfficeReceptionRect = {
   index: number;
   x: number;
@@ -94,6 +97,7 @@ export type OfficeLayout = {
 export function resolveOfficeLayout(
   requestedWidth: number,
   requestedRooms: number | readonly OfficeRoomPresentation[],
+  roomAlignment: OfficeRoomAlignment = DEFAULT_OFFICE_ROOM_ALIGNMENT,
 ): OfficeLayout {
   const officeWidth = Math.max(
     OFFICE_GEOMETRY.minOfficeWidth,
@@ -176,7 +180,11 @@ export function resolveOfficeLayout(
     const widths = row.map((index) => roomMetrics[index].preferredWidth);
     const rowWidth = widths.reduce((sum, width) => sum + width, 0) +
       OFFICE_GEOMETRY.roomGap * Math.max(0, row.length - 1);
-    let x = (officeWidth - rowWidth) / 2;
+    let x = roomAlignment === "left"
+      ? 12
+      : roomAlignment === "right"
+        ? officeWidth - 12 - rowWidth
+        : (officeWidth - rowWidth) / 2;
     row.forEach((index, column) => {
       const metric = roomMetrics[index];
       roomPositions.set(index, {
