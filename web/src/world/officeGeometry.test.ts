@@ -58,17 +58,25 @@ describe("Pixel Office geometry", () => {
     expect(layout.rooms[2].height).toBeGreaterThan(OFFICE_GEOMETRY.minRoomHeight);
   });
 
-  it("gives smaller rooms a smaller unit footprint while keeping dense rooms readable", () => {
-    const layout = resolveOfficeLayout(1000, [
-      { deskCount: 2, standingCount: 0 },
-      { deskCount: 8, standingCount: 8 },
-    ]);
-    expect(layout.rooms[0].width).toBeLessThan(layout.rooms[1].width);
-    expect(layout.rooms[1].width).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minRoomWidth);
-    expect(layout.rooms[1].deskColumns).toBe(4);
-    expect(layout.rooms[1].standingColumns).toBe(8);
-    expect(layout.rooms[0].x + layout.rooms[0].width + OFFICE_GEOMETRY.roomGap)
-      .toBeLessThanOrEqual(layout.rooms[1].x + 1);
+  it("keeps furniture spacing stable in a partial final room row", () => {
+    const layout = resolveOfficeLayout(1400, Array.from({ length: 7 }, () => ({
+      deskCount: 2,
+      standingCount: 0,
+    })));
+    const firstRoom = layout.rooms[0];
+    const finalRowRoom = layout.rooms[layout.columns];
+    expect(finalRowRoom.width).toBe(firstRoom.width);
+    expect(finalRowRoom.x).toBe(firstRoom.x);
+    expect(deskAnchor(finalRowRoom, 0).stationSpan)
+      .toBe(deskAnchor(firstRoom, 0).stationSpan);
+  });
+
+  it("spreads the CEO blocks and doubles the wide-screen Agent Bar", () => {
+    const blocks = resolveCeoBlockLayout(1700, 1);
+    expect(blocks.agentBarWidth).toBe(OFFICE_GEOMETRY.agentBarPreferredWidth);
+    expect(blocks.blockGap).toBeGreaterThan(OFFICE_GEOMETRY.ceoCompactBlockGap);
+    expect(blocks.agentBarX + blocks.agentBarWidth)
+      .toBe(1700 - OFFICE_GEOMETRY.ceoEdgePadding);
   });
 
   it("keeps CEO and all host reception desks on one bounded horizontal row", () => {

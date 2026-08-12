@@ -28,7 +28,11 @@ import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
 import { officeCalloutForKey } from "./officeSelection";
 import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
-import { deskAnchor, OFFICE_GEOMETRY } from "./officeGeometry";
+import {
+  agentBarWidthForOffice,
+  deskAnchor,
+  OFFICE_GEOMETRY,
+} from "./officeGeometry";
 import type { OfficeLayout } from "./officeGeometry";
 import {
   MAX_SAVED_WORLD_WINDOWS,
@@ -255,6 +259,9 @@ function WorldStage({
     projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
     projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
     null;
+  const agentBarWidth = officeLayout
+    ? agentBarWidthForOffice(officeLayout.officeWidth, projection.receptions.length)
+    : OFFICE_GEOMETRY.agentBarPreferredWidth;
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
       setCanvasHover(null);
@@ -796,6 +803,7 @@ function WorldStage({
             className="world-canvas-agent-bar"
             projection={projection}
             selectedKey={context.selectedKey}
+            barWidth={agentBarWidth}
             onSelect={context.onSelect}
             onActivateAgent={onActivateAgent}
           />
@@ -1021,28 +1029,36 @@ function WorldAgentBar({
   className,
   projection,
   selectedKey,
+  barWidth,
   onSelect,
   onActivateAgent,
 }: {
   className?: string;
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
+  barWidth: number;
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
 }) {
   const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
   const blockedCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "blocked").length;
   const overflowCount = projection.coverage.omittedBarAgents;
+  const columns = Math.max(3, Math.floor(Math.max(0, barWidth - 106) / 56));
   return (
     <section
       className={`world-office-overview${className ? ` ${className}` : ""}`}
       aria-label="Agent Bar"
+      style={{ width: `${barWidth}px` }}
     >
       <div className="world-overview-heading">
         <strong>Agent Bar</strong>
         <span>{projection.barAgents.length} visible · {idleCount} idle · {blockedCount} needs input</span>
       </div>
-      <ul className="world-agent-bar" aria-label="Agent Bar">
+      <ul
+        className="world-agent-bar"
+        aria-label="Agent Bar"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
         {projection.barAgents.length === 0 ? (
           <li className="world-agent-bar-empty">No completed or waiting agents</li>
         ) : (

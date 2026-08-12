@@ -58,6 +58,9 @@
   Moved room rename/close controls into room title bars, moved room creation to
   an in-scene `+`, and removed the global `New seat` control in favour of the
   room-local desk actions.
+- Distributed CEO-room boards and reception furniture across the available CEO
+  area, expanded the desktop Agent Bar to 560px when space permits, and kept
+  furniture spacing stable for rooms in a partial final row.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

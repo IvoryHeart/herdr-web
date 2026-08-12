@@ -902,7 +902,7 @@ button {
   right: 28px;
   z-index: 6;
   display: block;
-  width: 280px;
+  width: 560px;
   height: 206px;
   padding: 0;
   border: 0;
@@ -928,7 +928,7 @@ button {
   top: 60px;
   right: 10px;
   bottom: 42px;
-  left: 86px;
+  left: 96px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
