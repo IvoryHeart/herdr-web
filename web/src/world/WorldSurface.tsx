@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ChevronLeft,
   PanelLeft,
   Pencil,
@@ -741,32 +740,6 @@ function WorldStage({
     );
   })();
 
-  const onlineHosts = projection.hosts.filter(
-    ({ connectionState }) => connectionState === "compatible" || connectionState === "degraded",
-  ).length;
-  const hostHealthStatus = projection.hosts.length === 0
-    ? "unavailable"
-    : onlineHosts === projection.hosts.length
-      ? "available"
-      : onlineHosts > 0
-        ? "degraded"
-        : "unavailable";
-  const hostHealthText = projection.hosts.length === 0
-    ? "No Herdr hosts"
-    : `${onlineHosts}/${projection.hosts.length} connected${projection.coverage.staleHosts ? ` · ${projection.coverage.staleHosts} stale` : ""}`;
-  const economyHealthStatus = context.observability.health === "available"
-    ? "available"
-    : context.observability.health === "degraded"
-      ? "degraded"
-      : "unavailable";
-  const economyHealthText = context.observability.health === "available"
-    ? `${context.observability.providerId ?? "Provider"} connected`
-    : context.observability.configuredSourceCount === 0
-      ? "Not configured"
-      : context.observability.failedSourceCount > 0
-        ? "Provider unavailable"
-        : "No data available";
-
   return (
     <div ref={shellRef} className="world-stage-shell">
       <header className="stage-bar world-stage-bar">
@@ -837,23 +810,6 @@ function WorldStage({
           </div>
         ) : null}
       </header>
-      <div className="world-stage-notice" role="status">
-        <span>Live admitted state is shown on the CEO Office blackboard</span>
-        <span>Double-click a room or agent to open it in Spaces</span>
-        {projection.coverage.staleHosts ? (
-          <span className="world-notice-stale">
-            <AlertTriangle size={13} aria-hidden="true" />
-            {projection.coverage.staleHosts} stale host · animation and handoff suppressed
-          </span>
-        ) : null}
-        {context.handoffStatus ? (
-          <span className="world-notice-handoff" role="status">{context.handoffStatus}</span>
-        ) : null}
-        <span className="world-provider-health" aria-label="Office provider health">
-          <span data-status={hostHealthStatus}><strong>Herdr</strong> {hostHealthText}</span>
-          <span data-status={economyHealthStatus}><strong>Economy</strong> {economyHealthText}</span>
-        </span>
-      </div>
       <div
         ref={scrollRef}
         className="world-stage-scroll"
@@ -1026,7 +982,7 @@ function WorldAgentBar({
   return (
     <section
       className={`world-office-overview${className ? ` ${className}` : ""}`}
-      aria-label="CEO overview"
+      aria-label="Agent Bar"
     >
       <div className="world-overview-heading">
         <strong>Agent Bar</strong>

@@ -509,7 +509,7 @@ test("deduplicates terminal windows and stops at the five-window Office cap", as
 
   await page.locator(".agent-row").filter({ hasText: "Agent 06" }).first().click();
   await expect(openBubbles).toHaveCount(5);
-  await expect(page.locator(".world-notice-handoff")).toContainText("Five Office terminals are open");
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
 });
 
 test("moves and resizes the Office conversation bubble without losing its live anchors", async ({
@@ -823,11 +823,7 @@ test("keeps single-click and empty-desk gestures read-only, then opens a canvas 
   await page.goto("/world");
   await waitForOffice(page);
   await expect(page.locator(".agent-row").filter({ hasText: "Codex A" })).toBeVisible();
-  await expect(
-    page.getByText("Double-click a room or agent to open it in Spaces", {
-      exact: true,
-    }),
-  ).toBeVisible();
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
 
   const firstRoom = page.locator(".space-row").first();
   await firstRoom.click();
@@ -880,7 +876,7 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 13" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
-  await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   await page.locator(".world-agent-bar-item").filter({ hasText: "Agent 14" }).dblclick();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
@@ -1000,7 +996,7 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 02" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
-  await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   const officeWidth = await page.evaluate(
     () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
   );
@@ -1139,7 +1135,7 @@ test("revalidates a colliding live agent and opens its exact host in Spaces", as
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
-  await expect(page.locator(".world-stage-notice")).toContainText("Double-click a room or agent");
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   const officeWidth = await page.evaluate(
     () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
   );
@@ -1177,7 +1173,7 @@ test("isolates a stale host, retains its last-known room, and suppresses handoff
   await staleAgent.click();
   await staleAgent.dblclick();
   await expect(page).toHaveURL(/\/world$/);
-  await expect(page.locator(".world-notice-handoff")).toContainText("not live");
+  await expect(page.locator(".world-stage-notice")).toHaveCount(0);
 });
 
 async function waitForOffice(page: import("@playwright/test").Page) {

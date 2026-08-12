@@ -152,9 +152,10 @@ of hidden requirements.
 - **Dependencies:** Capability and health contract.
 - **Owner:** Open
 - **Added:** 2026-08-06
-- **Current slice:** The Office notice now shows compact colour-coded Herdr
-  host health and Economy provider state. A fuller freshness/details panel
-  remains open for a later pass.
+- **Current slice:** Persistent notice-strip health text was removed to return
+  the space to the Office canvas. Host and Economy details remain available in
+  the shared sidebar, Office settings, and the existing CEO boards; a fuller
+  freshness/details panel remains open for a later pass.
 
 ### SUG-006 — Agent activity timeline
 

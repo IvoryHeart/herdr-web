@@ -61,6 +61,8 @@ describe("Pixel Office geometry", () => {
     const receptions = blocks.receptions;
     expect(officeWidth).toBeGreaterThanOrEqual(OFFICE_GEOMETRY.minOfficeWidth);
     expect(receptions).toHaveLength(6);
+    expect(blocks.ceoScale).toBe(1);
+    expect(blocks.localBlockGap).toBe(OFFICE_GEOMETRY.ceoCompactBlockGap);
     expect(blocks.ceoX).toBe(OFFICE_GEOMETRY.ceoEdgePadding);
     expect(blocks.otelBoardX).toBe(
       blocks.ceoX + blocks.ceoScale * OFFICE_GEOMETRY.ceoDeskWidth + blocks.blockGap,
@@ -78,6 +80,12 @@ describe("Pixel Office geometry", () => {
     expect(receptions[1].x - (receptions[0].x + receptions[0].width))
       .toBeCloseTo(blocks.blockGap);
     expect(receptions.at(-1)!.x + receptions.at(-1)!.width).toBeLessThanOrEqual(officeWidth - 12);
+    expect(blocks.agentBarX).toBeGreaterThan(
+      receptions.at(-1)!.x + receptions.at(-1)!.width,
+    );
+    expect(blocks.agentBarX + blocks.agentBarWidth).toBe(
+      officeWidth - OFFICE_GEOMETRY.ceoEdgePadding,
+    );
     const agents = Array.from({ length: 4 }, (_, index) =>
       receptionAgentAnchor(receptions[0], index));
     expect(new Set(agents.map(({ x }) => x)).size).toBe(4);

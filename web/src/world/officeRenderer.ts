@@ -29,6 +29,7 @@ import {
   standingAnchor,
 } from "./officeGeometry";
 import type {
+  OfficeCeoBlockLayout,
   OfficeLayout,
   OfficeReceptionRect,
   OfficeRoomRect,
@@ -722,23 +723,31 @@ function drawCeoReception(
   onActivateAgent: (key: string) => void,
 ) {
   const band = new Container();
+  const ceoBlocks = resolveCeoBlockLayout(
+    layout.officeWidth,
+    projection.receptions.length,
+  );
+  const ceoRoomRight = ceoBlocks.agentBarX - OFFICE_GEOMETRY.agentBarGap;
   const floor = new Graphics();
   drawTiledFloor(
     floor,
     4,
     4,
-    layout.officeWidth - 8,
+    ceoRoomRight - 4,
     OFFICE_GEOMETRY.ceoBandHeight - 4,
     0x131328,
     0x0e0e1d,
   );
   floor
-    .roundRect(4, 4, layout.officeWidth - 8, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
+    .roundRect(4, 4, ceoRoomRight - 4, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
-  const ceoBlocks = resolveCeoBlockLayout(
-    layout.officeWidth,
-    projection.receptions.length,
+  drawVerticalRoad(
+    band,
+    ceoRoomRight,
+    4,
+    OFFICE_GEOMETRY.agentBarGap,
+    OFFICE_GEOMETRY.ceoBandHeight - 4,
   );
   const ceoContent = new Container();
   ceoContent.position.x = ceoBlocks.ceoOriginX;
@@ -786,7 +795,34 @@ function drawCeoReception(
     ceoContent.addChild(overflow);
   }
   band.addChild(ceoContent);
+  drawAgentBar(
+    band,
+    ceoBlocks,
+    projection,
+    selectedKey,
+    textures,
+    animated,
+    onSelect,
+    onActivateAgent,
+  );
   stage.addChild(band);
+}
+
+function drawVerticalRoad(
+  parent: Container,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const road = new Graphics();
+  road.rect(x, y, width, height).fill(0x252537);
+  road.rect(x, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
+  road.rect(x + width - 1, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
+  for (let markerY = y + 14; markerY < y + height - 8; markerY += 18) {
+    road.rect(x + width / 2 - 3, markerY, 6, 1).fill({ color: 0x77749a, alpha: 0.38 });
+  }
+  parent.addChild(road);
 }
 
 function drawCeo(parent: Container, textures: readonly Texture[], deskX: number) {
@@ -1537,6 +1573,164 @@ function drawStandingAgent(
     onActivateAgent,
   );
   character.alpha = agent.stale ? 0.56 : 1;
+}
+
+function drawAgentBar(
+  parent: Container,
+  blocks: OfficeCeoBlockLayout,
+  projection: HerdrOfficeProjection,
+  selectedKey: string | null,
+  textures: readonly Texture[],
+  animated: AnimatedItem[],
+  onSelect: (key: string) => void,
+  onActivateAgent: (key: string) => void,
+) {
+  const x = blocks.agentBarX;
+  const y = 4;
+  const width = blocks.agentBarWidth;
+  const height = OFFICE_GEOMETRY.ceoBandHeight - 4;
+  const room = new Container();
+  const floor = new Graphics();
+  drawTiledFloor(floor, x, y, width, height, 0x17140f, 0x11100d);
+  floor.roundRect(x, y, width, height, 4)
+    .stroke({ width: 2, color: 0xb59048, alpha: 0.72 });
+  room.addChild(floor);
+  addSign(
+    room,
+    x + width / 2 - 58,
+    y + 8,
+    "AGENT BAR",
+    0xa17d37,
+    116,
+    undefined,
+    undefined,
+    undefined,
+    10,
+  );
+
+  const boardX = x + 10;
+  const boardY = y + 42;
+  const boardWidth = Math.min(76, width * 0.25);
+  const boardHeight = height - 86;
+  const barX = boardX + boardWidth + 10;
+  const barWidth = Math.max(0, x + width - 10 - barX);
+  const counterY = y + height - 40;
+  const agentAreaY = y + 61;
+  const agentAreaHeight = Math.max(1, counterY - agentAreaY - 4);
+  const columns = Math.max(3, Math.floor(barWidth / 56));
+  const capacity = columns * 2;
+  const rowHeight = agentAreaHeight / 2;
+  const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
+  drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
+  projection.barAgents.slice(0, capacity).forEach((agent, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const px = barX + (barWidth / columns) * (column + 0.5);
+    const rowY = agentAreaY + row * rowHeight;
+    const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
+    const name = label(shortLabel(agent.displayLabel, 10), {
+      size: 8,
+      color: 0xf0ece5,
+      anchor: 0.5,
+    });
+    name.position.set(px, rowY + 1);
+    makeInteractive(name, agent.key, onSelect, onActivateAgent);
+    room.addChild(name);
+    const state = label(cue.label, { size: 6, color: cue.color, anchor: 0.5 });
+    state.position.set(px, rowY + 12);
+    makeInteractive(state, agent.key, onSelect, onActivateAgent);
+    room.addChild(state);
+    const characterFeetY = rowY + rowHeight - 2;
+    const character = drawCharacter(
+      room,
+      textures[agent.characterIndex] ?? Texture.EMPTY,
+      px,
+      characterFeetY,
+      false,
+      agent.stale,
+      animated,
+      agent.key,
+      onSelect,
+      selectedKey,
+      onActivateAgent,
+    );
+    character.alpha = agent.stale ? 0.56 : 1;
+  });
+  drawBarCounter(room, barX, counterY, barWidth);
+  const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - capacity);
+  if (overflowCount > 0) {
+    const overflow = label(`+${overflowCount} more`, {
+      size: 8,
+      color: 0xe5cf98,
+      anchor: { x: 1, y: 0 },
+    });
+    overflow.position.set(x + width - 10, y + 12);
+    room.addChild(overflow);
+  }
+  parent.addChild(room);
+}
+
+function drawPartyBoard(
+  parent: Container,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  idleCount: number,
+) {
+  const board = new Graphics();
+  board.roundRect(x + 3, y + 4, width, height, 4).fill({ color: 0x000000, alpha: 0.28 });
+  board.roundRect(x, y, width, height, 4).fill(0x553b25);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2).fill(0x17251f);
+  board.roundRect(x + 4, y + 4, width - 8, height - 8, 2)
+    .stroke({ width: 1, color: 0x9b7542, alpha: 0.72 });
+  parent.addChild(board);
+  const heading = label("PARTY", { size: 11, color: 0xf2d78f, anchor: 0.5 });
+  heading.position.set(x + width / 2, y + 17);
+  parent.addChild(heading);
+  const value = label(String(idleCount), { size: 26, color: 0xf1e9bd, anchor: 0.5 });
+  value.position.set(x + width / 2, y + height / 2 - 4);
+  parent.addChild(value);
+  drawPartyDecorations(parent, x, y, width, height);
+}
+
+function drawPartyDecorations(parent: Container, x: number, y: number, width: number, height: number) {
+  const decorations = new Graphics();
+  const confetti = [
+    [10, 25, 0xe29b66], [width - 14, 23, 0x8fb9d8], [16, 58, 0x9fceac],
+    [width - 20, 68, 0xdca4c7], [10, height - 32, 0xf3c07e], [width - 14, height - 30, 0xe29b66],
+  ] as const;
+  confetti.forEach(([offsetX, offsetY, color], index) => {
+    if (index % 2 === 0) {
+      decorations.rect(x + offsetX, y + offsetY, 3, 7).fill(color);
+    } else {
+      decorations.circle(x + offsetX, y + offsetY, 2.5).fill(color);
+    }
+  });
+  const glassX = x + width / 2 - 4;
+  const glassY = y + height - 30;
+  decorations.roundRect(glassX - 6, glassY, 12, 9, 3)
+    .stroke({ width: 1.5, color: 0xf1d19a, alpha: 0.9 });
+  decorations.rect(glassX - 1, glassY + 9, 2, 9).fill(0xf1d19a);
+  decorations.rect(glassX - 7, glassY + 18, 14, 2).fill(0xf1d19a);
+  parent.addChild(decorations);
+}
+
+function drawBarCounter(parent: Container, x: number, y: number, width: number) {
+  const counter = new Graphics();
+  counter.roundRect(x + 3, y + 6, width, 34, 8).fill({ color: 0x000000, alpha: 0.28 });
+  counter.roundRect(x, y, width, 32, 7).fill(0x4c3122);
+  counter.roundRect(x + 4, y + 4, width - 8, 9, 4).fill(0x8b5b35);
+  counter.rect(x + 8, y + 7, width - 16, 2).fill({ color: 0xd0a878, alpha: 0.54 });
+  counter.roundRect(x + 8, y + 16, width - 16, 12, 4).fill(0x38231d);
+  for (let panel = x + 24; panel < x + width - 18; panel += 52) {
+    counter.rect(panel, y + 19, 1, 7).fill({ color: 0xb07945, alpha: 0.4 });
+  }
+  for (let tap = x + 24; tap < x + width - 20; tap += 74) {
+    counter.circle(tap, y + 10, 3).fill(0xd0a878);
+    counter.rect(tap - 1, y + 9, 2, 7).fill(0x5b3c2b);
+  }
+  parent.addChild(counter);
 }
 
 function drawCharacter(

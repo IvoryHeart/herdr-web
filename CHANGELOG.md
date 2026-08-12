@@ -20,10 +20,11 @@
 - Added short-lived Office terminal restoration across browser refreshes by
   persisting only qualified pane descriptors and revalidating them against an
   admitted snapshot.
-- Added a semantic Agent Bar panel beside the CEO Office and capability-gated
-  Office room create, rename, and close actions backed by Herdr workspace
-  lifecycle commands. The former bottom canvas Agent Bar band no longer
-  consumes scene space.
+- Restored the graphical Agent Bar as a separate room beside the CEO Office,
+  including the Party board, single counter, and compact full-size agent
+  sprites, while retaining a semantic keyboard and screen-reader overlay.
+  Office room create, rename, and close actions remain capability-gated against
+  Herdr workspace lifecycle commands.
 - Added a documented `npm run dev:local` workflow that checks the Herdr socket,
   reuses or starts the bridge, and launches the web client with the correct
   development proxy.
@@ -44,13 +45,14 @@
 
 ### Changed
 
-- Added compact colour-coded Herdr host and Economy provider state to the
-  Office notice, and made Office canvas hover resolution and in-room `+`
-  actions use explicit canvas hit targets.
-- Positioned the Agent Bar beside the CEO Office as a keyboard-accessible DOM
-  panel with compact multi-column packing, and kept room lifecycle actions
-  disabled when the selected host does not advertise the required Herdr
-  commands.
+- Removed the persistent Office notice/status strip to return its vertical
+  space to the canvas; provider details remain available through Office
+  settings and the existing CEO boards/sidebar.
+- Positioned the graphical Agent Bar beside the CEO Office with a dedicated
+  pixel-road separator. CEO furniture and agent sprites remain at their native
+  scale; only inter-block spacing and bar spacing are compacted. Room lifecycle
+  actions remain disabled when the selected host does not advertise the
+  required Herdr commands.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state
@@ -58,7 +60,7 @@
   boards, shifted room furniture down within the existing wall clearance, and refreshed the Agent
   Bar with a warm Claw-Empire-inspired bar setting using the existing character art. The board now
   uses a legible three-column/two-row metric grid with a compact single-dot state cue, and the
-  Agent Bar now stacks agents/stools, counter, and drinks shelf from front to back.
+  Agent Bar now packs full-size agents around one counter.
 - Remodeled Pixel Office around qualified Herdr topology: tabs are desks; `working` and `unknown`
   agents work or stand in their exact workspace; `blocked` agents wait at horizontal host reception
   conference tables; and `idle` and `done` agents move to the shared Agent Bar. The reception floor

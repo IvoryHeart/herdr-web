@@ -8,10 +8,9 @@ export const OFFICE_GEOMETRY = Object.freeze({
   ceoBoardY: 48,
   ceoBoardHeight: 154,
   ceoBlockGap: 24,
+  ceoCompactBlockGap: 8,
   agentBarMinWidth: 280,
-  agentBarMaxWidth: 420,
-  agentBarWidthRatio: 0.31,
-  agentBarGap: 18,
+  agentBarGap: 28,
   receptionStationMinWidth: 176,
   receptionTableWidth: 160,
   receptionTableHeight: 42,
@@ -205,22 +204,19 @@ export function minimumOfficeWidthForReceptions(receptionCount: number) {
     OFFICE_GEOMETRY.ceoBoardWidth +
     OFFICE_GEOMETRY.ceoOtelBoardWidth +
     count * OFFICE_GEOMETRY.receptionStationMinWidth;
-  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoBlockGap;
+  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoCompactBlockGap;
   return Math.max(
     OFFICE_GEOMETRY.minOfficeWidth,
     OFFICE_GEOMETRY.ceoEdgePadding * 2 +
-      ceoContentWidth,
+      ceoContentWidth +
+      OFFICE_GEOMETRY.agentBarGap +
+      OFFICE_GEOMETRY.agentBarMinWidth,
   );
 }
 
 export function agentBarWidthForOffice(officeWidth: number) {
-  return Math.max(
-    OFFICE_GEOMETRY.agentBarMinWidth,
-    Math.min(
-      OFFICE_GEOMETRY.agentBarMaxWidth,
-      Math.floor(officeWidth * OFFICE_GEOMETRY.agentBarWidthRatio),
-    ),
-  );
+  void officeWidth;
+  return OFFICE_GEOMETRY.agentBarMinWidth;
 }
 
 export function resolveCeoBlockLayout(
@@ -232,19 +228,15 @@ export function resolveCeoBlockLayout(
     OFFICE_GEOMETRY.ceoBoardWidth +
     OFFICE_GEOMETRY.ceoOtelBoardWidth +
     count * OFFICE_GEOMETRY.receptionStationMinWidth;
-  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoBlockGap;
+  const ceoContentWidth = fixedWidth + (count + 2) * OFFICE_GEOMETRY.ceoCompactBlockGap;
   const agentBarWidth = agentBarWidthForOffice(officeWidth);
-  const agentBarX = officeWidth - OFFICE_GEOMETRY.ceoEdgePadding - agentBarWidth;
-  const ceoPanelWidth = Math.max(
-    0,
-    agentBarX - OFFICE_GEOMETRY.agentBarGap - OFFICE_GEOMETRY.ceoEdgePadding,
+  const ceoOriginX = OFFICE_GEOMETRY.ceoEdgePadding;
+  const agentBarX = Math.max(
+    ceoOriginX + ceoContentWidth + OFFICE_GEOMETRY.agentBarGap,
+    officeWidth - OFFICE_GEOMETRY.ceoEdgePadding - agentBarWidth,
   );
-  const ceoScale = Math.min(1, ceoPanelWidth / Math.max(1, ceoContentWidth));
-  const gapCount = count + 2;
-  const blockGap = Math.max(
-    OFFICE_GEOMETRY.ceoBlockGap,
-    (ceoContentWidth - fixedWidth) / gapCount,
-  );
+  const ceoScale = 1;
+  const blockGap = OFFICE_GEOMETRY.ceoCompactBlockGap;
   const localCeoX = 0;
   const localOtelBoardX = localCeoX + OFFICE_GEOMETRY.ceoDeskWidth + blockGap;
   const localBoardX = localOtelBoardX + OFFICE_GEOMETRY.ceoOtelBoardWidth + blockGap;
@@ -264,7 +256,6 @@ export function resolveCeoBlockLayout(
     height: 160,
     gapBefore: blockGap,
   }));
-  const ceoOriginX = OFFICE_GEOMETRY.ceoEdgePadding;
   const scaleX = (value: number) => ceoOriginX + value * ceoScale;
   const receptions = localReceptions.map((reception) => ({
     ...reception,

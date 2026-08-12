@@ -41,9 +41,7 @@ for (const viewport of [
     await expect(page.locator(".brand-sub")).toHaveText("3 blocked");
     const selectedAgent = page.locator(".agent-row").filter({ hasText: "Agent 11" });
     await selectedAgent.click();
-    await expect(page.locator(".world-stage-notice")).toContainText(
-      "Double-click a room or agent to open it in Spaces",
-    );
+    await expect(page.locator(".world-stage-notice")).toHaveCount(0);
     await page.screenshot({
       path: resolve(evidenceDir, `world-live-${viewport.width}x${viewport.height}.png`),
       animations: "disabled",
