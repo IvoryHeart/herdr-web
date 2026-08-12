@@ -23,7 +23,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   deskHeight: 26,
   roomPadding: 16,
   tile: 20,
-  roomGap: 8,
+  roomGap: 16,
   maxRooms: 128,
   desksPerRoom: 8,
   deskColumns: 4,

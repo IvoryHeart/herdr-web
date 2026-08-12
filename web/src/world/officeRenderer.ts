@@ -842,7 +842,7 @@ function drawVerticalRoad(
   road.rect(x, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
   road.rect(x + width - 1, y, 1, height).fill({ color: 0x6c6990, alpha: 0.35 });
   for (let markerY = y + 14; markerY < y + height - 8; markerY += 18) {
-    road.rect(x + width / 2 - 3, markerY, 6, 1).fill({ color: 0x77749a, alpha: 0.38 });
+    road.rect(x + width / 2, markerY, 1, 6).fill({ color: 0x77749a, alpha: 0.38 });
   }
   parent.addChild(road);
 }

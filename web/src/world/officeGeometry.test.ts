@@ -38,8 +38,10 @@ describe("Pixel Office geometry", () => {
     })), "center");
     expect(layout.columns).toBe(3);
     expect(layout.rows).toBe(1);
-    expect(layout.rooms[0].x).toBe(208);
-    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(992);
+    expect(layout.rooms[0].x).toBe(200);
+    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(1000);
+    expect(layout.rooms[1].x - (layout.rooms[0].x + layout.rooms[0].width))
+      .toBe(OFFICE_GEOMETRY.roomGap);
     expect(layout.rooms.map(({ width }) => width)).toEqual([
       layout.rooms[0].width,
       layout.rooms[0].width,
@@ -68,6 +70,12 @@ describe("Pixel Office geometry", () => {
     const finalRowRoom = layout.rooms[layout.columns];
     expect(finalRowRoom.width).toBe(firstRoom.width);
     expect(finalRowRoom.x).toBe(firstRoom.x);
+    const firstRowBottom = Math.max(
+      ...layout.rooms
+        .filter(({ row }) => row === firstRoom.row)
+        .map(({ y, height }) => y + height),
+    );
+    expect(finalRowRoom.y - firstRowBottom).toBe(OFFICE_GEOMETRY.roomGap);
     expect(deskAnchor(finalRowRoom, 0).stationSpan)
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });
