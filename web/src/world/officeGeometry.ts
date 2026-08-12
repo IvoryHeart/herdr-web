@@ -15,6 +15,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   receptionStationMinWidth: 176,
   receptionTableWidth: 160,
   receptionTableHeight: 42,
+  receptionTableNudgeX: -4,
   maxReceptionDesks: 6,
   hallwayHeight: 32,
   characterHeight: 68,
@@ -381,7 +382,7 @@ export function receptionTableRect(reception: OfficeReceptionRect) {
     Math.max(0, reception.width - 8),
   );
   return {
-    x: reception.x + (reception.width - width) / 2,
+    x: reception.x + (reception.width - width) / 2 + OFFICE_GEOMETRY.receptionTableNudgeX,
     y: reception.y + 96,
     width,
     height: OFFICE_GEOMETRY.receptionTableHeight,

@@ -70,6 +70,9 @@
 - Added a persisted Office layout preference for left, center, or right room-row
   alignment, with left alignment as the default; CEO Office and Agent Bar placement
   remain dedicated and unaffected.
+- Added pixel-road separators between responsive room rows and columns, nudged
+  reception tables inward at the CEO boundary, and gave each visible Agent Bar
+  agent an aligned glass alongside a rear shelf of drinks.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

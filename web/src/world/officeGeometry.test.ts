@@ -161,7 +161,10 @@ describe("Pixel Office geometry", () => {
     expect(new Set(agents.map(({ x }) => x)).size).toBe(4);
     expect(agents[1].x - agents[0].x).toBeCloseTo(agents[0].stationSpan);
     const table = receptionTableRect(receptions[0]);
+    const centeredTableX = receptions[0].x +
+      (receptions[0].width - table.width) / 2;
     expect(table.width).toBeLessThanOrEqual(OFFICE_GEOMETRY.receptionTableWidth);
+    expect(table.x).toBe(centeredTableX + OFFICE_GEOMETRY.receptionTableNudgeX);
     expect(table.x).toBeGreaterThan(receptions[0].x);
     expect(table.x + table.width).toBeLessThan(receptions[0].x + receptions[0].width);
   });
