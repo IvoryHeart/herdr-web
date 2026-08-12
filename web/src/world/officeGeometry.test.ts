@@ -38,8 +38,8 @@ describe("Pixel Office geometry", () => {
     })));
     expect(layout.columns).toBe(3);
     expect(layout.rows).toBe(1);
-    expect(layout.rooms[0].x).toBe(12);
-    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(1188);
+    expect(layout.rooms[0].x).toBe(208);
+    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(992);
     expect(layout.rooms.map(({ width }) => width)).toEqual([
       layout.rooms[0].width,
       layout.rooms[0].width,
@@ -67,7 +67,7 @@ describe("Pixel Office geometry", () => {
     const firstRoom = layout.rooms[0];
     const finalRowRoom = layout.rooms[layout.columns];
     expect(finalRowRoom.width).toBe(firstRoom.width);
-    expect(finalRowRoom.x).toBe(firstRoom.x);
+    expect(finalRowRoom.x).not.toBe(firstRoom.x);
     expect(deskAnchor(finalRowRoom, 0).stationSpan)
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });
@@ -87,6 +87,16 @@ describe("Pixel Office geometry", () => {
     expect(nextRowRoom.width).toBeLessThan(denseRoom.width);
     expect(deskAnchor(nextRowRoom, 0).stationSpan)
       .toBe(deskAnchor(denseRoom, 0).stationSpan);
+  });
+
+  it("packs later rows independently of a dense room in the first row", () => {
+    const layout = resolveOfficeLayout(1700, [
+      { deskCount: 8, standingCount: 0 },
+      ...Array.from({ length: 11 }, () => ({ deskCount: 2, standingCount: 0 })),
+    ]);
+    expect(layout.rooms.slice(0, layout.columns).some(({ deskColumns }) => deskColumns === 4))
+      .toBe(true);
+    expect(layout.rooms.filter(({ row }) => row === 1)).toHaveLength(6);
   });
 
   it("spreads the CEO blocks and doubles the wide-screen Agent Bar", () => {

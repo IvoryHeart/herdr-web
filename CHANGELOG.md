@@ -64,6 +64,9 @@
 - Matched the Agent Bar Party count to the rendered bar occupancy, packed the
   first agent row against the counter, added drinks to the counter, and kept a
   disabled `+ / ROOM FULL` affordance visible after the eighth desk.
+- Changed room placement to sequential natural-width row packing: each row fits
+  as many 2–8-seat room templates as it can, later rows are not constrained by
+  a wide room above them, and all room gaps remain snug and consistent.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

@@ -22,7 +22,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   deskHeight: 26,
   roomPadding: 16,
   tile: 20,
-  roomGap: 12,
+  roomGap: 8,
   maxRooms: 128,
   desksPerRoom: 8,
   deskColumns: 4,
@@ -138,41 +138,31 @@ export function resolveOfficeLayout(
       ),
     };
   });
-  const maxColumns = count > 0
-    ? Math.min(
-        count,
-        Math.max(
-          1,
-          Math.floor(
-            (availableRoomWidth + OFFICE_GEOMETRY.roomGap) /
-              (OFFICE_GEOMETRY.minRoomWidth + OFFICE_GEOMETRY.roomGap),
-          ),
-        ),
-      )
-    : 1;
-  const preferredRowWidth = (columns: number, row: number) =>
-    (() => {
-      const rowLength = roomMetrics.slice(row * columns, row * columns + columns).length;
-      return roomMetrics
-        .slice(row * columns, row * columns + columns)
-        .reduce((sum, metric) => sum + metric.preferredWidth, 0) +
-        Math.max(0, rowLength - 1) * OFFICE_GEOMETRY.roomGap;
-    })();
-  let columns = maxColumns;
-  while (
-    columns > 1 &&
-    Array.from({ length: Math.ceil(count / columns) }, (_, row) =>
-      preferredRowWidth(columns, row),
-    ).some((width) => width > availableRoomWidth)
-  ) {
-    columns -= 1;
+  const packedRows: number[][] = [];
+  let currentRow: number[] = [];
+  let currentWidth = 0;
+  roomMetrics.forEach(({ preferredWidth }, index) => {
+    const nextWidth = currentRow.length > 0
+      ? currentWidth + OFFICE_GEOMETRY.roomGap + preferredWidth
+      : preferredWidth;
+    if (currentRow.length > 0 && nextWidth > availableRoomWidth) {
+      packedRows.push(currentRow);
+      currentRow = [];
+      currentWidth = 0;
+    }
+    currentRow.push(index);
+    currentWidth = currentRow.length > 1
+      ? currentWidth + OFFICE_GEOMETRY.roomGap + preferredWidth
+      : preferredWidth;
+  });
+  if (currentRow.length > 0) {
+    packedRows.push(currentRow);
   }
-  const rows = count > 0 ? Math.ceil(count / columns) : 0;
+  const columns = Math.max(1, ...packedRows.map((row) => row.length));
+  const rows = packedRows.length;
   const rowHeights = Array.from({ length: rows }, (_, row) =>
     Math.max(
-      ...roomMetrics
-        .slice(row * columns, row * columns + columns)
-        .map(({ height }) => height),
+      ...packedRows[row].map((index) => roomMetrics[index].height),
     ),
   );
   const rowYs: number[] = [];
@@ -181,46 +171,31 @@ export function resolveOfficeLayout(
     rowYs.push(nextY);
     nextY += height + OFFICE_GEOMETRY.roomGap;
   }
-  const rowLayouts = Array.from({ length: rows }, (_, row) => {
-    const metrics = roomMetrics.slice(row * columns, row * columns + columns);
-    const widths = metrics.map(({ preferredWidth }) => preferredWidth);
-    const naturalWidth = widths.reduce((sum, width) => sum + width, 0);
-    const naturalGap = OFFICE_GEOMETRY.roomGap * Math.max(0, widths.length - 1);
-    const isFullRow = widths.length === columns;
-    const distributableSpace = isFullRow
-      ? Math.max(0, availableRoomWidth - naturalWidth - naturalGap)
-      : 0;
-    const gap = widths.length > 1
-      ? OFFICE_GEOMETRY.roomGap + distributableSpace / (widths.length - 1)
-      : 0;
-    return {
-      widths,
-      gap,
-      width: naturalWidth + gap * Math.max(0, widths.length - 1),
-    };
+  const roomPositions = new Map<number, OfficeRoomRect>();
+  packedRows.forEach((row, rowIndex) => {
+    const widths = row.map((index) => roomMetrics[index].preferredWidth);
+    const rowWidth = widths.reduce((sum, width) => sum + width, 0) +
+      OFFICE_GEOMETRY.roomGap * Math.max(0, row.length - 1);
+    let x = (officeWidth - rowWidth) / 2;
+    row.forEach((index, column) => {
+      const metric = roomMetrics[index];
+      roomPositions.set(index, {
+        index,
+        column,
+        row: rowIndex,
+        x,
+        y: rowYs[rowIndex],
+        width: metric.preferredWidth,
+        height: metric.height,
+        deskColumns: metric.deskColumns,
+        standingColumns: metric.standingColumns,
+        deskRows: metric.deskRows,
+        standingRows: metric.standingRows,
+      });
+      x += metric.preferredWidth + OFFICE_GEOMETRY.roomGap;
+    });
   });
-  const rowStartX = (officeWidth - availableRoomWidth) / 2;
-  const rooms = presentations.map((_, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const rowLayout = rowLayouts[row];
-    const x = rowStartX + rowLayout.widths
-      .slice(0, column)
-      .reduce((sum, width) => sum + width + rowLayout.gap, 0);
-    return {
-      index,
-      column,
-      row,
-      x,
-      y: rowYs[row],
-      width: rowLayout.widths[column],
-      height: roomMetrics[index].height,
-      deskColumns: roomMetrics[index].deskColumns,
-      standingColumns: roomMetrics[index].standingColumns,
-      deskRows: roomMetrics[index].deskRows,
-      standingRows: roomMetrics[index].standingRows,
-    };
-  });
+  const rooms = presentations.map((_, index) => roomPositions.get(index)!);
   const roomWidth = Math.max(0, ...rooms.map(({ width }) => width));
   const roomStartX = rooms.length > 0 ? Math.min(...rooms.map(({ x }) => x)) : 0;
   const totalHeight = nextY + 30 + (count < OFFICE_GEOMETRY.maxRooms ? 64 : 0);

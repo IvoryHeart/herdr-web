@@ -948,6 +948,7 @@ test("selects an Office agent semantically and launches a real new seat", async 
   await expect(
     bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
   ).toBeEnabled();
+  await bubble.getByRole("button", { name: "Close agent conversation" }).click();
 
   const newSeatButton = page.getByRole("button", { name: /^New seat in / }).first();
   await expect(newSeatButton).toBeVisible();
@@ -968,6 +969,7 @@ test("selects an Office agent semantically and launches a real new seat", async 
       target: { mode: "tab", workspace_id: "main" },
     },
   ]);
+  await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   await expect(page.locator("[data-world-conversation='open']")).toHaveCount(2);
   await expect(
     page.locator("[data-world-conversation='open']").filter({ hasText: "Shell" }),
