@@ -12,6 +12,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   agentBarMinWidth: 280,
   agentBarPreferredWidth: 560,
   agentBarGap: 28,
+  agentBarCounterBottomClearance: 64,
   receptionStationMinWidth: 176,
   receptionTableWidth: 160,
   receptionTableHeight: 42,
@@ -254,7 +255,8 @@ export function agentBarSlot(blocks: OfficeCeoBlockLayout, index: number) {
   const boardWidth = Math.min(76, blocks.agentBarWidth * 0.25);
   const barX = blocks.agentBarX + 10 + boardWidth + 10;
   const barWidth = Math.max(0, blocks.agentBarX + blocks.agentBarWidth - 10 - barX);
-  const counterY = 4 + OFFICE_GEOMETRY.ceoBandHeight - 4 - 40;
+  const counterY = 4 + OFFICE_GEOMETRY.ceoBandHeight - 4 -
+    OFFICE_GEOMETRY.agentBarCounterBottomClearance;
   const agentAreaY = 4 + 61;
   const agentAreaHeight = Math.max(1, counterY - agentAreaY - 4);
   const columns = Math.max(3, Math.floor(barWidth / 56));

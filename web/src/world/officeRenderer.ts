@@ -1714,7 +1714,7 @@ function drawAgentBar(
   const firstSlot = agentBarSlot(blocks, 0);
   const barX = boardX + boardWidth + 10;
   const barWidth = Math.max(0, x + width - 10 - barX);
-  const counterY = y + height - 40;
+  const counterY = y + height - OFFICE_GEOMETRY.agentBarCounterBottomClearance;
   const capacity = firstSlot.capacity;
   const visibleBarAgents = projection.barAgents.slice(0, capacity);
   drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, visibleBarAgents.length);
@@ -1751,7 +1751,6 @@ function drawAgentBar(
     );
     character.alpha = agent.stale ? 0.56 : 1;
   });
-  drawBarBackShelf(room, barX, counterY, barWidth);
   drawBarCounter(
     room,
     barX,
@@ -1759,6 +1758,7 @@ function drawAgentBar(
     barWidth,
     visibleBarAgents.map((_, index) => agentBarSlot(blocks, index).x),
   );
+  drawBarBottleRow(room, barX, y + height, barWidth);
   const overflowCount = projection.coverage.omittedBarAgents + Math.max(0, projection.barAgents.length - capacity);
   if (overflowCount > 0) {
     const overflow = label(`+${overflowCount} more`, {
@@ -1818,20 +1818,21 @@ function drawPartyDecorations(parent: Container, x: number, y: number, width: nu
   parent.addChild(decorations);
 }
 
-function drawBarBackShelf(parent: Container, x: number, y: number, width: number) {
+function drawBarBottleRow(parent: Container, x: number, roomBottom: number, width: number) {
   const shelf = new Graphics();
-  const shelfY = y - 38;
+  const bottleY = roomBottom - 30;
+  const shelfY = bottleY + 18;
   const shelfWidth = Math.max(0, width - 16);
-  shelf.rect(x + 8, shelfY + 21, shelfWidth, 3)
+  shelf.rect(x + 8, shelfY, shelfWidth, 3)
     .fill({ color: 0x5b3c2b, alpha: 0.72 });
-  shelf.rect(x + 8, shelfY + 24, shelfWidth, 1)
+  shelf.rect(x + 8, shelfY + 3, shelfWidth, 1)
     .fill({ color: 0xd0a878, alpha: 0.36 });
   parent.addChild(shelf);
   const drinks = new Graphics();
   const count = Math.max(3, Math.min(12, Math.floor(width / 42)));
   for (let index = 0; index < count; index += 1) {
     const drinkX = x + 14 + ((shelfWidth - 12) * index) / Math.max(1, count - 1);
-    const drinkY = shelfY + 5;
+    const drinkY = bottleY;
     const liquid = [0xd36e57, 0x7ab9c4, 0xd6a24e, 0xb884d6][index % 4];
     drinks.roundRect(drinkX - 4, drinkY, 8, 13, 2)
       .fill({ color: liquid, alpha: 0.86 })

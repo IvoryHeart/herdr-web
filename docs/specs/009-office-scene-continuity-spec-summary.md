@@ -29,3 +29,12 @@
 - No Herdr, bridge, persistence, or protocol changes were made.
 - Mobile-specific composition and richer agent-specific drink types remain
   deferred.
+
+## Follow-up extension 001
+
+- Raised the Agent Bar counter and its visible agent slots, kept one glass per
+  visible agent on the counter, and moved the decorative bottle row to the
+  lower room band.
+- `npm run lint:web`, `npm run test:web -- --run` (345 tests), and
+  `npm run build:web` passed. Manual live verification confirmed the bottle row
+  remains inside the bar at the wide responsive layout.

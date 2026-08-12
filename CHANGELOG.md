@@ -73,6 +73,9 @@
 - Added pixel-road separators between responsive room rows and columns, nudged
   reception tables inward at the CEO boundary, and gave each visible Agent Bar
   agent an aligned glass alongside a rear shelf of drinks.
+- Refined the Agent Bar composition by raising the counter and visible agents,
+  keeping their glasses on the counter, and moving the bottle row into the
+  lower edge of the room.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state
