@@ -19,6 +19,7 @@ import type {
   OfficeRoom,
 } from "./herdrOfficeProjection";
 import {
+  agentBarSlot,
   deskAnchor,
   minimumOfficeWidthForReceptions,
   OFFICE_GEOMETRY,
@@ -173,6 +174,7 @@ export async function createOfficeRenderer(
   canCreateSeat: (roomKey: string) => boolean,
   onNewSeat: (roomKey: string) => void,
   onHover: (hover: OfficeCanvasHover | null) => void,
+  onLayoutChange: (layout: OfficeLayout | null) => void,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -411,9 +413,10 @@ export async function createOfficeRenderer(
     if (disposed) {
       return;
     }
+    const viewportWidth = scrollElement?.clientWidth ?? element.clientWidth;
     const width = Math.max(
       minimumOfficeWidthForReceptions(currentProjection.receptions.length),
-      Math.floor(requestedWidth || 0),
+      Math.floor(viewportWidth || requestedWidth || 0),
     );
     const layout = resolveOfficeLayout(
       width,
@@ -429,6 +432,7 @@ export async function createOfficeRenderer(
       Math.max(1, scrollElement?.clientHeight ?? layout.totalHeight),
     );
     currentLayout = layout;
+    onLayoutChange(layout);
     lastWidth = layout.officeWidth;
     if (
       lastRendererSize.width !== layout.officeWidth ||
@@ -502,7 +506,7 @@ export async function createOfficeRenderer(
       build(nextWidth);
     }, 80);
   });
-  observer.observe(element);
+  observer.observe(scrollElement ?? element);
   diagnostics.activeObservers += 1;
   try {
     build();
@@ -586,6 +590,7 @@ export async function createOfficeRenderer(
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
+      onLayoutChange(null);
     },
   };
 }
@@ -666,8 +671,15 @@ function resolveOfficeAgentAnchor(
     return { x: anchor.x, y: anchor.characterFeetY - 42 };
   }
   if (agent.destination === "bar") {
-    // Agent Bar entries are semantic DOM controls in the CEO overview.
-    return null;
+    const barIndex = projection.barAgents.findIndex(({ key: agentKey }) => agentKey === key);
+    if (barIndex < 0) {
+      return null;
+    }
+    const slot = agentBarSlot(
+      resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length),
+      barIndex,
+    );
+    return { x: slot.x, y: slot.characterFeetY - 42 };
   }
   const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
   const room = projection.rooms[roomIndex];
@@ -1612,21 +1624,17 @@ function drawAgentBar(
   const boardY = y + 42;
   const boardWidth = Math.min(76, width * 0.25);
   const boardHeight = height - 86;
+  const firstSlot = agentBarSlot(blocks, 0);
   const barX = boardX + boardWidth + 10;
   const barWidth = Math.max(0, x + width - 10 - barX);
   const counterY = y + height - 40;
-  const agentAreaY = y + 61;
-  const agentAreaHeight = Math.max(1, counterY - agentAreaY - 4);
-  const columns = Math.max(3, Math.floor(barWidth / 56));
-  const capacity = columns * 2;
-  const rowHeight = agentAreaHeight / 2;
+  const capacity = firstSlot.capacity;
   const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
   drawPartyBoard(room, boardX, boardY, boardWidth, boardHeight, idleCount);
   projection.barAgents.slice(0, capacity).forEach((agent, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const px = barX + (barWidth / columns) * (column + 0.5);
-    const rowY = agentAreaY + row * rowHeight;
+    const slot = agentBarSlot(blocks, index);
+    const px = slot.x;
+    const rowY = slot.rowY;
     const cue = agent.stale ? { label: "STALE", color: 0x79869a } : STATUS_CUES[agent.semanticStatus];
     const name = label(shortLabel(agent.displayLabel, 10), {
       size: 8,
@@ -1640,7 +1648,7 @@ function drawAgentBar(
     state.position.set(px, rowY + 12);
     makeInteractive(state, agent.key, onSelect, onActivateAgent);
     room.addChild(state);
-    const characterFeetY = rowY + rowHeight - 2;
+    const characterFeetY = slot.characterFeetY;
     const character = drawCharacter(
       room,
       textures[agent.characterIndex] ?? Texture.EMPTY,

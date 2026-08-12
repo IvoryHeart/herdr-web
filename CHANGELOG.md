@@ -53,6 +53,11 @@
   scale; only inter-block spacing and bar spacing are compacted. Room lifecycle
   actions remain disabled when the selected host does not advertise the
   required Herdr commands.
+- Made the Office canvas follow the available viewport width and changed room
+  placement from a fixed two-column cluster to an elastic full-width grid.
+  Moved room rename/close controls into room title bars, moved room creation to
+  an in-scene `+`, and removed the global `New seat` control in favour of the
+  room-local desk actions.
 - Documented Office settings verification and tracked the usable-but-not-yet
   smooth terminal refit during conversation-window resizing as SUG-028.
 - Kept the delivered Herdr sidebar shared across Spaces and Office, moved live admitted-state

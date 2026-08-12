@@ -881,51 +881,6 @@ button {
   border-top: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.world-new-room {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 0 10px;
-  border-color: color-mix(in srgb, var(--st-working) 35%, var(--line));
-  color: var(--text);
-  background: color-mix(in srgb, var(--st-working) 9%, var(--base));
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.world-new-room:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--st-working) 65%, var(--line));
-  background: color-mix(in srgb, var(--st-working) 16%, var(--surface0));
-}
-
-.world-room-context {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 3px;
-  margin-left: auto;
-  padding-left: 4px;
-}
-
-.world-room-context-label {
-  max-width: 150px;
-  overflow: hidden;
-  color: var(--subtext0);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.world-room-action {
-  width: 28px;
-  height: 28px;
-}
-
-.world-room-action-danger:not(:disabled) {
-  color: var(--red);
-}
-
 .world-office-overview {
   display: flex;
   min-width: 0;
@@ -938,7 +893,7 @@ button {
 }
 
 .world-canvas-shell {
-  width: max-content;
+  width: 100%;
 }
 
 .world-canvas-agent-bar {
@@ -1025,6 +980,81 @@ button {
   overflow: hidden;
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
+}
+
+.world-room-actions-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.world-room-actions {
+  position: absolute;
+  display: inline-flex;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.world-room-overlay-action {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--yellow) 55%, var(--line));
+  border-radius: 3px;
+  color: var(--text);
+  background: color-mix(in srgb, #3c2c1d 86%, var(--surface0));
+  pointer-events: auto;
+}
+
+.world-room-overlay-action:hover:not(:disabled),
+.world-room-overlay-action:focus-visible {
+  border-color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 20%, var(--surface0));
+}
+
+.world-room-overlay-action-danger:not(:disabled) {
+  color: var(--red);
+}
+
+.world-new-seat-canvas-action {
+  position: absolute;
+  width: 50px;
+  height: 27px;
+  padding: 0;
+  border: 0;
+  color: transparent;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.world-new-seat-canvas-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.world-new-room-canvas-action {
+  position: absolute;
+  display: grid;
+  width: 56px;
+  height: 48px;
+  padding: 3px 4px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--st-working) 72%, var(--line));
+  border-radius: 5px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--st-working) 12%, var(--surface0));
+  font-size: 7px;
+  letter-spacing: .04em;
+  pointer-events: auto;
+}
+
+.world-new-room-canvas-action:hover,
+.world-new-room-canvas-action:focus-visible {
+  border-color: var(--st-working);
+  background: color-mix(in srgb, var(--st-working) 24%, var(--surface0));
 }
 
 .world-overview-heading {
@@ -1152,24 +1182,6 @@ button {
   border-color: color-mix(in srgb, var(--st-blocked) 35%, var(--line));
 }
 
-.world-new-seat {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 10px;
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 10%, var(--base));
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.world-new-seat:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
-  background: color-mix(in srgb, var(--accent) 18%, var(--surface0));
-}
-
 .world-canvas-callout {
   position: absolute;
   z-index: 12;
@@ -1238,6 +1250,7 @@ button {
 .world-canvas-shell,
 .world-canvas-host {
   position: relative;
+  width: 100%;
   min-width: 1000px;
   min-height: 100%;
 }
@@ -4525,10 +4538,6 @@ button {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-}
-
-.app[data-compact="true"] .world-room-context {
-  margin-left: 0;
 }
 
 .app[data-compact="true"] .world-sidebar {

@@ -220,7 +220,10 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
         scrollWidth: element.scrollWidth,
       })),
     )
-    .toMatchObject({ clientWidth: 375, scrollWidth: 1000 });
+    .toMatchObject({ clientWidth: 375 });
+  await expect
+    .poll(() => page.locator(".world-stage-scroll").evaluate((element) => element.scrollWidth))
+    .toBeGreaterThan(375);
 
   await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
@@ -341,25 +344,18 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   // Keep the conversation window out of the room while inspecting the next
   // seat; the responsive layout may place the room beneath the default window.
   const conversationHeader = page.locator(".world-conversation-header");
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 12; index += 1) {
     await conversationHeader.focus();
-    await page.keyboard.press("Shift+ArrowLeft");
+    await page.keyboard.press("Shift+ArrowRight");
   }
   for (let index = 0; index < 6; index += 1) {
     await conversationHeader.focus();
     await page.keyboard.press("Shift+ArrowDown");
   }
 
-  const nextSeat = deskAnchor(layout.rooms[0], 1);
-  await page.mouse.move(
-    (canvasBox?.x ?? 0) + nextSeat.x,
-    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
-  );
-  await expect(page.getByRole("tooltip")).toContainText("main");
-  await page.mouse.click(
-    (canvasBox?.x ?? 0) + nextSeat.x,
-    (canvasBox?.y ?? 0) + nextSeat.deskY + 12,
-  );
+  const newSeatButton = page.getByRole("button", { name: /^New seat in / }).first();
+  await expect(newSeatButton).toBeVisible();
+  await newSeatButton.click();
   await expect(page.locator("form.launch-modal")).toBeVisible();
   await expect(
     page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
@@ -420,7 +416,7 @@ test("keeps the live connector visible when the selected agent moves to the Agen
   expect(afterAgentPath).not.toBeNull();
   expect(afterAgentPath).not.toBe(beforeAgentPath);
   const offscreenEdge = await agentPath.getAttribute("data-offscreen");
-  expect(offscreenEdge === null || offscreenEdge === "bottom").toBe(true);
+  expect(offscreenEdge === null || ["bottom", "right"].includes(offscreenEdge)).toBe(true);
 });
 
 test("inspects completed work from the shared sidebar and clears its unseen marker", async ({
@@ -953,7 +949,9 @@ test("selects an Office agent semantically and launches a real new seat", async 
     bubble.getByRole("button", { name: "Open full terminal in Spaces" }),
   ).toBeEnabled();
 
-  await page.getByRole("button", { name: "New seat", exact: true }).click();
+  const newSeatButton = page.getByRole("button", { name: /^New seat in / }).first();
+  await expect(newSeatButton).toBeVisible();
+  await newSeatButton.click();
   const launchDialog = page.locator("form.launch-modal");
   await expect(launchDialog).toBeVisible();
   await expect(launchDialog).toContainText("New tab");

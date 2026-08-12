@@ -28,6 +28,8 @@ import { OFFICE_PRESENTATION_BOUNDS } from "./herdrOfficeProjection";
 import { officeCalloutForKey } from "./officeSelection";
 import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
+import { deskAnchor, OFFICE_GEOMETRY } from "./officeGeometry";
+import type { OfficeLayout } from "./officeGeometry";
 import {
   MAX_SAVED_WORLD_WINDOWS,
   readWorldViewPrefs,
@@ -201,6 +203,7 @@ function WorldStage({
   const scrollRestoreRef = useRef(false);
   const scrollSaveTimerRef = useRef<number | null>(null);
   const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
+  const [officeLayout, setOfficeLayout] = useState<OfficeLayout | null>(null);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
   const [conversationGeometry, setConversationGeometry] = useState<Record<string, ConversationGeometry>>({});
@@ -252,10 +255,6 @@ function WorldStage({
     projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
     projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
     null;
-  const selectedRoom = selectedRoomKey
-    ? projection.roomRoster.find(({ key }) => key === selectedRoomKey) ?? null
-    : null;
-
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
       setCanvasHover(null);
@@ -765,50 +764,6 @@ function WorldStage({
         >
           <RotateCcw size={16} />
         </button>
-        <button
-          className="world-new-seat btn"
-          type="button"
-          title={selectedRoomKey ? "Start a new Herdr-backed seat in the selected room" : "Start a new Herdr-backed seat"}
-          onClick={() => context.onNewSeat(selectedRoomKey ?? undefined)}
-        >
-          <span>New seat</span>
-        </button>
-        <button
-          className="world-new-room btn"
-          type="button"
-          aria-label="New room"
-          title="Create a new Herdr workspace"
-          disabled={!context.canCreateRoom(selectedRoomKey ?? undefined)}
-          onClick={() => context.onCreateRoom(selectedRoomKey ?? undefined)}
-        >
-          <Plus size={14} aria-hidden="true" />
-          <span>New room</span>
-        </button>
-        {selectedRoom ? (
-          <div className="world-room-context" aria-label={`Selected room ${selectedRoom.displayLabel}`}>
-            <span className="world-room-context-label">{selectedRoom.displayLabel}</span>
-            <button
-              className="icon-btn world-room-action"
-              type="button"
-              aria-label={`Rename room ${selectedRoom.displayLabel}`}
-              title="Rename room"
-              disabled={!context.canRenameRoom(selectedRoom.key)}
-              onClick={() => context.onRenameRoom(selectedRoom.key)}
-            >
-              <Pencil size={14} aria-hidden="true" />
-            </button>
-            <button
-              className="icon-btn world-room-action world-room-action-danger"
-              type="button"
-              aria-label={`Close room ${selectedRoom.displayLabel}`}
-              title="Close room"
-              disabled={!context.canCloseRoom(selectedRoom.key)}
-              onClick={() => context.onCloseRoom(selectedRoom.key)}
-            >
-              <Trash2 size={14} aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
       </header>
       <div
         ref={scrollRef}
@@ -832,6 +787,7 @@ function WorldStage({
           onActivateRoom={onActivateRoom}
           canCreateSeat={context.canCreateSeat}
           onNewSeat={context.onNewSeat}
+          onLayoutChange={setOfficeLayout}
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
           onSelectedAnchorChange={onSelectedCanvasAnchorChange}
@@ -843,6 +799,14 @@ function WorldStage({
             onSelect={context.onSelect}
             onActivateAgent={onActivateAgent}
           />
+          {officeLayout ? (
+            <WorldRoomActions
+              layout={officeLayout}
+              projection={projection}
+              selectedRoomKey={selectedRoomKey}
+              context={context}
+            />
+          ) : null}
         </PixelOfficeCanvas>
       </div>
       {context.selectedKey && selectedCanvasAnchor ? (
@@ -937,6 +901,96 @@ function WorldCanvasCallout({
       <strong>{callout.title}</strong>
       {callout.summary ? <span className="world-canvas-callout-summary">{callout.summary}</span> : null}
       <span>{callout.detail}</span>
+    </div>
+  );
+}
+
+function WorldRoomActions({
+  layout,
+  projection,
+  selectedRoomKey,
+  context,
+}: {
+  layout: OfficeLayout;
+  projection: HerdrOfficeProjection;
+  selectedRoomKey: string | null;
+  context: WorldSurfaceContext;
+}) {
+  const roomBottom = layout.rooms.reduce(
+    (bottom, room) => Math.max(bottom, room.y + room.height),
+    layout.roomStartY,
+  );
+  return (
+    <div className="world-room-actions-overlay" aria-label="Office room actions">
+      {projection.rooms.map((room, index) => {
+        const rect = layout.rooms[index];
+        if (!rect) {
+          return null;
+        }
+        return (
+          <div
+            key={room.key}
+            className="world-room-actions"
+            style={{ left: `${rect.x + rect.width - 62}px`, top: `${rect.y - 5}px` }}
+          >
+            <button
+              className="world-room-overlay-action"
+              type="button"
+              aria-label={`Rename room ${room.displayLabel}`}
+              title={`Rename ${room.displayLabel}`}
+              disabled={!context.canRenameRoom(room.key)}
+              onClick={() => context.onRenameRoom(room.key)}
+            >
+              <Pencil size={12} aria-hidden="true" />
+            </button>
+            <button
+              className="world-room-overlay-action world-room-overlay-action-danger"
+              type="button"
+              aria-label={`Close room ${room.displayLabel}`}
+              title={`Close ${room.displayLabel}`}
+              disabled={!context.canCloseRoom(room.key)}
+              onClick={() => context.onCloseRoom(room.key)}
+            >
+              <Trash2 size={12} aria-hidden="true" />
+            </button>
+          </div>
+        );
+      })}
+      {projection.rooms.map((room, index) => {
+        const rect = layout.rooms[index];
+        if (
+          !rect ||
+          room.desks.length >= OFFICE_GEOMETRY.desksPerRoom ||
+          !context.canCreateSeat(room.key)
+        ) {
+          return null;
+        }
+        const anchor = deskAnchor(rect, room.desks.length);
+        return (
+          <button
+            key={`${room.key}:new-seat`}
+            className="world-new-seat-canvas-action"
+            type="button"
+            aria-label={`New seat in ${room.displayLabel}`}
+            title={`Start a new seat in ${room.displayLabel}`}
+            style={{ left: `${anchor.x - 25}px`, top: `${anchor.deskY}px` }}
+            onClick={() => context.onNewSeat(room.key)}
+          />
+        );
+      })}
+      {context.canCreateRoom(selectedRoomKey ?? undefined) ? (
+        <button
+          className="world-new-room-canvas-action"
+          type="button"
+          aria-label="New room"
+          title="Create a new Herdr workspace"
+          style={{ left: `${layout.officeWidth / 2 - 28}px`, top: `${roomBottom + 8}px` }}
+          onClick={() => context.onCreateRoom(selectedRoomKey ?? undefined)}
+        >
+          <Plus size={24} aria-hidden="true" />
+          <span>NEW ROOM</span>
+        </button>
+      ) : null}
     </div>
   );
 }

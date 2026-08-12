@@ -4,6 +4,7 @@ import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
 import type { OfficeCanvasHover } from "./officeRenderer";
 import type { OfficeObservability } from "./officeObservability";
+import type { OfficeLayout } from "./officeGeometry";
 import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
@@ -42,6 +43,7 @@ export function PixelOfficeCanvas({
   onHover,
   onAnchorChange,
   onSelectedAnchorChange,
+  onLayoutChange,
   children,
 }: {
   projection: HerdrOfficeProjection;
@@ -57,6 +59,7 @@ export function PixelOfficeCanvas({
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
   onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
+  onLayoutChange?: (layout: OfficeLayout | null) => void;
   children?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +78,7 @@ export function PixelOfficeCanvas({
     onHover,
     onAnchorChange,
     onSelectedAnchorChange,
+    onLayoutChange,
   });
   const [failure, setFailure] = useState(false);
   latestRef.current = {
@@ -91,6 +95,7 @@ export function PixelOfficeCanvas({
     onHover,
     onAnchorChange,
     onSelectedAnchorChange,
+    onLayoutChange,
   };
 
   const reportAnchors = () => {
@@ -195,6 +200,7 @@ export function PixelOfficeCanvas({
       (roomKey) => latestRef.current.canCreateSeat(roomKey),
       (roomKey) => latestRef.current.onNewSeat(roomKey),
       (hover) => latestRef.current.onHover?.(hover),
+      (layout) => latestRef.current.onLayoutChange?.(layout),
     )
       .then((controller) => {
         if (disposed) {

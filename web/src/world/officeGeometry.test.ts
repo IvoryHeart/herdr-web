@@ -11,15 +11,15 @@ import {
 } from "./officeGeometry";
 
 describe("Pixel Office geometry", () => {
-  it("keeps the current two-column office at a readable logical width", () => {
+  it("uses an elastic room grid at a readable logical width", () => {
     const narrow = resolveOfficeLayout(375, Array.from({ length: 6 }, () => ({
       deskCount: 1,
       standingCount: 0,
     })));
     expect(narrow).toMatchObject({
       officeWidth: 1000,
-      columns: 2,
-      rows: 3,
+      columns: 3,
+      rows: 2,
     });
     expect(narrow.rooms).toHaveLength(6);
     expect(narrow.roomStartY).toBe(
@@ -28,6 +28,22 @@ describe("Pixel Office geometry", () => {
     expect(narrow.totalHeight).toBeGreaterThan(
       narrow.rooms.at(-1)!.y + narrow.rooms.at(-1)!.height,
     );
+  });
+
+  it("fits three ordinary rooms across one full-width row", () => {
+    const layout = resolveOfficeLayout(1200, Array.from({ length: 3 }, () => ({
+      deskCount: 2,
+      standingCount: 0,
+    })));
+    expect(layout.columns).toBe(3);
+    expect(layout.rows).toBe(1);
+    expect(layout.rooms[0].x).toBe(12);
+    expect(layout.rooms.at(-1)!.x + layout.rooms.at(-1)!.width).toBe(1188);
+    expect(layout.rooms.map(({ width }) => width)).toEqual([
+      layout.rooms[0].width,
+      layout.rooms[0].width,
+      layout.rooms[0].width,
+    ]);
   });
 
   it("expands rooms deterministically for second desk and standing rows", () => {
