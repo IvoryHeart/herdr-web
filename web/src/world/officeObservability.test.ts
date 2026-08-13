@@ -3,6 +3,7 @@ import { parseObservabilityExtensionResponse } from "../observability";
 import {
   aggregateOfficeObservability,
   formatOfficeCost,
+  formatOfficeModelName,
   formatOfficeModelNames,
   formatOfficeUsage,
 } from "./officeObservability";
@@ -108,11 +109,14 @@ describe("Office observability projection", () => {
     expect(formatOfficeCost(null)).toBe("—");
     expect(formatOfficeUsage(252_421_215)).toBe("252.4M");
     expect(formatOfficeUsage(900)).toBe("900");
+    expect(formatOfficeModelName("anthropic/claude-haiku-4-5-20251001")).toBe("Haiku 4.5");
+    expect(formatOfficeModelName("haiku-4-5-2025")).toBe("Haiku 4.5");
+    expect(formatOfficeModelName("claude-3-5-sonnet-20241022")).toBe("Sonnet 3.5");
     expect(formatOfficeModelNames([
       { provider: "openai", model: "gpt-5.6-luna", usage: {}, costUsd: null, costKind: null },
       { provider: "openai", model: "gpt-5.6-sol", usage: {}, costUsd: null, costKind: null },
       { provider: "anthropic", model: "claude-opus-5", usage: {}, costUsd: null, costKind: null },
       { provider: "anthropic", model: "claude-sonnet-5", usage: {}, costUsd: null, costKind: null },
-    ])).toBe("luna · sol · opus-5 · +1");
+    ])).toBe("luna · sol · Opus 5 · +1");
   });
 });

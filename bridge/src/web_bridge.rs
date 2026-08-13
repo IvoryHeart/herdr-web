@@ -3093,7 +3093,7 @@ async fn update_observability_configuration_handler(
                 .map_err(BridgeError::BadRequest)?;
             let endpoint = config.endpoint_string();
             (
-                PrometheusObservabilityProvider::start(config),
+                PrometheusObservabilityProvider::start_ready(config).await,
                 ObservabilityConfiguration {
                     provider_id: "prometheus.otel".to_string(),
                     configured: true,

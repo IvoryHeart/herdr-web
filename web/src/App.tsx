@@ -1279,6 +1279,7 @@ export function App() {
   const [worldObservabilityRevision, setWorldObservabilityRevision] = useState(0);
   const backendSettingsReturnFocusRef = useRef<HTMLElement | null>(null);
   const worldSettingsAppliedRef = useRef(new Map<string, string>());
+  const worldSettingsSyncRef = useRef(new Map<string, Promise<void>>());
   const openBackendSettings = useCallback(() => {
     backendSettingsReturnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1305,8 +1306,16 @@ export function App() {
     setWorldObservabilityRevision((revision) => revision + 1);
     setWorldRoomAlignment(readWorldRoomAlignment());
   }, []);
-  useEffect(() => {
-    for (const runtime of bridge.enabledRuntimes) {
+  const synchronizeStoredWorldSettings = useCallback(async (
+    runtimes: readonly BridgeRuntime[],
+  ) => {
+    const pending: Promise<void>[] = [];
+    for (const runtime of runtimes) {
+      const inFlight = worldSettingsSyncRef.current.get(runtime.id);
+      if (inFlight) {
+        pending.push(inFlight);
+        continue;
+      }
       if (
         runtime.capabilityState !== "ready" ||
         !runtime.canConnect ||
@@ -1324,11 +1333,24 @@ export function App() {
         continue;
       }
       worldSettingsAppliedRef.current.set(runtime.id, marker);
-      void updateWorldObservabilityConfiguration(runtime, settings.prometheusUrl).catch(() => {
-        worldSettingsAppliedRef.current.delete(runtime.id);
+      const sync: Promise<void> = updateWorldObservabilityConfiguration(runtime, settings.prometheusUrl)
+        .then(() => undefined)
+        .catch(() => {
+          worldSettingsAppliedRef.current.delete(runtime.id);
+        });
+      worldSettingsSyncRef.current.set(runtime.id, sync);
+      void sync.finally(() => {
+        if (worldSettingsSyncRef.current.get(runtime.id) === sync) {
+          worldSettingsSyncRef.current.delete(runtime.id);
+        }
       });
+      pending.push(sync);
     }
-  }, [bridge.enabledRuntimes]);
+    await Promise.all(pending);
+  }, []);
+  useEffect(() => {
+    void synchronizeStoredWorldSettings(bridge.enabledRuntimes);
+  }, [bridge.enabledRuntimes, synchronizeStoredWorldSettings]);
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
@@ -1641,6 +1663,10 @@ export function App() {
     }
     let disposed = false;
     const refresh = async () => {
+      await synchronizeStoredWorldSettings(bridge.enabledRuntimes);
+      if (disposed) {
+        return;
+      }
       const next = await fetchOfficeObservability(bridge.enabledRuntimes).catch(() => ({
         ...EMPTY_OFFICE_OBSERVABILITY,
         health: "degraded" as const,
@@ -1655,7 +1681,12 @@ export function App() {
       disposed = true;
       window.clearInterval(interval);
     };
-  }, [activeSurface.id, bridge.enabledRuntimes, worldObservabilityRevision]);
+  }, [
+    activeSurface.id,
+    bridge.enabledRuntimes,
+    synchronizeStoredWorldSettings,
+    worldObservabilityRevision,
+  ]);
   const worldProjection = useMemo(
     () => projectHerdrOffice(worldSourcesInScope, Date.now()),
     [worldSourcesInScope],
