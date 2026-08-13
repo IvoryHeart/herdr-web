@@ -1296,6 +1296,16 @@ function drawRoomHeading(
     height: rect.headerRect.height,
     emergencyEllipsis: false,
   };
+  const width = rect.headerRect.width;
+  const x = rect.headerRect.x;
+  const y = rect.headerRect.y;
+  const actionStart = x + width - OFFICE_GEOMETRY.roomHeaderActionWidth - 6;
+  const fixedTextChrome = 16 + 12 + 20 + 14 + 2;
+  const fittedHeader = fitRoomHeaderLabels(
+    header.workspace.toUpperCase(),
+    header.host.toUpperCase(),
+    Math.max(0, actionStart - (x + 10) - fixedTextChrome),
+  );
   const workspace = label(header.workspace.toUpperCase(), {
     size: OFFICE_HEADING_TEXT_SIZE,
     color: 0xffffff,
@@ -1308,9 +1318,8 @@ function drawRoomHeading(
   });
   const hyphenOne = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
   const hyphenTwo = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
-  const width = rect.headerRect.width;
-  const x = rect.headerRect.x;
-  const y = rect.headerRect.y;
+  workspace.text = fittedHeader.workspace;
+  hostName.text = fittedHeader.host;
   const background = new Graphics();
   background.roundRect(x, y, width, Math.min(22, rect.headerRect.height), 4)
     .fill(selectedKey === room.key ? accent : blendColor(accent, 0x121522, 0.5));
@@ -2189,6 +2198,45 @@ function label(
     text.anchor.set(options.anchor.x, options.anchor.y);
   }
   return text;
+}
+
+function fitRoomHeaderLabels(workspace: string, host: string, maximumWidth: number) {
+  if (maximumWidth <= 0) {
+    return { workspace: "", host: "" };
+  }
+  const workspaceBudget = Math.floor(maximumWidth * 0.52);
+  return {
+    workspace: fitRoomHeaderLabel(workspace, workspaceBudget),
+    host: fitRoomHeaderLabel(host, Math.max(0, maximumWidth - workspaceBudget)),
+  };
+}
+
+function fitRoomHeaderLabel(value: string, maximumWidth: number) {
+  if (maximumWidth <= 0) {
+    return "";
+  }
+  const points = [...value];
+  if (measureRoomHeaderLabel(value) <= maximumWidth) {
+    return value;
+  }
+  const ellipsis = "…";
+  if (measureRoomHeaderLabel(ellipsis) > maximumWidth) {
+    return "";
+  }
+  for (let end = points.length; end > 0; end -= 1) {
+    const candidate = `${points.slice(0, end).join("")}${ellipsis}`;
+    if (measureRoomHeaderLabel(candidate) <= maximumWidth) {
+      return candidate;
+    }
+  }
+  return ellipsis;
+}
+
+function measureRoomHeaderLabel(value: string) {
+  const text = label(value, { size: OFFICE_HEADING_TEXT_SIZE });
+  const width = text.width;
+  text.destroy();
+  return width;
 }
 
 function shortLabel(value: string, limit: number) {
