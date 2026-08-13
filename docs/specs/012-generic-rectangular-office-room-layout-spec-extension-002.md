@@ -3,12 +3,12 @@
 - **Parent spec:** [`012-generic-rectangular-office-room-layout-spec.md`](012-generic-rectangular-office-room-layout-spec.md)
 - **Previous extension:** [`012-generic-rectangular-office-room-layout-spec-extension-001.md`](012-generic-rectangular-office-room-layout-spec-extension-001.md)
 - **Spec ID:** `012-generic-rectangular-office-room-layout-extension-002`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-13
 - **Owner:** Downstream Herdr World / Office presentation layer
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Requester
+- **Approved at:** 2026-08-13
 
 > This compatible extension closes the remaining contract gaps before
 > implementation: pure geometry versus published layout revisions, finite-cap
