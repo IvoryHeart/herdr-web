@@ -36,12 +36,29 @@ describe("Office layout contract", () => {
       rooms: [room()],
     });
     const normalHeader = normal.roomHeaders[0]!;
+    const normalRect = normal.layout.rooms[0];
     expect(normalHeader.emergencyEllipsis).toBe(false);
     expect(normalHeader.workspace).toContain("2025");
     expect(normalHeader.titleBoxWidth).toBeLessThan(normalHeader.width);
-    expect(normalHeader.width).toBe(
-      normalHeader.titleBoxWidth + normalHeader.actionWidth + normalHeader.actionGap,
+    expect(normalHeader.width).toBeGreaterThanOrEqual(
+      normalHeader.titleBoxWidth +
+        2 * (
+          normalHeader.renameWidth +
+          normalHeader.actionGap +
+          normalHeader.closeWidth +
+          normalHeader.closeGap
+        ) +
+        OFFICE_GEOMETRY.roomHeaderSafeInset * 2,
     );
+    expect(normalRect.width).toBeGreaterThanOrEqual(normalHeader.width);
+    expect(normalRect.header?.titleBoxX).toBeGreaterThan(0);
+    expect(normalRect.header?.titleBoxX).toBeCloseTo(
+      (normalRect.headerRect.width - normalHeader.titleBoxWidth) / 2,
+    );
+    expect(normalRect.header!.renameX + normalHeader.renameWidth + normalHeader.closeGap)
+      .toBeLessThanOrEqual(normalRect.header!.closeX);
+    expect(normalRect.header!.closeX + normalHeader.closeWidth)
+      .toBe(normalRect.headerRect.width);
 
     const expanded = resolveOfficeGeometry({
       availableViewportWidth: 1000,
@@ -61,6 +78,33 @@ describe("Office layout contract", () => {
     expect(expanded.roomHeaders[0]?.width).toBeLessThanOrEqual(300);
     expect(compact.roomHeaders[0]?.workspace).not.toContain("2025");
     expect(compact.roomHeaders[0]?.width).toBeLessThanOrEqual(300);
+  });
+
+  it("makes the room wide enough for either the header group or a desk row", () => {
+    const longHeader = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("long-header", { deskCount: 1 })],
+    });
+    const manyDesks = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("many-desks", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        deskCount: OFFICE_GEOMETRY.desksPerRoom,
+      })],
+    });
+    const headerRect = longHeader.layout.rooms[0];
+    const deskRect = manyDesks.layout.rooms[0];
+    expect(headerRect.width).toBeGreaterThanOrEqual(longHeader.roomHeaders[0]!.width);
+    expect(deskRect.width).toBeGreaterThanOrEqual(
+      OFFICE_GEOMETRY.roomPadding * 2 +
+        deskRect.deskColumns * 112,
+    );
+    expect(deskRect.width).toBeGreaterThanOrEqual(manyDesks.roomHeaders[0]!.width);
   });
 
   it("keeps nested visual bounds and wrapped CEO content finite", () => {

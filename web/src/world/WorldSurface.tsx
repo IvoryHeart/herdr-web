@@ -961,23 +961,29 @@ function WorldRoomActions({
           return null;
         }
         const ready = layoutReady;
-        const titleBoxWidth = rect.header?.titleBoxWidth ?? Math.max(0, rect.headerRect.width - 52);
+        const header = rect.header;
         return (
           <div
             key={room.key}
             className={`world-room-actions${ready ? "" : " world-room-actions-stale"}`}
             aria-hidden={!ready}
             style={{
-              left: `${rect.headerRect.x + titleBoxWidth + (rect.header?.actionGap ?? OFFICE_GEOMETRY.roomHeaderActionGap)}px`,
-              top: `${rect.headerRect.y + 2}px`,
+              left: `${rect.headerRect.x}px`,
+              top: `${rect.headerRect.y}px`,
+              width: `${rect.headerRect.width}px`,
+              height: `${rect.headerRect.height}px`,
             }}
           >
             <button
-              className="world-room-overlay-action"
+              className="world-room-overlay-action world-room-overlay-action-rename"
               type="button"
               aria-label={`Rename room ${room.displayLabel}`}
               title={`Rename ${room.displayLabel}`}
               disabled={!ready || !context.canRenameRoom(room.key)}
+              style={{
+                left: `${header?.renameX ?? Math.max(0, rect.headerRect.width - 52)}px`,
+                top: "2px",
+              }}
               onClick={() => context.onRenameRoom(room.key)}
             >
               <Pencil size={12} aria-hidden="true" />
@@ -988,6 +994,10 @@ function WorldRoomActions({
               aria-label={`Close room ${room.displayLabel}`}
               title={`Close ${room.displayLabel}`}
               disabled={!ready || !context.canCloseRoom(room.key)}
+              style={{
+                left: `${header?.closeX ?? Math.max(0, rect.headerRect.width - OFFICE_GEOMETRY.roomHeaderActionWidth)}px`,
+                top: "2px",
+              }}
               onClick={() => context.onCloseRoom(room.key)}
             >
               <Trash2 size={12} aria-hidden="true" />

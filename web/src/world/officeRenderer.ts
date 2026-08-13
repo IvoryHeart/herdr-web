@@ -1289,18 +1289,34 @@ function drawRoomHeading(
   onSelect: (key: string) => void,
   onActivateRoom: (key: string) => void,
 ) {
+  const fallbackActionWidth = OFFICE_GEOMETRY.roomHeaderActionWidth;
+  const fallbackTitleBoxWidth = Math.max(
+    0,
+    rect.headerRect.width - 2 * (
+      fallbackActionWidth +
+      OFFICE_GEOMETRY.roomHeaderActionGap +
+      fallbackActionWidth +
+      OFFICE_GEOMETRY.roomHeaderCloseGap
+    ),
+  );
+  const fallbackTitleBoxX = Math.max(0, (rect.headerRect.width - fallbackTitleBoxWidth) / 2);
   const header = rect.header ?? {
     workspace: shortLabel(room.displayLabel, 18),
     host: shortLabel(host.displayLabel, 16),
     width: rect.headerRect.width,
-    titleBoxWidth: Math.max(0, rect.headerRect.width - 52),
-    actionWidth: OFFICE_GEOMETRY.roomHeaderActionWidth,
+    titleBoxX: fallbackTitleBoxX,
+    titleBoxWidth: fallbackTitleBoxWidth,
+    renameX: fallbackTitleBoxX + fallbackTitleBoxWidth + OFFICE_GEOMETRY.roomHeaderActionGap,
+    closeX: Math.max(0, rect.headerRect.width - fallbackActionWidth),
+    renameWidth: fallbackActionWidth,
+    closeWidth: fallbackActionWidth,
+    actionWidth: fallbackActionWidth,
     actionGap: OFFICE_GEOMETRY.roomHeaderActionGap,
+    closeGap: OFFICE_GEOMETRY.roomHeaderCloseGap,
     height: rect.headerRect.height,
     emergencyEllipsis: false,
   };
-  const width = rect.headerRect.width;
-  const x = rect.headerRect.x;
+  const x = rect.headerRect.x + header.titleBoxX;
   const y = rect.headerRect.y;
   const workspace = label(header.workspace.toUpperCase(), {
     size: OFFICE_HEADING_TEXT_SIZE,
@@ -1314,7 +1330,10 @@ function drawRoomHeading(
   });
   const hyphenOne = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
   const hyphenTwo = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
-  const titleBoxWidth = Math.min(width, Math.max(0, header.titleBoxWidth));
+  const titleBoxWidth = Math.min(
+    Math.max(0, rect.headerRect.width - header.titleBoxX),
+    Math.max(0, header.titleBoxWidth),
+  );
   const background = new Graphics();
   background.roundRect(x, y, titleBoxWidth, Math.min(22, rect.headerRect.height), 4)
     .fill(selectedKey === room.key ? accent : blendColor(accent, 0x121522, 0.5));

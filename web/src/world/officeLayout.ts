@@ -210,9 +210,10 @@ export function normalizeOfficeGeometryInput(
       HARD_MAX_ROOM_WIDTH,
     ),
   };
+  const minimumHeaderRoomWidth = minimumRoomWidthForTitleBox(style.fixedHeaderChromeWidth);
   const minimumRoomWidth = Math.min(HARD_MAX_ROOM_WIDTH, Math.max(
     OFFICE_GEOMETRY.minRoomWidth,
-    style.fixedHeaderChromeWidth,
+    minimumHeaderRoomWidth,
     style.overflowMarkerMinWidth,
   ));
   const minimumRoomHeight = Math.min(HARD_MAX_ROOM_HEIGHT, Math.max(
@@ -316,8 +317,7 @@ export function normalizeOfficeGeometryInput(
 export function resolveOfficeGeometry(input: OfficeGeometryInput): OfficeGeometryResult {
   const normalizedInput = normalizeOfficeGeometryInput(input);
   const inputDigest = JSON.stringify(normalizedInput);
-  const styleInvalid = normalizedInput.style.fixedHeaderChromeWidth >
-      normalizedInput.maximumExpandedRoomWidth
+  const styleInvalid = normalizedInput.minimumRoomWidth > normalizedInput.maximumExpandedRoomWidth
     || normalizedInput.style.fixedHeaderChromeHeight +
       normalizedInput.style.overflowMarkerMinHeight + normalizedInput.style.overflowMarkerGap >
       normalizedInput.maximumExpandedRoomHeight;
@@ -497,7 +497,7 @@ export function resolveOfficeGeometry(input: OfficeGeometryInput): OfficeGeometr
     inputDigest,
     normalizedInput,
     layout: layoutWithOverflow,
-    roomHeaders: normalizedInput.rooms.map((room) => resolveOfficeRoomHeader(room, normalizedInput)),
+    roomHeaders: layout.rooms.map((room) => room.header ?? null),
     rows,
     contentItems,
     omissions: omissionRecords,
@@ -519,37 +519,52 @@ export function resolveOfficeRoomHeader(
   const compact = input.titleMode === "compact";
   let visualWorkspace = compact ? compactOfficeLabel(workspace, 18) : workspace;
   let visualHost = compact ? compactOfficeLabel(host, 16) : host;
-  const fixedWidth = input.style.fixedHeaderChromeWidth;
+  const titleChromeWidth = input.style.fixedHeaderChromeWidth;
   const actionWidth = OFFICE_GEOMETRY.roomHeaderActionWidth;
   const actionGap = OFFICE_GEOMETRY.roomHeaderActionGap;
-  const titleChromeWidth = Math.max(0, fixedWidth - actionWidth - actionGap);
-  const maxWidth = Math.max(fixedWidth, input.maximumExpandedRoomWidth);
+  const closeGap = OFFICE_GEOMETRY.roomHeaderCloseGap;
+  const maxWidth = Math.max(
+    minimumRoomWidthForTitleBox(titleChromeWidth),
+    input.maximumExpandedRoomWidth,
+  );
+  const maxTitleBoxWidth = Math.max(
+    titleChromeWidth,
+    maxWidth - OFFICE_GEOMETRY.roomHeaderSafeInset * 2 -
+      2 * (actionWidth + actionGap + actionWidth + closeGap),
+  );
   let titleBoxWidth = Math.max(
-    room.headerMinWidth ?? 0,
+    titleChromeWidth,
     titleChromeWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
   );
-  let width = titleBoxWidth + actionWidth + actionGap;
+  let width = minimumRoomWidthForTitleBox(titleBoxWidth);
   let emergencyEllipsis = false;
-  if (width > maxWidth) {
+  if (titleBoxWidth > maxTitleBoxWidth) {
     emergencyEllipsis = true;
-    const available = Math.max(0, maxWidth - titleChromeWidth - actionWidth - actionGap);
+    const available = Math.max(0, maxTitleBoxWidth - titleChromeWidth);
     const workspaceBudget = Math.floor(available * 0.52);
     const hostBudget = Math.max(0, available - workspaceBudget);
     visualWorkspace = fitOfficeLabel(workspace, workspaceBudget);
     visualHost = fitOfficeLabel(host, hostBudget);
     titleBoxWidth = Math.min(
-      maxWidth - actionWidth - actionGap,
+      maxTitleBoxWidth,
       titleChromeWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
     );
-    width = titleBoxWidth + actionWidth + actionGap;
+    width = minimumRoomWidthForTitleBox(titleBoxWidth);
   }
+  width = Math.max(width, room.headerMinWidth ?? 0);
   return {
     workspace: visualWorkspace,
     host: visualHost,
-    width: Math.max(fixedWidth, Math.ceil(width)),
+    width: Math.min(maxWidth, Math.ceil(width)),
+    titleBoxX: 0,
     titleBoxWidth: Math.max(titleChromeWidth, Math.ceil(titleBoxWidth)),
+    renameX: 0,
+    closeX: 0,
+    renameWidth: actionWidth,
+    closeWidth: actionWidth,
     actionWidth,
     actionGap,
+    closeGap,
     height: Math.max(OFFICE_GEOMETRY.roomHeaderHeight, input.style.fixedHeaderChromeHeight),
     emergencyEllipsis,
   };
@@ -804,9 +819,37 @@ function withLayoutBounds(
 ): OfficeLayout {
   const rooms = layout.rooms.map((room) => ({
     ...room,
-    header: headers[room.index] ?? room.header,
+    header: headers[room.index]
+      ? positionOfficeRoomHeader(room.headerRect, headers[room.index]!)
+      : room.header,
   }));
   return { ...layout, rooms };
+}
+
+function positionOfficeRoomHeader(
+  headerRect: OfficeRect,
+  header: OfficeRoomHeaderLayout,
+): OfficeRoomHeaderLayout {
+  const titleBoxX = Math.max(0, (headerRect.width - header.titleBoxWidth) / 2);
+  return {
+    ...header,
+    titleBoxX,
+    renameX: titleBoxX + header.titleBoxWidth + header.actionGap,
+    closeX: Math.max(0, headerRect.width - header.closeWidth),
+  };
+}
+
+function minimumRoomWidthForTitleBox(titleBoxWidth: number) {
+  return Math.ceil(
+    Math.max(0, titleBoxWidth) +
+      2 * (
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderActionGap +
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderCloseGap
+      ) +
+      OFFICE_GEOMETRY.roomHeaderSafeInset * 2,
+  );
 }
 
 function overflowMarkerRect(room: OfficeRoomRect, input: NormalizedOfficeGeometryInput): OfficeRect {
@@ -913,9 +956,11 @@ function fitOfficeLabel(value: string, maximumWidth: number, fallbackLimit = 256
 }
 
 function measureOfficeText(value: string) {
-  return [...value].reduce((width, character) => {
+  // Room headings are rendered uppercase by Pixi. Measure that presentation
+  // form so the geometry reserves the same width the canvas actually uses.
+  return [...value.toUpperCase()].reduce((width, character) => {
     const codePoint = character.codePointAt(0) ?? 0;
     const wide = codePoint > 0x2e80 || codePoint >= 0x1f000;
-    return width + (wide ? 13 : character === " " ? 4 : 7.2);
+    return width + (wide ? 13 : character === " " ? 4 : 8.1);
   }, 0);
 }
