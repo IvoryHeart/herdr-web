@@ -33,7 +33,11 @@ import {
   deskAnchor,
   OFFICE_GEOMETRY,
 } from "./officeGeometry";
-import type { OfficeLayout, OfficeRoomAlignment } from "./officeGeometry";
+import type {
+  OfficeLayout,
+  OfficeLongRoomTitleMode,
+  OfficeRoomAlignment,
+} from "./officeGeometry";
 import {
   MAX_SAVED_WORLD_WINDOWS,
   readWorldViewPrefs,
@@ -61,6 +65,7 @@ export type WorldSurfaceContext = {
   onFocusConversation: (id: string) => void;
   agentActivityTransitions: ReadonlyMap<string, number>;
   roomAlignment: OfficeRoomAlignment;
+  longRoomTitleMode: OfficeLongRoomTitleMode;
   canCreateSeat: (roomKey: string) => boolean;
   onNewSeat: (roomKey?: string) => void;
   canCreateRoom: (roomKey?: string) => boolean;
@@ -150,6 +155,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onFocusConversation: () => {},
   agentActivityTransitions: new Map(),
   roomAlignment: "left",
+  longRoomTitleMode: "expand",
   canCreateSeat: () => false,
   onNewSeat: () => {},
   canCreateRoom: () => false,
@@ -210,6 +216,7 @@ function WorldStage({
   const scrollSaveTimerRef = useRef<number | null>(null);
   const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
   const [officeLayout, setOfficeLayout] = useState<OfficeLayout | null>(null);
+  const [canvasRenderedRevision, setCanvasRenderedRevision] = useState(0);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
   const [conversationGeometry, setConversationGeometry] = useState<Record<string, ConversationGeometry>>({});
@@ -264,6 +271,9 @@ function WorldStage({
   const agentBarWidth = officeLayout
     ? agentBarWidthForOffice(officeLayout.officeWidth, projection.receptions.length)
     : OFFICE_GEOMETRY.agentBarPreferredWidth;
+  const agentBarHeight = officeLayout
+    ? Math.max(1, officeLayout.ceoBandHeight - 4)
+    : OFFICE_GEOMETRY.ceoBandHeight - 4;
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
       setCanvasHover(null);
@@ -797,7 +807,9 @@ function WorldStage({
           canCreateSeat={context.canCreateSeat}
           onNewSeat={context.onNewSeat}
           onLayoutChange={setOfficeLayout}
+          onCanvasRendered={setCanvasRenderedRevision}
           roomAlignment={context.roomAlignment}
+          longRoomTitleMode={context.longRoomTitleMode}
           onHover={onCanvasHover}
           onAnchorChange={(anchors) => setConversationAnchors(anchors ?? {})}
           onSelectedAnchorChange={onSelectedCanvasAnchorChange}
@@ -807,6 +819,7 @@ function WorldStage({
             projection={projection}
             selectedKey={context.selectedKey}
             barWidth={agentBarWidth}
+            barHeight={agentBarHeight}
             onSelect={context.onSelect}
             onActivateAgent={onActivateAgent}
           />
@@ -816,6 +829,7 @@ function WorldStage({
               projection={projection}
               selectedRoomKey={selectedRoomKey}
               context={context}
+              canvasRenderedRevision={canvasRenderedRevision}
             />
           ) : null}
         </PixelOfficeCanvas>
@@ -921,35 +935,45 @@ function WorldRoomActions({
   projection,
   selectedRoomKey,
   context,
+  canvasRenderedRevision,
 }: {
   layout: OfficeLayout;
   projection: HerdrOfficeProjection;
   selectedRoomKey: string | null;
   context: WorldSurfaceContext;
+  canvasRenderedRevision: number;
 }) {
+  const layoutReady = layout.layoutRevision > 0 && layout.layoutRevision === canvasRenderedRevision;
   const roomBottom = layout.rooms.reduce(
     (bottom, room) => Math.max(bottom, room.y + room.height),
     layout.roomStartY,
   );
   return (
     <div className="world-room-actions-overlay" aria-label="Office room actions">
+      {layout.overflowMarker ? (
+        <div className="sr-only" role="status" aria-live="polite">
+          {layout.overflowMarker.label}
+        </div>
+      ) : null}
       {projection.rooms.map((room, index) => {
-        const rect = layout.rooms[index];
+        const rect = layout.rooms.find(({ index: roomIndex }) => roomIndex === index);
         if (!rect) {
           return null;
         }
+        const ready = layoutReady;
         return (
           <div
             key={room.key}
-            className="world-room-actions"
-            style={{ left: `${rect.x + rect.width - 62}px`, top: `${rect.y - 5}px` }}
+            className={`world-room-actions${ready ? "" : " world-room-actions-stale"}`}
+            aria-hidden={!ready}
+            style={{ left: `${rect.headerRect.x + rect.headerRect.width - 50}px`, top: `${rect.headerRect.y + 2}px` }}
           >
             <button
               className="world-room-overlay-action"
               type="button"
               aria-label={`Rename room ${room.displayLabel}`}
               title={`Rename ${room.displayLabel}`}
-              disabled={!context.canRenameRoom(room.key)}
+              disabled={!ready || !context.canRenameRoom(room.key)}
               onClick={() => context.onRenameRoom(room.key)}
             >
               <Pencil size={12} aria-hidden="true" />
@@ -959,7 +983,7 @@ function WorldRoomActions({
               type="button"
               aria-label={`Close room ${room.displayLabel}`}
               title={`Close ${room.displayLabel}`}
-              disabled={!context.canCloseRoom(room.key)}
+              disabled={!ready || !context.canCloseRoom(room.key)}
               onClick={() => context.onCloseRoom(room.key)}
             >
               <Trash2 size={12} aria-hidden="true" />
@@ -968,7 +992,7 @@ function WorldRoomActions({
         );
       })}
       {projection.rooms.map((room, index) => {
-        const rect = layout.rooms[index];
+        const rect = layout.rooms.find(({ index: roomIndex }) => roomIndex === index);
         if (!rect || !context.canCreateSeat(room.key)) {
           return null;
         }
@@ -983,18 +1007,29 @@ function WorldRoomActions({
             type="button"
             aria-label={full ? `${room.displayLabel} room full` : `New seat in ${room.displayLabel}`}
             title={full ? `${room.displayLabel} is full` : `Start a new seat in ${room.displayLabel}`}
-            disabled={full}
+            disabled={!layoutReady || full}
             style={{ left: `${anchor.x - 25}px`, top: `${anchor.deskY}px` }}
             onClick={() => context.onNewSeat(room.key)}
           />
         );
       })}
+      <div className="sr-only" aria-label="Office room names">
+        {projection.rooms.map((room) => {
+          const host = projection.hosts.find(({ key }) => key === room.hostKey);
+          return (
+            <span key={`${room.key}:semantic-name`}>
+              {room.displayLabel} — {host?.displayLabel ?? "host unavailable"}
+            </span>
+          );
+        })}
+      </div>
       {context.canCreateRoom(selectedRoomKey ?? undefined) ? (
         <button
           className="world-new-room-canvas-action"
           type="button"
           aria-label="New room"
           title="Create a new Herdr workspace"
+          disabled={!layoutReady}
           style={{ left: `${layout.officeWidth / 2 - 28}px`, top: `${roomBottom + 8}px` }}
           onClick={() => context.onCreateRoom(selectedRoomKey ?? undefined)}
         >
@@ -1019,6 +1054,7 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
     (record.roomAlignment === "left" ||
       record.roomAlignment === "center" ||
       record.roomAlignment === "right") &&
+    (record.longRoomTitleMode === "expand" || record.longRoomTitleMode === "compact") &&
     typeof record.canCreateSeat === "function" &&
     typeof record.onNewSeat === "function" &&
     typeof record.canCreateRoom === "function" &&
@@ -1036,6 +1072,7 @@ function WorldAgentBar({
   projection,
   selectedKey,
   barWidth,
+  barHeight,
   onSelect,
   onActivateAgent,
 }: {
@@ -1043,6 +1080,7 @@ function WorldAgentBar({
   projection: HerdrOfficeProjection;
   selectedKey: string | null;
   barWidth: number;
+  barHeight: number;
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
 }) {
@@ -1050,11 +1088,15 @@ function WorldAgentBar({
   const blockedCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "blocked").length;
   const overflowCount = projection.coverage.omittedBarAgents;
   const columns = Math.max(3, Math.floor(Math.max(0, barWidth - 106) / 56));
+  const rows = Math.max(2, Math.floor(Math.max(1, barHeight - 102) / 56));
   return (
     <section
       className={`world-office-overview${className ? ` ${className}` : ""}`}
       aria-label="Agent Bar"
-      style={{ width: `${barWidth}px` }}
+      style={{
+        width: `${barWidth}px`,
+        height: `${barHeight}px`,
+      }}
     >
       <div className="world-overview-heading">
         <strong>Agent Bar</strong>
@@ -1063,7 +1105,10 @@ function WorldAgentBar({
       <ul
         className="world-agent-bar"
         aria-label="Agent Bar"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
       >
         {projection.barAgents.length === 0 ? (
           <li className="world-agent-bar-empty">No completed or waiting agents</li>

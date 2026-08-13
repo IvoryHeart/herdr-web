@@ -996,6 +996,11 @@ button {
   pointer-events: none;
 }
 
+.world-room-actions-stale {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .world-room-overlay-action {
   display: inline-grid;
   width: 20px;

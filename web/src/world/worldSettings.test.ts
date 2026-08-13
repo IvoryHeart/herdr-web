@@ -2,9 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasStoredWorldSettings,
   normalizeWorldPrometheusUrl,
+  normalizeWorldLongRoomTitleMode,
   normalizeWorldRoomAlignment,
+  readWorldLayoutSettings,
+  readWorldLongRoomTitleMode,
   readWorldSettings,
   readWorldRoomAlignment,
+  writeWorldLayoutSettings,
+  writeWorldLongRoomTitleMode,
   writeWorldRoomAlignment,
   writeWorldSettings,
 } from "./worldSettings";
@@ -65,5 +70,37 @@ describe("Office settings", () => {
     expect(normalizeWorldRoomAlignment("unexpected")).toBe("left");
     writeWorldRoomAlignment("right");
     expect(readWorldRoomAlignment()).toBe("right");
+  });
+
+  it("preserves the complete layout record when either field changes", () => {
+    let value: string | null = null;
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => value),
+      setItem: vi.fn((_key: string, next: string) => {
+        value = next;
+      }),
+    });
+
+    writeWorldLayoutSettings({ roomAlignment: "center", longRoomTitleMode: "compact" });
+    writeWorldRoomAlignment("right");
+    expect(readWorldLayoutSettings()).toEqual({ roomAlignment: "right", longRoomTitleMode: "compact" });
+    writeWorldLongRoomTitleMode("expand");
+    expect(readWorldLayoutSettings()).toEqual({ roomAlignment: "right", longRoomTitleMode: "expand" });
+    expect(readWorldLongRoomTitleMode()).toBe("expand");
+  });
+
+  it("normalizes missing or malformed sibling values independently", () => {
+    let value = JSON.stringify({ roomAlignment: "right", longRoomTitleMode: "invalid" });
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => value),
+      setItem: vi.fn((_key: string, next: string) => {
+        value = next;
+      }),
+    });
+
+    expect(readWorldLayoutSettings()).toEqual({ roomAlignment: "right", longRoomTitleMode: "expand" });
+    expect(normalizeWorldLongRoomTitleMode("compact")).toBe("compact");
+    writeWorldLayoutSettings({ longRoomTitleMode: "compact" });
+    expect(readWorldLayoutSettings()).toEqual({ roomAlignment: "right", longRoomTitleMode: "compact" });
   });
 });

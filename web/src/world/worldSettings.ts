@@ -1,7 +1,11 @@
 import type { BridgeId, BridgeRuntime } from "../bridge";
 import { apiErrorMessage } from "../bridgeApi";
 import { fetchWithTimeout } from "../fetchWithTimeout";
-import type { OfficeRoomAlignment } from "./officeGeometry";
+import {
+  DEFAULT_OFFICE_LONG_ROOM_TITLE_MODE,
+  DEFAULT_OFFICE_ROOM_ALIGNMENT,
+} from "./officeGeometry";
+import type { OfficeLongRoomTitleMode, OfficeRoomAlignment } from "./officeGeometry";
 
 const WORLD_SETTINGS_STORAGE_KEY = "herdrWeb.worldSettings.v1";
 const WORLD_LAYOUT_SETTINGS_STORAGE_KEY = "herdrWeb.worldLayout.v1";
@@ -16,32 +20,70 @@ export type WorldObservabilityConfiguration = {
   endpoint: string | null;
 };
 
+export type WorldLayoutSettings = {
+  roomAlignment: OfficeRoomAlignment;
+  longRoomTitleMode: OfficeLongRoomTitleMode;
+};
+
 export function normalizeWorldRoomAlignment(value: unknown): OfficeRoomAlignment {
   return value === "center" || value === "right" ? value : "left";
 }
 
-export function readWorldRoomAlignment(): OfficeRoomAlignment {
+export function normalizeWorldLongRoomTitleMode(value: unknown): OfficeLongRoomTitleMode {
+  return value === "compact" ? "compact" : DEFAULT_OFFICE_LONG_ROOM_TITLE_MODE;
+}
+
+export function readWorldLayoutSettings(): WorldLayoutSettings {
   try {
     const raw = globalThis.localStorage?.getItem(WORLD_LAYOUT_SETTINGS_STORAGE_KEY);
     if (!raw) {
-      return "left";
+      return {
+        roomAlignment: DEFAULT_OFFICE_ROOM_ALIGNMENT,
+        longRoomTitleMode: DEFAULT_OFFICE_LONG_ROOM_TITLE_MODE,
+      };
     }
-    const parsed = JSON.parse(raw) as { roomAlignment?: unknown };
-    return normalizeWorldRoomAlignment(parsed.roomAlignment);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      roomAlignment: normalizeWorldRoomAlignment(parsed.roomAlignment),
+      longRoomTitleMode: normalizeWorldLongRoomTitleMode(parsed.longRoomTitleMode),
+    };
   } catch {
-    return "left";
+    return {
+      roomAlignment: DEFAULT_OFFICE_ROOM_ALIGNMENT,
+      longRoomTitleMode: DEFAULT_OFFICE_LONG_ROOM_TITLE_MODE,
+    };
   }
 }
 
-export function writeWorldRoomAlignment(roomAlignment: OfficeRoomAlignment) {
+export function writeWorldLayoutSettings(patch: Partial<WorldLayoutSettings>) {
   try {
-    globalThis.localStorage?.setItem(
-      WORLD_LAYOUT_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ roomAlignment: normalizeWorldRoomAlignment(roomAlignment) }),
-    );
+    const current = readWorldLayoutSettings();
+    const next = {
+      roomAlignment: normalizeWorldRoomAlignment(patch.roomAlignment ?? current.roomAlignment),
+      longRoomTitleMode: normalizeWorldLongRoomTitleMode(
+        patch.longRoomTitleMode ?? current.longRoomTitleMode,
+      ),
+    } satisfies WorldLayoutSettings;
+    globalThis.localStorage?.setItem(WORLD_LAYOUT_SETTINGS_STORAGE_KEY, JSON.stringify(next));
   } catch {
     // Browser storage can be unavailable in private or locked-down contexts.
   }
+}
+
+export function readWorldRoomAlignment(): OfficeRoomAlignment {
+  return readWorldLayoutSettings().roomAlignment;
+}
+
+export function writeWorldRoomAlignment(roomAlignment: OfficeRoomAlignment) {
+  writeWorldLayoutSettings({ roomAlignment });
+}
+
+export function readWorldLongRoomTitleMode(): OfficeLongRoomTitleMode {
+  return readWorldLayoutSettings().longRoomTitleMode;
+}
+
+export function writeWorldLongRoomTitleMode(longRoomTitleMode: OfficeLongRoomTitleMode) {
+  writeWorldLayoutSettings({ longRoomTitleMode });
 }
 
 export function normalizeWorldPrometheusUrl(value: string) {

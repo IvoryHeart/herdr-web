@@ -173,6 +173,7 @@ import { WorldConversationBubble } from "./world/WorldConversationBubble";
 import { WorldSettingsDialog } from "./world/WorldSettingsDialog";
 import {
   hasStoredWorldSettings,
+  readWorldLongRoomTitleMode,
   readWorldSettings,
   readWorldRoomAlignment,
   updateWorldObservabilityConfiguration,
@@ -1225,6 +1226,9 @@ export function App() {
     EMPTY_OFFICE_OBSERVABILITY,
   );
   const [worldRoomAlignment, setWorldRoomAlignment] = useState(() => readWorldRoomAlignment());
+  const [worldLongRoomTitleMode, setWorldLongRoomTitleMode] = useState(
+    () => readWorldLongRoomTitleMode(),
+  );
   const [worldConversationTargets, setWorldConversationTargets] = useState<WorldConversationTarget[]>(
     () => readWorldConversationTargets(),
   );
@@ -1305,6 +1309,7 @@ export function App() {
   const markWorldSettingsSaved = useCallback(() => {
     setWorldObservabilityRevision((revision) => revision + 1);
     setWorldRoomAlignment(readWorldRoomAlignment());
+    setWorldLongRoomTitleMode(readWorldLongRoomTitleMode());
   }, []);
   const synchronizeStoredWorldSettings = useCallback(async (
     runtimes: readonly BridgeRuntime[],
@@ -5179,6 +5184,7 @@ export function App() {
     onFocusConversation: focusWorldConversation,
     agentActivityTransitions,
     roomAlignment: worldRoomAlignment,
+    longRoomTitleMode: worldLongRoomTitleMode,
     canCreateSeat: canCreateWorldSeat,
     onNewSeat: openNewWorldSeat,
     canCreateRoom: canCreateWorldRoom,
