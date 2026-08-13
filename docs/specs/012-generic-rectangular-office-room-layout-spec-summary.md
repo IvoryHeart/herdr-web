@@ -28,3 +28,9 @@ The approved parent specification, Extensions 001 and 002, and their implementat
 - **Implemented:** The room-header renderer now reserves the edit/trash action zone for every room and applies renderer-font measurement with deterministic ellipsis to both workspace and host labels before that boundary. This covers the asymmetric collision visible only on some room titles.
 - **Evidence:** Fresh 1440×900 and 375×812 captures were inspected after rebuilding `web/dist`; all visible room headers keep text separate from their action controls. `npm run lint`, the full 353-test web suite, and `npm run build` pass.
 - **Drift from approved spec:** None.
+
+### 2026-08-13 — Separate title boxes from room actions
+
+- **Implemented:** Room header geometry now distinguishes the root title-box width from the action group width/gap. The edit and delete controls are positioned outside the title box while remaining inside the room's header-safe area; normal titles are no longer truncated merely to reserve those controls.
+- **Evidence:** Fresh 1440×900 and 375×812 screenshots were captured and inspected. All visible rooms show complete headings where capacity allows, with edit/delete controls outside the title backgrounds. Focused layout tests now cover the title-box/action-width invariant; lint, focused tests, and production build pass.
+- **Drift from approved spec:** None.

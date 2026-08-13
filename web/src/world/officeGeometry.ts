@@ -46,7 +46,7 @@ export const OFFICE_GEOMETRY = Object.freeze({
   roomHeaderSafeInset: 8,
   roomHeaderActionWidth: 44,
   roomHeaderActionGap: 8,
-  roomHeaderChromeWidth: 94,
+  roomHeaderChromeWidth: 130,
   roomHeaderChromeHeight: 34,
   overflowMarkerMinWidth: 96,
   overflowMarkerMinHeight: 20,
@@ -87,6 +87,9 @@ export type OfficeRoomHeaderLayout = {
   workspace: string;
   host: string;
   width: number;
+  titleBoxWidth: number;
+  actionWidth: number;
+  actionGap: number;
   height: number;
   emergencyEllipsis: boolean;
 };

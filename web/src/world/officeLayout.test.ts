@@ -29,6 +29,20 @@ function contains(outer: { x: number; y: number; width: number; height: number }
 
 describe("Office layout contract", () => {
   it("measures expanded and compact headers without letting labels escape the room cap", () => {
+    const normal = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room()],
+    });
+    const normalHeader = normal.roomHeaders[0]!;
+    expect(normalHeader.emergencyEllipsis).toBe(false);
+    expect(normalHeader.workspace).toContain("2025");
+    expect(normalHeader.titleBoxWidth).toBeLessThan(normalHeader.width);
+    expect(normalHeader.width).toBe(
+      normalHeader.titleBoxWidth + normalHeader.actionWidth + normalHeader.actionGap,
+    );
+
     const expanded = resolveOfficeGeometry({
       availableViewportWidth: 1000,
       maximumExpandedRoomWidth: 300,

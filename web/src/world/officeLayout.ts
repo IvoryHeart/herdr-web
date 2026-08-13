@@ -520,28 +520,36 @@ export function resolveOfficeRoomHeader(
   let visualWorkspace = compact ? compactOfficeLabel(workspace, 18) : workspace;
   let visualHost = compact ? compactOfficeLabel(host, 16) : host;
   const fixedWidth = input.style.fixedHeaderChromeWidth;
+  const actionWidth = OFFICE_GEOMETRY.roomHeaderActionWidth;
+  const actionGap = OFFICE_GEOMETRY.roomHeaderActionGap;
+  const titleChromeWidth = Math.max(0, fixedWidth - actionWidth - actionGap);
   const maxWidth = Math.max(fixedWidth, input.maximumExpandedRoomWidth);
-  let width = Math.max(
+  let titleBoxWidth = Math.max(
     room.headerMinWidth ?? 0,
-    fixedWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
+    titleChromeWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
   );
+  let width = titleBoxWidth + actionWidth + actionGap;
   let emergencyEllipsis = false;
   if (width > maxWidth) {
     emergencyEllipsis = true;
-    const available = Math.max(0, maxWidth - fixedWidth);
+    const available = Math.max(0, maxWidth - titleChromeWidth - actionWidth - actionGap);
     const workspaceBudget = Math.floor(available * 0.52);
     const hostBudget = Math.max(0, available - workspaceBudget);
     visualWorkspace = fitOfficeLabel(workspace, workspaceBudget);
     visualHost = fitOfficeLabel(host, hostBudget);
-    width = Math.min(
-      maxWidth,
-      fixedWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
+    titleBoxWidth = Math.min(
+      maxWidth - actionWidth - actionGap,
+      titleChromeWidth + measureOfficeText(visualWorkspace) + measureOfficeText(visualHost),
     );
+    width = titleBoxWidth + actionWidth + actionGap;
   }
   return {
     workspace: visualWorkspace,
     host: visualHost,
     width: Math.max(fixedWidth, Math.ceil(width)),
+    titleBoxWidth: Math.max(titleChromeWidth, Math.ceil(titleBoxWidth)),
+    actionWidth,
+    actionGap,
     height: Math.max(OFFICE_GEOMETRY.roomHeaderHeight, input.style.fixedHeaderChromeHeight),
     emergencyEllipsis,
   };

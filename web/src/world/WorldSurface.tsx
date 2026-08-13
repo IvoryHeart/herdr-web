@@ -961,12 +961,16 @@ function WorldRoomActions({
           return null;
         }
         const ready = layoutReady;
+        const titleBoxWidth = rect.header?.titleBoxWidth ?? Math.max(0, rect.headerRect.width - 52);
         return (
           <div
             key={room.key}
             className={`world-room-actions${ready ? "" : " world-room-actions-stale"}`}
             aria-hidden={!ready}
-            style={{ left: `${rect.headerRect.x + rect.headerRect.width - 50}px`, top: `${rect.headerRect.y + 2}px` }}
+            style={{
+              left: `${rect.headerRect.x + titleBoxWidth + (rect.header?.actionGap ?? OFFICE_GEOMETRY.roomHeaderActionGap)}px`,
+              top: `${rect.headerRect.y + 2}px`,
+            }}
           >
             <button
               className="world-room-overlay-action"
