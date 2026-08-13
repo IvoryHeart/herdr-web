@@ -94,7 +94,7 @@ An `inputGeneration` SHALL contain an opaque generation identifier and a
 canonical digest of the complete normalized input. The normalized input MUST
 include fonts and font-readiness state, action capabilities, room/content
 descriptors, title mode, room alignment, viewport width, logical-canvas
-minimums/caps, and all other geometry-affecting width inputs. Reusing one
+minimums/caps, and all other geometry-affecting inputs. Reusing one
 generation identifier with a different normalized-input digest MUST be
 rejected. The controller transitions SHALL be:
 
