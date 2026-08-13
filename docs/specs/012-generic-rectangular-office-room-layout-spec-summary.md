@@ -15,3 +15,10 @@
 ## Delivery record
 
 The approved parent specification, Extensions 001 and 002, and their implementation are retained as separate immutable history. The observability synchronization commit was pushed before the layout implementation commit; the layout implementation commit is local on the current feature branch pending the repository owner's push decision.
+
+### 2026-08-13 — Visual header correction
+
+- **Implemented:** Commit [`6bff148`](../../commit/6bff148) removes a decorative room-window drawing that occupied the title band and makes the header background span the complete safe header rectangle, keeping title text and action controls visually separate.
+- **Evidence:** `npm run lint` and `npm run build` passed; the running bridge serves the rebuilt `web/dist` asset.
+- **Constraints / operational notes:** Refresh the existing `localhost:8787/world` tab to load the rebuilt asset.
+- **Drift from approved spec:** None.
