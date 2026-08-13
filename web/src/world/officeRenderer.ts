@@ -1308,7 +1308,7 @@ function drawRoomHeading(
   });
   const hyphenOne = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
   const hyphenTwo = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
-  const width = Math.min(rect.headerRect.width, Math.max(header.width, 120));
+  const width = rect.headerRect.width;
   const x = rect.headerRect.x;
   const y = rect.headerRect.y;
   const background = new Graphics();
@@ -1436,7 +1436,6 @@ function drawRoom(
   if (rect.overflowMarkerRect) {
     drawRoomOverflowMarker(parent, rect.overflowMarkerRect, theme.accent);
   }
-  drawWindow(parent, rect.x + rect.width / 2 - 18, rect.y + 17);
   drawPlant(parent, rect.x + 14, rect.y + rect.height - 18, theme.accent);
   drawPlant(parent, rect.x + rect.width - 16, rect.y + rect.height - 18, theme.accent);
 
@@ -2055,16 +2054,6 @@ function drawDesk(
     animated.push({ kind: "monitor", node: glow, baseAlpha: 0.18, phase: animated.length * 7 });
   }
   return desk;
-}
-
-function drawWindow(parent: Container, x: number, y: number) {
-  const windowNode = new Graphics();
-  windowNode.roundRect(x, y, 36, 23, 3).fill(0x504955);
-  windowNode.rect(x + 3, y + 3, 14, 7).fill(0x3f6888);
-  windowNode.rect(x + 19, y + 3, 14, 7).fill(0x537b96);
-  windowNode.rect(x + 3, y + 12, 14, 7).fill(0x355d7c);
-  windowNode.rect(x + 19, y + 12, 14, 7).fill(0x446f8d);
-  parent.addChild(windowNode);
 }
 
 function drawPlant(parent: Container, x: number, y: number, accent: number) {
