@@ -396,6 +396,10 @@ export async function createOfficeRenderer(
         );
       }
     });
+    // Room floors/borders must not cover the road bands between rows and
+    // columns. The road pass uses the resolved outer rectangles, so it is
+    // safe to paint after rooms without entering their mathematical bounds.
+    drawRoomRoads(app.stage, layout);
     if (!diagnostics.ready) {
       officeDebug("renderer:scene-ready", {
         rooms: layout.rooms.length,
@@ -1216,7 +1220,6 @@ function drawHallways(stage: Container, layout: OfficeLayout) {
     hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
   }
   stage.addChild(hall);
-  drawRoomRoads(stage, layout);
 }
 
 function drawRoomRoads(stage: Container, layout: OfficeLayout) {

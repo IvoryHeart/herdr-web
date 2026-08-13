@@ -75,7 +75,11 @@ describe("Pixel Office geometry", () => {
         .filter(({ row }) => row === firstRoom.row)
         .map(({ y, height }) => y + height),
     );
-    expect(finalRowRoom.y - firstRowBottom).toBe(OFFICE_GEOMETRY.roomRowGap);
+    const roadGap = finalRowRoom.y - firstRowBottom;
+    expect(roadGap).toBe(OFFICE_GEOMETRY.roomRowGap);
+    expect(roadGap).toBeGreaterThanOrEqual(
+      OFFICE_GEOMETRY.shadowAllowance * 2 + OFFICE_GEOMETRY.selectionStrokeAllowance * 2,
+    );
     expect(deskAnchor(finalRowRoom, 0).stationSpan)
       .toBe(deskAnchor(firstRoom, 0).stationSpan);
   });

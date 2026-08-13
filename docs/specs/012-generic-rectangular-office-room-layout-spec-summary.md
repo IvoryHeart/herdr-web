@@ -40,3 +40,9 @@ The approved parent specification, Extensions 001 and 002, and their implementat
 - **Implemented:** Room width now resolves from the maximum of the complete header footprint (centered title box, adjacent rename control, and right-corner close reserve) and the widest desk/standing row. Header text measurement uses the uppercase form rendered by Pixi. The title box is centered on the room's top border, rename remains immediately beside it, and close is anchored to the room header's top-right safe edge.
 - **Evidence:** Fresh 1704×1400 desktop and 375×812 narrow captures were inspected after rebuilding `web/dist`; no title text or header control escapes its room. Focused geometry tests cover header-group centering, close containment, and header-versus-desk sizing; lint and production build pass.
 - **Drift from approved spec:** None.
+
+### 2026-08-14 — Preserve roads between room rows
+
+- **Implemented:** The inter-room road pass now renders after room floors and borders, while using the resolved room rectangles for its horizontal and vertical gaps. Room-row geometry also asserts enough clearance for room shadows and selection strokes.
+- **Evidence:** Fresh desktop capture inspected after rebuilding `web/dist`; the horizontal road remains continuous between the two room rows. Focused geometry tests, lint, and production build pass.
+- **Drift from approved spec:** None.
