@@ -1,0 +1,17 @@
+# Implementation summary — Generic rectangular Office room layout
+
+- **Parent spec:** [`012-generic-rectangular-office-room-layout-spec.md`](012-generic-rectangular-office-room-layout-spec.md)
+- **Implemented at:** 2026-08-13
+- **Implementation status:** Complete
+
+### 2026-08-13 — Delivered implementation
+
+- **Implemented:** Commit [`657e560`](../../commit/657e560) adds the bounded pure Office geometry resolver, publication controller, immutable layout revisions, stale-canvas acknowledgement gating, title-safe room headers, nested room bounds, wrapped CEO reception/content layout, vertically elastic Agent Bar, logical-canvas scrolling, synchronized DOM/Pixi geometry, accessible overflow markers, and preserving Office layout settings. Apache-derived geometry and drawing files carry the required downstream modification notices. Observability/settings synchronization was delivered separately in [`241c2cb`](../../commit/241c2cb), which is pushed to the feature branch.
+- **Evidence:** `npm run lint`; `npm test` — 51 files, 353 tests; `npm run build`; targeted Playwright checks for persistent World navigation and narrow horizontal Office scrolling — 2 passed; room capability actions — 1 passed; narrow and desktop visual capture checks — passed. Focused layout tests cover 19 geometry/publication/bounded-content cases, including A → B → A revisions, stale acknowledgements, emergency ellipsis, CEO wrapping, nested bounds, settings preservation, and bounded omission samples.
+- **Constraints / operational notes:** The approved logical-scroll mode remains in effect: the viewport bounds the scroll container, while the resolved logical canvas may be wider. Mobile-specific composition remains deferred by the approved contract. Existing generated evidence images and the pre-existing repository analysis file were intentionally left outside the implementation commit.
+- **Drift from approved spec:** None for the implemented slice. Future CEO boards/control types are supported by bounded synthetic content descriptors in the pure geometry contract; the current renderer continues to draw the approved existing CEO boards/receptions and does not invent a new product content type.
+- **Follow-up extension:** None.
+
+## Delivery record
+
+The approved parent specification, Extensions 001 and 002, and their implementation are retained as separate immutable history. The observability synchronization commit was pushed before the layout implementation commit; the layout implementation commit is local on the current feature branch pending the repository owner's push decision.
