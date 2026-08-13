@@ -77,17 +77,18 @@ const published = publisher.publish(inputGeneration, geometry); // controller
 ```
 
 `resolveOfficeGeometry` SHALL be deterministic and side-effect free. It SHALL
-retain mutable state, read clocks or randomness, inspect DOM/Pixi state, perform
-I/O, or produce externally visible side effects. It MAY allocate the returned
+NOT retain mutable state, read clocks or randomness, inspect DOM/Pixi state,
+perform I/O, or produce externally visible side effects. It MAY allocate the returned
 geometry, diagnostics, omission records, and other result objects. It returns
-geometry plus normalized diagnostics and omission data.
+geometry plus its canonical normalized-input digest, normalized diagnostics,
+and omission data.
 
-The publication controller SHALL own publication state. It SHALL increment the
-layout revision exactly once when a new normalized-input generation is
-published, retain the same revision for repeated publication of the same
-generation, and return one immutable published value containing the revision,
-generation identity, and geometry. The controller, not the caller, assigns the
-revision.
+The publication controller SHALL own publication state. `layoutRevision` SHALL
+increment if and only if the canonical normalized-input digest differs from the
+currently published digest. It SHALL retain the same revision for repeated
+publication of the same digest and return one immutable published value
+containing the revision, generation identity, validated digest, and geometry.
+The controller, not the caller, assigns the revision.
 
 An `inputGeneration` SHALL contain an opaque generation identifier and a
 canonical digest of the complete normalized input. The normalized input MUST
@@ -98,10 +99,19 @@ generation identifier with a different normalized-input digest MUST be
 rejected. The controller transitions SHALL be:
 
 - repeated `A → A`: no revision increment;
-- `A → B → A`: two increments, one for each changed publication; and
+- `A → B → A`, where A and B have different canonical digests: two increments,
+  one for each digest transition; and
 - a new generation identifier with an identical normalized digest: accepted as
-  a publication request but does not increment while the current normalized
-  generation is unchanged.
+  a no-op publication request, returns the existing immutable published value,
+  and does not increment while the current normalized generation is unchanged.
+  Generation identifiers detect accidental reuse; they are not revision
+  identity.
+
+The publisher SHALL validate that `geometry.inputDigest` equals
+`inputGeneration.canonicalDigest` before publication. A mismatch MUST be
+rejected without changing the current published layout or revision; callers
+cannot publish geometry resolved from one input with another generation's
+identity.
 
 The controller SHALL separately track mutable `canvasRenderedRevision` state;
 that acknowledgement MUST NOT be stored inside the immutable published value.
@@ -109,6 +119,11 @@ The DOM overlay MUST be hidden or non-interactive until both the published
 `layoutRevision` and controller `canvasRenderedRevision` equal the published
 layout revision. Receiving the same object reference alone is not proof that
 Pixi has rendered it.
+
+`ackCanvasRendered(revision)` SHALL accept only the currently published
+`layoutRevision`. Older acknowledgements and acknowledgements for a future or
+unknown revision SHALL be ignored or rejected and MUST NOT change or regress
+`canvasRenderedRevision`.
 
 #### Scenario: Identical geometry is published twice
 
@@ -139,6 +154,23 @@ Pixi has rendered it.
   reports completion
 - **THEN** the DOM overlay remains hidden or non-interactive until
   `canvasRenderedRevision` also becomes `N+1`.
+
+#### Scenario: A stale canvas acknowledgement arrives
+
+- **GIVEN** the current published revision is `N+1` and the canvas has not yet
+  acknowledged it
+- **WHEN** `ackCanvasRendered(N)` or `ackCanvasRendered(N+2)` is received
+- **THEN** the acknowledgement is ignored or rejected, and
+  `canvasRenderedRevision` remains unchanged until `ackCanvasRendered(N+1)` is
+  received.
+
+#### Scenario: Geometry and generation digests disagree
+
+- **GIVEN** geometry carries `inputDigest: digest-A` and the publication
+  request carries `canonicalDigest: digest-B`
+- **WHEN** the publisher validates the request
+- **THEN** publication is rejected without changing the current layout or
+  revision.
 
 ### Requirement: Normalize widths, caps, and capacities deterministically
 
@@ -201,14 +233,22 @@ never greater than their corresponding canvas caps.
 
 The fixed header chrome width (icons, actions, gaps, safe insets, and stroke
 allowance) MUST be included in `minimumRoomWidth` before text measurement or
-emergency ellipsis. The immutable room ceiling MUST be greater than or equal
-to that normalized fixed chrome width. If a future style change violates this
-compile-time invariant, normalization SHALL return `invalid-style-capacity`
-and the room SHALL not render out-of-bounds.
+emergency ellipsis. Fixed header chrome height, the overflow-marker minimum
+width and height, and their safe gaps MUST likewise be included in
+`minimumRoomWidth` and `minimumRoomHeight` respectively. The immutable room
+ceiling MUST be greater than or equal to the normalized fixed chrome width and
+height. If a future style change violates either invariant, normalization SHALL
+return `invalid-style-capacity` as a top-level normalization error, not as a
+content-item omission reason. The resolver SHALL return a bounded fallback
+geometry with decorative/content artwork disabled and an accessible in-bounds
+“Office layout unavailable” marker; it SHALL not render normal room content
+out-of-bounds.
 
-`maxContentItems` SHALL be a finite positive integer capacity. The initial
-bounded default and hard cap are both `128`; descriptors may request fewer but
-not more. The resolver SHALL return aggregate omission counts and, for
+`maxContentItems` SHALL be a finite integer capacity in the inclusive range
+`1…128`. The initial bounded default and hard cap are both `128`; descriptors
+may request fewer but not more. Normalization SHALL clamp the effective value
+to `1…128`; invalid or missing values use the finite default. The resolver
+SHALL return aggregate omission counts and, for
 diagnostics, at most eight stable omitted-item IDs per reason/importance. It
 MUST NOT return an unbounded list of omitted items.
 
@@ -219,6 +259,23 @@ MUST NOT return an unbounded list of omitted items.
 - **THEN** it becomes the documented finite default or non-negative floored
   value, the ordering invariant holds, and the pure resolver receives only
   finite non-negative integers.
+
+#### Scenario: Style capacity is internally inconsistent
+
+- **GIVEN** normalized fixed header or overflow-marker dimensions exceed the
+  normalized room minimum/capacity
+- **WHEN** the input is normalized
+- **THEN** the result reports top-level `invalid-style-capacity`, disables normal
+  decorative/content artwork, and provides an in-bounds accessible “Office
+  layout unavailable” fallback without emitting an item omission reason.
+
+#### Scenario: Content-item capacity is requested outside its range
+
+- **GIVEN** `maxContentItems` is zero, negative, fractional, non-finite, or
+  greater than `128`
+- **WHEN** the input is normalized
+- **THEN** the effective capacity is an integer in `1…128`, using the finite
+  default for invalid/missing values and clamping oversized requests.
 
 ### Requirement: Bound vertical growth and row capacity
 
@@ -277,9 +334,9 @@ resolver SHALL return an omission record with one of these stable reasons:
 
 - `content-item-count-cap` — the bounded item capacity was reached;
 - `required-minimum-exceeds-room-cap` — a required item cannot fit the maximum
-  room width;
+  room width or height;
 - `non-required-minimum-exceeds-room-cap` — a preferred or optional item
-  cannot fit the maximum room width;
+  cannot fit the maximum room width or height;
 - `canvas-capacity-exhausted` — the bounded canvas cannot provide another
   permitted row/region; or
 - `invalid-content-descriptor` — one or more mandatory descriptor fields are
@@ -297,7 +354,9 @@ importance plus only the bounded stable-ID samples described above.
 `invalid-content-descriptor` means that one or more mandatory descriptor fields
 are malformed after normalization, regardless of the item's importance. The
 mandatory fields are stable id, importance, declared order, and finite
-non-negative minimum width and height.
+non-negative minimum width and height. `invalid-style-capacity` is not an item
+omission reason; it is the top-level normalization error and fallback state
+defined above.
 
 #### Scenario: Content exceeds the item capacity
 
@@ -311,7 +370,8 @@ non-negative minimum width and height.
 #### Scenario: A required board exceeds the room cap
 
 - **GIVEN** a required content item has a minimum width greater than
-  `maximumExpandedRoomWidth`
+  `maximumExpandedRoomWidth` or a minimum height greater than
+  `maximumExpandedRoomHeight`
 - **WHEN** the resolver resolves its region
 - **THEN** it returns the item with
   `required-minimum-exceeds-room-cap`, places a bounded accessible overflow
@@ -381,11 +441,13 @@ extension.
 
 The pure geometry function accepts normalized width/capacity inputs and
 bounded descriptors and returns deterministic geometry, child rectangles,
-containment bounds, and omission records. It does not return a monotonic
-revision.
+containment bounds, omission records, top-level normalization diagnostics, and
+the canonical `inputDigest` for the normalized input. It does not return a
+monotonic revision and does not retain publication state.
 
-The stateful publication controller accepts a normalized-input generation and
-pure geometry result and returns an immutable layout with:
+The stateful publication controller accepts a normalized-input generation and a
+pure geometry result whose `inputDigest` it validates against the generation's
+canonical digest. It returns an immutable layout with:
 
 - `layoutRevision`;
 - the normalized width/capacity values;
@@ -393,13 +455,19 @@ pure geometry result and returns an immutable layout with:
 - nested wall/header/content/clip/ink bounds; and
 - omission counts and stable reasons.
 
-The controller separately exposes mutable `canvasRenderedRevision` state; it
-is not a field of the immutable published layout. The normalized input also
+The controller separately exposes mutable `canvasRenderedRevision` state and
+`ackCanvasRendered(revision)`; neither is a field of the immutable published
+layout. Acknowledgements are accepted only for the currently published
+revision and never regress the acknowledgement state. The normalized input also
 includes `minimumLogicalCanvasHeight`, `maximumExpandedCanvasHeight`,
 `minimumRoomHeight`, `maximumExpandedRoomHeight`, and the bounded row/count
 limits. Vertical growth MUST stop at the normalized canvas-height cap or row
 cap; content that cannot be represented receives `canvas-capacity-exhausted`
 and follows the required or non-required omission policy.
+
+`invalid-style-capacity` is a top-level normalization diagnostic. When present,
+the published fallback contains only bounded accessibility/status content and
+does not claim that normal room items were omitted.
 
 The browser-local settings codec remains the complete versioned
 `WorldLayoutSettings` record from Extension 001. Its one-context update
@@ -416,14 +484,17 @@ provider data.
 
 - Pure resolver tests prove deterministic output for identical normalized
   inputs, permitted result allocation, no retained mutable state, and no
-  revision side effects.
+  revision side effects, including a matching canonical input digest.
 - Publication-controller tests prove one revision per normalized generation,
   stable repeated publication, `A → B → A` transitions, rejection of a reused
-  generation id with different normalized inputs, and separate
-  canvas-rendered revision gating.
+  generation id with different normalized inputs, rejection of digest-mismatched
+  geometry, and separate canvas-rendered revision gating including stale and
+  future acknowledgements.
 - Normalization tests cover negative, non-finite, fractional, invalid ordering,
   immutable horizontal and vertical absolute ceilings, row/count caps, and
-  `maxContentItems` inputs.
+  `maxContentItems` inputs plus top-level `invalid-style-capacity` fallback;
+  style-capacity tests include fixed header width/height and overflow-marker
+  width/height requirements.
 - Text tests cover expand-mode emergency ellipsis and full semantic labels.
 - Content tests cover required/preferred/optional ordering, all omission
   reasons, required overflow markers for every required omission path, bounded
