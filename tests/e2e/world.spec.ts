@@ -1,12 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   deskAnchor,
   receptionAgentAnchor,
-  resolveOfficeLayout,
-  resolveReceptionLayout,
   standingAnchor,
 } from "../../web/src/world/officeGeometry";
+import type { PublishedOfficeLayout } from "../../web/src/world/officeLayout";
 import { hostStore } from "./hostStore";
 
 test.describe.configure({ timeout: 90_000 });
@@ -133,7 +132,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     activeApplications: 1,
     activeTickers: 1,
     activeObservers: 1,
-    activeListeners: 5,
+    activeListeners: 6,
     canvases: 1,
     ready: true,
   });
@@ -154,10 +153,14 @@ test("disposes the renderer across ten switches without reconnecting core observ
   });
 
   const appOrigin = new URL(page.url()).origin;
+  const allowedOrigins = new Set([
+    appOrigin,
+    ...hostStore().backends.map(({ baseUrl }) => new URL(baseUrl).origin),
+  ]);
   expect(
     requests.filter((url) => {
       try {
-        return new URL(url).origin !== appOrigin;
+        return !allowedOrigins.has(new URL(url).origin);
       } catch {
         return true;
       }
@@ -323,13 +326,7 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
   await waitForLiveOffice(page);
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [
-    { deskCount: 2, standingCount: 0 },
-    { deskCount: 2, standingCount: 0 },
-  ]);
+  const layout = await publishedOfficeLayout(page);
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
@@ -337,6 +334,19 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   await page.mouse.move(
     (canvasBox?.x ?? 0) + firstDesk.x,
     (canvasBox?.y ?? 0) + firstDesk.nameY + 25,
+  );
+  await expect(page.getByRole("tooltip")).toContainText("Codex A");
+  await expect(page.getByRole("tooltip")).toContainText("Running");
+  const officeScroll = page.locator(".world-stage-scroll");
+  const characterScrollTop = Math.max(0, firstDesk.characterFeetY - 260);
+  await officeScroll.evaluate((element, top) => element.scrollTo({ top, behavior: "auto" }), characterScrollTop);
+  await expect.poll(() => officeScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const visibleCanvasBox = await canvas.boundingBox();
+  expect(visibleCanvasBox).not.toBeNull();
+  const visibleScrollTop = await officeScroll.evaluate((element) => element.scrollTop);
+  await page.mouse.move(
+    (visibleCanvasBox?.x ?? 0) + firstDesk.x,
+    (visibleCanvasBox?.y ?? 0) + firstDesk.characterFeetY - visibleScrollTop - 60,
   );
   await expect(page.getByRole("tooltip")).toContainText("Codex A");
   await expect(page.getByRole("tooltip")).toContainText("Running");
@@ -376,6 +386,33 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   }]);
 });
 
+test("keeps a long Office title contained while preserving its semantic label", async ({
+  page,
+  request,
+}) => {
+  await request.post("http://127.0.0.1:4173/__fixture/state", {
+    data: { hostId: "host-a", snapshotVariant: "long-title" },
+  });
+  await page.goto("/world");
+  await waitForOffice(page);
+
+  const fullTitle = "Research Workspace — " + "An Exceptionally Long Office Title ".repeat(24) + "🚀";
+  const layout = await publishedOfficeLayout(page);
+  const room = layout.rooms[0];
+  const header = room.header;
+  expect(room).toBeDefined();
+  expect(header).toBeDefined();
+  expect(header!.titleBoxX + header!.titleBoxWidth).toBeLessThanOrEqual(room.headerRect.width);
+  expect(header!.renameX).toBeGreaterThanOrEqual(
+    header!.titleBoxX + header!.titleBoxWidth + header!.actionGap - 1,
+  );
+  expect(header!.closeX + header!.closeWidth).toBeLessThanOrEqual(room.headerRect.width);
+  expect(header!.workspace.length).toBeLessThan(fullTitle.length);
+
+  await expect(page.locator('[aria-label="Office room names"]')).toContainText(fullTitle);
+  await expect(page.getByRole("button", { name: `Rename room ${fullTitle}` })).toBeVisible();
+});
+
 test("keeps the live connector visible when the selected agent moves to the Agent Bar", async ({
   page,
   request,
@@ -385,6 +422,13 @@ test("keeps the live connector visible when the selected agent moves to the Agen
   await waitForOffice(page);
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
   await waitForLiveOffice(page);
+
+  const initialLayout = await publishedOfficeLayout(page);
+  const initialAgent = deskAnchor(initialLayout.rooms[0], 0);
+  const stage = page.locator(".world-stage-scroll");
+  const initialScrollTop = Math.max(0, initialAgent.characterFeetY - 300);
+  await stage.evaluate((element, top) => element.scrollTo({ top, behavior: "auto" }), initialScrollTop);
+  await expect.poll(() => stage.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   const bubble = page.locator("[data-world-conversation='open']");
@@ -415,6 +459,8 @@ test("keeps the live connector visible when the selected agent moves to the Agen
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.completionMarkers ?? 0))
     .toBeGreaterThan(0);
+  await stage.evaluate((element) => element.scrollTo({ top: 0, behavior: "auto" }));
+  await expect.poll(() => stage.evaluate((element) => element.scrollTop)).toBe(0);
   await expect(bubble).toBeVisible();
   await expect(agentPath).toHaveCount(1);
   const afterAgentPath = await agentPath.getAttribute("d");
@@ -684,13 +730,7 @@ test("opens the attached terminal when an occupied desk is selected", async ({
   await waitForOffice(page);
   await expect(page.locator(".agent-row").filter({ hasText: "Agent 01" })).toBeVisible();
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [
-    { deskCount: 8, standingCount: 2 },
-    ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
-  ]);
+  const layout = await publishedOfficeLayout(page);
   const desk = deskAnchor(layout.rooms[0], 0);
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const canvasBox = await canvas.boundingBox();
@@ -720,13 +760,7 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
   await page.goto("/world");
   await waitForOffice(page);
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [
-    { deskCount: 8, standingCount: 2 },
-    ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
-  ]);
+  const layout = await publishedOfficeLayout(page);
   const desk = deskAnchor(layout.rooms[0], 7);
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const canvasBox = await canvas.boundingBox();
@@ -834,10 +868,7 @@ test("keeps single-click and empty-desk gestures read-only, then opens a canvas 
   expect(await firstRoom.getAttribute("data-active")).toBe("true");
   expect(terminalSocketUrls(sockets)).toEqual([]);
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 1, standingCount: 0 }]);
+  const layout = await publishedOfficeLayout(page);
   const agent = deskAnchor(layout.rooms[0], 0);
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const position = { x: agent.x, y: agent.characterFeetY - 34 };
@@ -904,10 +935,7 @@ test("creates and manages rooms through capability-gated workspace actions", asy
     params: { focus: true, label: "Research" },
   });
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [{ deskCount: 1, standingCount: 0 }]);
+  const layout = await publishedOfficeLayout(page);
   await page.locator("canvas[data-office-canvas='true']").click({
     position: { x: layout.rooms[0].x + 8, y: layout.rooms[0].y + 8 },
   });
@@ -1002,13 +1030,7 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await page.locator(".agent-row").filter({ hasText: "Agent 02" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
   await expect(page.locator(".world-stage-notice")).toHaveCount(0);
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [
-    { deskCount: 8, standingCount: 2 },
-    ...Array.from({ length: 127 }, () => ({ deskCount: 1, standingCount: 0 })),
-  ]);
+  const layout = await publishedOfficeLayout(page);
   const anchor = standingAnchor(layout.rooms[0], 1);
   const stage = page.locator(".world-stage-scroll");
   const scrollTop = layout.roomStartY - 40;
@@ -1055,13 +1077,7 @@ test("single-clicks then double-clicks the exact colliding host room", async ({
   await expect(hostARoom).toHaveAttribute("data-active", "true");
   expect(terminalSocketUrls(sockets)).toEqual([]);
 
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const layout = resolveOfficeLayout(officeWidth, [
-    { deskCount: 1, standingCount: 0 },
-    { deskCount: 1, standingCount: 0 },
-  ]);
+  const layout = await publishedOfficeLayout(page);
   const hostBRect = layout.rooms[1];
   await page.locator("canvas[data-office-canvas='true']").dblclick({
     position: {
@@ -1141,10 +1157,9 @@ test("revalidates a colliding live agent and opens its exact host in Spaces", as
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
   await expect(page.locator(".world-stage-notice")).toHaveCount(0);
-  const officeWidth = await page.evaluate(
-    () => window.__HERDR_WORLD_RENDERER__?.layout?.officeWidth ?? 1_000,
-  );
-  const hostBReception = resolveReceptionLayout(officeWidth, 2)[1];
+  const layout = await publishedOfficeLayout(page);
+  const hostBReception = layout.ceoBlocks.receptions[1];
+  expect(hostBReception).toBeDefined();
   const waitingAgent = receptionAgentAnchor(hostBReception, 0);
   await page.locator("canvas[data-office-canvas='true']").dblclick({
     position: {
@@ -1186,6 +1201,15 @@ async function waitForOffice(page: import("@playwright/test").Page) {
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.ready ?? false))
     .toBe(true);
   await expect(page.locator("canvas[data-office-canvas='true']")).toHaveCount(1);
+}
+
+async function publishedOfficeLayout(page: Page): Promise<PublishedOfficeLayout> {
+  await expect
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.publishedLayout?.layoutRevision ?? 0))
+    .toBeGreaterThan(0);
+  const layout = await page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.publishedLayout ?? null);
+  expect(layout).not.toBeNull();
+  return layout as PublishedOfficeLayout;
 }
 
 async function waitForLiveOffice(page: import("@playwright/test").Page) {

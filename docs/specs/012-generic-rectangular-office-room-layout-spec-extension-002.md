@@ -90,22 +90,20 @@ publication of the same digest and return one immutable published value
 containing the revision, generation identity, validated digest, and geometry.
 The controller, not the caller, assigns the revision.
 
-An `inputGeneration` SHALL contain an opaque generation identifier and a
-canonical digest of the complete normalized input. The normalized input MUST
-include fonts and font-readiness state, action capabilities, room/content
-descriptors, title mode, room alignment, viewport width, logical-canvas
-minimums/caps, and all other geometry-affecting inputs. Reusing one
-generation identifier with a different normalized-input digest MUST be
-rejected. The controller transitions SHALL be:
+An `inputGeneration` SHALL contain the canonical digest of the complete
+normalized input. The digest is the generation identity; the publisher SHALL
+retain only the currently published digest and layout, not a history of opaque
+generation identifiers. The normalized input MUST include fonts and
+font-readiness state, action capabilities, room/content descriptors, title
+mode, room alignment, viewport width, logical-canvas minimums/caps, and all
+other geometry-affecting inputs. The controller transitions SHALL be:
 
 - repeated `A → A`: no revision increment;
 - `A → B → A`, where A and B have different canonical digests: two increments,
   one for each digest transition; and
-- a new generation identifier with an identical normalized digest: accepted as
-  a no-op publication request, returns the existing immutable published value,
+- a publication request with an identical normalized digest: accepted as a
+  no-op publication request, returns the existing immutable published value,
   and does not increment while the current normalized generation is unchanged.
-  Generation identifiers detect accidental reuse; they are not revision
-  identity.
 
 The publisher SHALL validate that `geometry.inputDigest` equals
 `inputGeneration.canonicalDigest` before publication. A mismatch MUST be
@@ -138,14 +136,6 @@ unknown revision SHALL be ignored or rejected and MUST NOT change or regress
 - **WHEN** generation `A` is published again with the same canonical digest
 - **THEN** the controller increments once for the `B → A` transition rather
   than treating the earlier revision as current.
-
-#### Scenario: A generation identifier is reused inconsistently
-
-- **GIVEN** generation identifier `A` was published with canonical digest
-  `digest-1`
-- **WHEN** the caller reuses identifier `A` with `digest-2`
-- **THEN** the publication controller rejects the request without changing the
-  current published layout or revision.
 
 #### Scenario: Geometry changes before canvas rendering completes
 
@@ -485,11 +475,10 @@ provider data.
 - Pure resolver tests prove deterministic output for identical normalized
   inputs, permitted result allocation, no retained mutable state, and no
   revision side effects, including a matching canonical input digest.
-- Publication-controller tests prove one revision per normalized generation,
-  stable repeated publication, `A → B → A` transitions, rejection of a reused
-  generation id with different normalized inputs, rejection of digest-mismatched
-  geometry, and separate canvas-rendered revision gating including stale and
-  future acknowledgements.
+- Publication-controller tests prove one revision per canonical digest,
+  stable repeated publication, `A → B → A` transitions beyond the old
+  retention boundary, rejection of digest-mismatched geometry, and separate
+  canvas-rendered revision gating including stale and future acknowledgements.
 - Normalization tests cover negative, non-finite, fractional, invalid ordering,
   immutable horizontal and vertical absolute ceilings, row/count caps, and
   `maxContentItems` inputs plus top-level `invalid-style-capacity` fallback;

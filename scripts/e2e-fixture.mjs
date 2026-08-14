@@ -311,7 +311,7 @@ function setFixtureState(hostId, value) {
   const launchCreatesSeat = value.launchCreatesSeat ?? current.launchCreatesSeat;
   if (
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
-    !["default", "empty", "large", "idle-desk"].includes(snapshotVariant) ||
+    !["default", "empty", "large", "idle-desk", "long-title"].includes(snapshotVariant) ||
     (terminalProtocol !== null && terminalProtocol !== 18 && terminalProtocol !== 19) ||
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
@@ -344,6 +344,9 @@ function snapshot(fixture, stateOrVariant = "default") {
   }
   if (variant === "idle-desk") {
     return idleDeskSnapshot(fixture);
+  }
+  if (variant === "long-title") {
+    return longTitleSnapshot(fixture);
   }
   const suffix = fixture.id.at(-1).toUpperCase();
   const result = {
@@ -423,6 +426,16 @@ function snapshot(fixture, stateOrVariant = "default") {
     });
     result.selected_pane_id = "p-launched";
   }
+  return result;
+}
+
+function longTitleSnapshot(fixture) {
+  const result = snapshot(fixture, "default");
+  const title = "Research Workspace — " + "An Exceptionally Long Office Title ".repeat(24) + "🚀";
+  result.workspaces[0].label = title;
+  result.tabs[0].label = `Agents for ${title}`;
+  result.panes[0].label = `Codex A — ${title}`;
+  result.panes[0].display_agent = `Codex A — ${title}`;
   return result;
 }
 

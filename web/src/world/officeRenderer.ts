@@ -12,6 +12,7 @@ import {
   CanvasSource,
   Container,
   Graphics,
+  Rectangle,
   Sprite,
   Text,
   TextStyle,
@@ -141,6 +142,8 @@ export type OfficeRendererDiagnostics = {
     ceoBandHeight: number;
     viewportHeight: number;
   };
+  /** Browser-test and observability hook for the immutable layout consumed by both presenters. */
+  publishedLayout: PublishedOfficeLayout | null;
   completionMarkers: number;
 };
 
@@ -463,17 +466,19 @@ export async function createOfficeRenderer(
     const width = Math.floor(viewportWidth || requestedWidth || 0);
     const roomDescriptors: OfficeGeometryRoomDescriptor[] = currentProjection.rooms.map((room) => {
       const host = currentProjection.hosts.find(({ key }) => key === room.hostKey);
+      const roomTitle = room.accessibleLabel ?? room.displayLabel;
+      const hostTitle = host?.accessibleLabel ?? host?.displayLabel ?? "host";
       const measuredHeader = measureOfficeRoomHeader(
-        room.displayLabel,
-        host?.displayLabel ?? "host",
+        roomTitle,
+        hostTitle,
         currentLongRoomTitleMode,
       );
       return {
         id: room.key,
         role: "work",
         region: "work",
-        title: room.displayLabel,
-        hostTitle: host?.displayLabel ?? "host",
+        title: roomTitle,
+        hostTitle,
         visualTitle: measuredHeader.workspace,
         visualHostTitle: measuredHeader.host,
         headerMinTitleBoxWidth: measuredHeader.titleBoxWidth,
@@ -500,7 +505,7 @@ export async function createOfficeRenderer(
       rooms: roomDescriptors,
     });
     const layout = layoutPublisher.publish(
-      { id: geometry.inputDigest, canonicalDigest: geometry.inputDigest },
+      { canonicalDigest: geometry.inputDigest },
       geometry,
     );
     const viewportHeight = Math.min(
@@ -508,6 +513,7 @@ export async function createOfficeRenderer(
       Math.max(1, scrollElement?.clientHeight ?? layout.totalHeight),
     );
     currentLayout = layout;
+    diagnostics.publishedLayout = layout;
     onLayoutChange(layout);
     lastWidth = layout.officeWidth;
     if (
@@ -695,6 +701,7 @@ export async function createOfficeRenderer(
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
+      diagnostics.publishedLayout = null;
       onLayoutChange(null);
     },
   };
@@ -2046,7 +2053,26 @@ function drawCharacter(
 ) {
   const container = new Container();
   container.position.set(x, feetY);
+  // The sprite texture contains transparent pixels and is not a comfortable
+  // interaction target by itself. Give the whole character silhouette a
+  // stable rectangular hit region so the tooltip follows ordinary pointer
+  // movement over the character, not only opaque texture pixels.
+  container.hitArea = new Rectangle(
+    -30,
+    -OFFICE_GEOMETRY.characterHeight - 8,
+    60,
+    OFFICE_GEOMETRY.characterHeight + 18,
+  );
   addCharacterSprite(container, texture);
+  const hitTarget = new Graphics();
+  hitTarget.rect(
+    -30,
+    -OFFICE_GEOMETRY.characterHeight - 8,
+    60,
+    OFFICE_GEOMETRY.characterHeight + 18,
+  ).fill({ color: 0xffffff, alpha: 0.0001 });
+  makeInteractive(hitTarget, key, onSelect, onActivateAgent);
+  container.addChild(hitTarget);
   if (selectedKey === key) {
     const selected = new Graphics();
     selected.ellipse(0, -2, 25, 8).stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
@@ -2388,6 +2414,7 @@ function ensureDiagnostics(): OfficeRendererDiagnostics {
       lastError: null,
       animation: { characters: 0, monitors: 0, statuses: 0 },
       layout: null,
+      publishedLayout: null,
       completionMarkers: 0,
     };
   }

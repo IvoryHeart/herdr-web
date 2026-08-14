@@ -150,8 +150,8 @@ describe("Office layout contract", () => {
       rooms: [room()],
     };
     const first = resolveOfficeGeometry(input);
-    const publishedA = publisher.publish({ id: "generation-a", canonicalDigest: first.inputDigest }, first);
-    const same = publisher.publish({ id: "generation-a-2", canonicalDigest: first.inputDigest }, first);
+    const publishedA = publisher.publish({ canonicalDigest: first.inputDigest }, first);
+    const same = publisher.publish({ canonicalDigest: first.inputDigest }, first);
     expect(same).toBe(publishedA);
     expect(publishedA.layoutRevision).toBe(1);
     expect(publisher.ackCanvasRendered(0)).toBe(false);
@@ -159,17 +159,15 @@ describe("Office layout contract", () => {
     expect(publisher.isCanvasReady(publishedA.layoutRevision)).toBe(true);
 
     const second = resolveOfficeGeometry({ ...input, roomAlignment: "center" });
-    const publishedB = publisher.publish({ id: "generation-b", canonicalDigest: second.inputDigest }, second);
+    const publishedB = publisher.publish({ canonicalDigest: second.inputDigest }, second);
     expect(publishedB.layoutRevision).toBe(2);
     expect(publisher.ackCanvasRendered(publishedA.layoutRevision)).toBe(false);
     expect(publisher.ackCanvasRendered(publishedB.layoutRevision + 1)).toBe(false);
     expect(publisher.canvasRenderedRevision).toBe(publishedA.layoutRevision);
 
-    const backToA = publisher.publish({ id: "generation-a-3", canonicalDigest: first.inputDigest }, first);
+    const backToA = publisher.publish({ canonicalDigest: first.inputDigest }, first);
     expect(backToA.layoutRevision).toBe(3);
-    expect(() => publisher.publish({ id: "generation-b", canonicalDigest: first.inputDigest }, first))
-      .toThrow(/reused with different input/);
-    expect(() => publisher.publish({ id: "generation-c", canonicalDigest: "wrong" }, first))
+    expect(() => publisher.publish({ canonicalDigest: "wrong" }, first))
       .toThrow(/does not match/);
   });
 
@@ -181,10 +179,10 @@ describe("Office layout contract", () => {
       rooms: [room("published")],
     });
     const published = new OfficeLayoutPublisher().publish(
-      { id: "published-generation", canonicalDigest: result.inputDigest },
+      { canonicalDigest: result.inputDigest },
       result,
     );
-    expect(published.generationId).toBe("published-generation");
+    expect(published.generationId).toBe(result.inputDigest);
     expect(published.normalizedInput.minimumLogicalCanvasWidth).toBeDefined();
     expect(published.roomHeaders).toEqual(result.roomHeaders);
     expect(published.rows).toEqual(result.rows);
@@ -551,16 +549,20 @@ describe("Office layout contract", () => {
     expect(result.inputDigest).toMatch(/^office-v1-[0-9a-f]{16}$/);
 
     const publisher = new OfficeLayoutPublisher();
-    const first = publisher.publish({ id: "large-generation", canonicalDigest: result.inputDigest }, result);
+    const first = publisher.publish({ canonicalDigest: result.inputDigest }, result);
     for (let index = 0; index < OFFICE_GEOMETRY.maxRooms * 2; index += 1) {
-      publisher.publish({ id: `bounded-generation-${index}`, canonicalDigest: result.inputDigest }, result);
+      const next = resolveOfficeGeometry({
+        availableViewportWidth: 1000,
+        titleMode: "expand",
+        roomAlignment: index % 2 === 0 ? "left" : "center",
+        rooms: [room(`generation-transition-${index}`)],
+      });
+      publisher.publish({ canonicalDigest: next.inputDigest }, next);
+      const returned = publisher.publish({ canonicalDigest: first.inputDigest }, result);
+      expect(returned.layoutRevision).toBe(3 + index * 2);
     }
-    const state = publisher as unknown as {
-      generationDigests: Map<string, string>;
-      generationOrder: string[];
-    };
-    expect(state.generationDigests.size).toBeLessThanOrEqual(OFFICE_GEOMETRY.maxRooms);
-    expect(state.generationOrder.length).toBeLessThanOrEqual(OFFICE_GEOMETRY.maxRooms);
+    expect((publisher as unknown as { generationDigests?: unknown }).generationDigests).toBeUndefined();
+    expect((publisher as unknown as { generationOrder?: unknown }).generationOrder).toBeUndefined();
     expect(first.normalizedInput.rooms[0].contentItems).toHaveLength(128);
   });
 
@@ -608,7 +610,7 @@ describe("Office layout contract", () => {
     ]);
   });
 
-  it("orders generic regions deterministically before bounded truncation", () => {
+  it("orders generic descriptor metadata deterministically before bounded truncation", () => {
     const descriptors = [
       room("work-b", { region: "work", precedence: 1, order: 1 }),
       room("agent-bar", { region: "agent-bar", precedence: 9, order: 0 }),
@@ -681,7 +683,7 @@ describe("Office layout contract", () => {
       rooms: [],
     });
     const publisher = new OfficeLayoutPublisher();
-    const published = publisher.publish({ id: "agent-bar-layout", canonicalDigest: result.inputDigest }, result);
+    const published = publisher.publish({ canonicalDigest: result.inputDigest }, result);
     expect(published.agentBarRect).toEqual(result.layout.agentBarRect);
     expect(publisher.isCanvasReady(published.layoutRevision)).toBe(false);
     expect(publisher.ackCanvasRendered(published.layoutRevision - 1)).toBe(false);

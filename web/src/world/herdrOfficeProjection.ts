@@ -39,6 +39,8 @@ export type OfficeHostSkin = {
 export type OfficeHost = {
   key: string;
   displayLabel: string;
+  /** Full display-safe source label for semantic DOM; canvas text uses displayLabel/geometry fitting. */
+  accessibleLabel?: string;
   displayOrder: number;
   location: OfficeHostLocation;
   connectionState: HostConnectionState;
@@ -93,6 +95,8 @@ export type OfficeRoom = {
   workspaceRef: QualifiedTarget;
   observedGeneration: string;
   displayLabel: string;
+  /** Full display-safe source label for semantic DOM and measured room geometry. */
+  accessibleLabel?: string;
   order: number;
   stale: boolean;
   canOpenInSpaces: boolean;
@@ -422,6 +426,7 @@ function projectHost(source: HerdrOfficeSourceHost): ProjectedHost {
     host: {
       key: source.profile.profileId,
       displayLabel: boundedLabel(source.profile.label, "Host"),
+      accessibleLabel: normalizedLabel(source.profile.label, "Host"),
       displayOrder: source.profile.displayOrder,
       location: source.location,
       connectionState: enabled ? source.connectionState : "disabled",
@@ -502,6 +507,7 @@ function projectRooms({ source, host }: ProjectedHost): ProjectedRoom[] {
         workspaceRef,
         observedGeneration: source.generationKey ?? "",
         displayLabel: boundedLabel(workspace.label, "Workspace"),
+        accessibleLabel: normalizedLabel(workspace.label, "Workspace"),
         order: workspace.number,
         stale: host.stale,
         canOpenInSpaces,
@@ -672,12 +678,16 @@ function boundedStateLabels(
 }
 
 function boundedLabel(value: string | null | undefined, fallback: string, limit = MAX_VISIBLE_LABEL) {
-  const normalized = value?.trim() || fallback;
+  const normalized = normalizedLabel(value, fallback);
   const points = [...normalized];
   if (points.length <= limit) {
     return normalized;
   }
   return `${points.slice(0, Math.max(1, limit - 1)).join("")}…`;
+}
+
+function normalizedLabel(value: string | null | undefined, fallback: string) {
+  return value?.trim() || fallback;
 }
 
 export function stableNumber(value: string) {

@@ -980,8 +980,8 @@ function WorldRoomActions({
             <button
               className="world-room-overlay-action world-room-overlay-action-rename"
               type="button"
-              aria-label={`Rename room ${room.displayLabel}`}
-              title={`Rename ${room.displayLabel}`}
+              aria-label={`Rename room ${room.accessibleLabel ?? room.displayLabel}`}
+              title={`Rename ${room.accessibleLabel ?? room.displayLabel}`}
               disabled={!ready || !context.canRenameRoom(room.key)}
               style={{
                 left: `${header?.renameX ?? Math.max(0, rect.headerRect.width - 52)}px`,
@@ -994,8 +994,8 @@ function WorldRoomActions({
             <button
               className="world-room-overlay-action world-room-overlay-action-danger"
               type="button"
-              aria-label={`Close room ${room.displayLabel}`}
-              title={`Close ${room.displayLabel}`}
+              aria-label={`Close room ${room.accessibleLabel ?? room.displayLabel}`}
+              title={`Close ${room.accessibleLabel ?? room.displayLabel}`}
               disabled={!ready || !context.canCloseRoom(room.key)}
               style={{
                 left: `${header?.closeX ?? Math.max(0, rect.headerRect.width - OFFICE_GEOMETRY.roomHeaderActionWidth)}px`,
@@ -1022,8 +1022,12 @@ function WorldRoomActions({
             key={`${room.key}:new-seat`}
             className={`world-new-seat-canvas-action${full ? " world-new-seat-canvas-action-full" : ""}`}
             type="button"
-            aria-label={full ? `${room.displayLabel} room full` : `New seat in ${room.displayLabel}`}
-            title={full ? `${room.displayLabel} is full` : `Start a new seat in ${room.displayLabel}`}
+            aria-label={full
+              ? `${room.accessibleLabel ?? room.displayLabel} room full`
+              : `New seat in ${room.accessibleLabel ?? room.displayLabel}`}
+            title={full
+              ? `${room.accessibleLabel ?? room.displayLabel} is full`
+              : `Start a new seat in ${room.accessibleLabel ?? room.displayLabel}`}
             disabled={!layoutReady || full}
             style={{ left: `${anchor.x - 25}px`, top: `${anchor.deskY}px` }}
             onClick={() => context.onNewSeat(room.key)}
@@ -1035,7 +1039,7 @@ function WorldRoomActions({
           const host = projection.hosts.find(({ key }) => key === room.hostKey);
           return (
             <span key={`${room.key}:semantic-name`}>
-              {room.displayLabel} — {host?.displayLabel ?? "host unavailable"}
+              {room.accessibleLabel ?? room.displayLabel} — {host?.accessibleLabel ?? host?.displayLabel ?? "host unavailable"}
             </span>
           );
         })}

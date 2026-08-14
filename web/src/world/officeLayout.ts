@@ -185,7 +185,6 @@ export type OfficeGeometryResult = {
 };
 
 export type OfficeInputGeneration = {
-  id: string;
   canonicalDigest: string;
 };
 
@@ -710,27 +709,11 @@ export class OfficeLayoutPublisher {
   private revision = 0;
   private currentDigest: string | null = null;
   private currentLayout: PublishedOfficeLayout | null = null;
-  private readonly generationDigests = new Map<string, string>();
-  private readonly generationOrder: string[] = [];
   private renderedRevision = 0;
 
   publish(generation: OfficeInputGeneration, geometry: OfficeGeometryResult): PublishedOfficeLayout {
-    const priorDigest = this.generationDigests.get(generation.id);
-    if (priorDigest !== undefined && priorDigest !== generation.canonicalDigest) {
-      throw new Error(`Office layout generation ${generation.id} was reused with different input.`);
-    }
     if (geometry.inputDigest !== generation.canonicalDigest) {
       throw new Error("Office layout geometry does not match its input generation.");
-    }
-    if (!this.generationDigests.has(generation.id)) {
-      this.generationOrder.push(generation.id);
-    }
-    this.generationDigests.set(generation.id, generation.canonicalDigest);
-    while (this.generationOrder.length > OFFICE_GEOMETRY.maxRooms) {
-      const oldest = this.generationOrder.shift();
-      if (oldest) {
-        this.generationDigests.delete(oldest);
-      }
     }
     if (this.currentLayout && this.currentDigest === generation.canonicalDigest) {
       return this.currentLayout;
@@ -739,7 +722,7 @@ export class OfficeLayoutPublisher {
     this.currentDigest = generation.canonicalDigest;
     const snapshot = {
       ...geometry.layout,
-      generationId: generation.id,
+      generationId: generation.canonicalDigest,
       layoutRevision: this.revision,
       inputDigest: generation.canonicalDigest,
       normalizedInput: geometry.normalizedInput,

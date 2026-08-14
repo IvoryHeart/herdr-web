@@ -4,7 +4,7 @@
 - **Spec ID:** `012-generic-rectangular-office-room-layout-extension-001`
 - **Status:** Approved
 - **Created:** 2026-08-13
-- **Owner:** Herdr Web / Office
+- **Owner:** Downstream Herdr World / Office presentation layer
 - **Reviewers:** IvoryHeart (repository owner)
 - **Approved by:** Requester
 - **Approved at:** 2026-08-13
@@ -125,19 +125,23 @@ room descriptor SHALL include:
   preferred width/height, and any supported row/column span.
 
 The resolver SHALL return the enclosing room rectangles and the resolved
-rectangles for bounded content items and rows. A future room role MAY reuse the
-generic rectangle and style contract only when it supplies one of the supported
-composition flows and policies; a novel composition requires a later approved
-extension rather than an undocumented resolver change.
+rectangles for bounded content items and rows. This slice uses that generic
+contract for work-room descriptors and for the explicit CEO content flow; the
+CEO region and Agent Bar remain named presentation compositions rather than
+arbitrary room descriptors. A future room role MAY reuse the generic rectangle
+and style primitives only after a presenter routes it into one of the supported
+composition flows and policies; a novel region composition requires a later
+approved extension rather than an undocumented resolver change.
 
 #### Scenario: A future role uses an existing composition flow
 
-- **GIVEN** a future room supplies bounded header/content descriptors and the
-  existing `grid` flow with a deterministic order
+- **GIVEN** a future room is explicitly routed as a work-room descriptor,
+  supplies bounded header/content descriptors, and uses the existing `grid`
+  flow with a deterministic order
 - **WHEN** the resolver receives it
 - **THEN** it can reuse the generic room rectangle, style tokens, safe bounds,
-  and presenter contract without changing room identity, bridge commands, or
-  canvas/overlay routing.
+  and presenter contract; adding a new region or presenter routing remains a
+  separately approved integration task.
 
 #### Scenario: A CEO room wraps synthetic content
 
