@@ -304,15 +304,23 @@ test("opens one stable live conversation bubble for the selected Office agent", 
   await expect(connector.locator("path[data-anchor='workbench']")).toHaveCount(2);
   await expect(connector.locator("path[data-anchor='agent']")).toHaveCount(2);
 
-  await page.evaluate(() => {
-    (document.activeElement as HTMLElement | null)?.blur();
-  });
+  const resetOfficeView = page.getByRole("button", { name: "Reset office view" });
+  await expect(resetOfficeView).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => Boolean(
+        document.activeElement instanceof Element
+          && document.activeElement.closest(".world-conversation-terminal"),
+      )),
+    )
+    .toBe(true);
+  await resetOfficeView.focus();
+  await expect(resetOfficeView).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(1);
   await expect(page.getByRole("dialog", { name: "Codex A" })).toBeVisible();
-  await page.evaluate(() => {
-    (document.activeElement as HTMLElement | null)?.blur();
-  });
+  await resetOfficeView.focus();
+  await expect(resetOfficeView).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(openBubbles).toHaveCount(0);
 });
