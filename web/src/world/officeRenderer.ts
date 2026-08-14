@@ -474,6 +474,8 @@ export async function createOfficeRenderer(
         region: "work",
         title: room.displayLabel,
         hostTitle: host?.displayLabel ?? "host",
+        visualTitle: measuredHeader.workspace,
+        visualHostTitle: measuredHeader.host,
         headerMinTitleBoxWidth: measuredHeader.titleBoxWidth,
         headerMinWidth: measuredHeader.roomWidth,
         deskCount: room.desks.length + (
@@ -834,6 +836,13 @@ function drawCeoReception(
   onActivateAgent: (key: string) => void,
 ) {
   const band = new Container();
+  if (layout.fallbackMessage) {
+    if (layout.ceoOverflowMarkerRect) {
+      drawRoomOverflowMarker(band, layout.ceoOverflowMarkerRect, 0xf0c878);
+    }
+    stage.addChild(band);
+    return;
+  }
   const ceoBlocks = layout.ceoBlocks;
   const ceoRoomRight = layout.ceoRect.x + layout.ceoRect.width;
   const floor = new Graphics();
@@ -2270,13 +2279,34 @@ function measureOfficeRoomHeader(
 ) {
   const labels = officeHeaderLabels(title, hostTitle, titleMode);
   const hyphenWidth = measureOfficeHeadingText("-");
+  const fixedWidth = 10 + 16 + hyphenWidth + 12 + 20 + hyphenWidth + 10;
+  const maximumTitleBoxWidth = Math.max(
+    0,
+    OFFICE_GEOMETRY.maxExpandedRoomWidth -
+      2 * OFFICE_GEOMETRY.roomHeaderSafeInset -
+      2 * (
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderActionGap +
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderCloseGap
+      ),
+  );
+  let workspace = labels.workspace;
+  let host = labels.host;
+  if (fixedWidth + measureOfficeHeadingText(workspace) + measureOfficeHeadingText(host) > maximumTitleBoxWidth) {
+    const available = Math.max(0, maximumTitleBoxWidth - fixedWidth);
+    const workspaceBudget = Math.floor(available * 0.52);
+    workspace = fitOfficeLabelForCanvas(workspace, workspaceBudget);
+    host = fitOfficeLabelForCanvas(host, Math.max(0, available - workspaceBudget));
+  }
   const titleBoxWidth = Math.ceil(
-    10 + 16 + hyphenWidth + measureOfficeHeadingText(labels.workspace) +
-      12 + 20 + hyphenWidth + measureOfficeHeadingText(labels.host) + 10,
+    fixedWidth + measureOfficeHeadingText(workspace) + measureOfficeHeadingText(host),
   );
   return {
     titleBoxWidth,
     roomWidth: minimumRoomWidthForTitleBox(titleBoxWidth),
+    workspace,
+    host,
   };
 }
 
@@ -2295,6 +2325,25 @@ function measureOfficeHeadingText(value: string) {
   const width = text.width;
   text.destroy();
   return width;
+}
+
+function fitOfficeLabelForCanvas(value: string, maximumWidth: number) {
+  if (maximumWidth <= 0) {
+    return "";
+  }
+  if (measureOfficeHeadingText(value) <= maximumWidth) {
+    return value;
+  }
+  const ellipsis = "…";
+  if (measureOfficeHeadingText(ellipsis) > maximumWidth) {
+    return "";
+  }
+  const points = [...value];
+  let end = points.length;
+  while (end > 0 && measureOfficeHeadingText(`${points.slice(0, end).join("")}${ellipsis}`) > maximumWidth) {
+    end -= 1;
+  }
+  return end > 0 ? `${points.slice(0, end).join("")}${ellipsis}` : ellipsis;
 }
 
 function shortLabel(value: string, limit: number) {

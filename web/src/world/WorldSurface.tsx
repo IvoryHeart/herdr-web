@@ -29,7 +29,6 @@ import { officeCalloutForKey } from "./officeSelection";
 import type { OfficeCallout } from "./officeSelection";
 import type { OfficeObservability } from "./officeObservability";
 import {
-  agentBarWidthForOffice,
   deskAnchor,
   OFFICE_GEOMETRY,
 } from "./officeGeometry";
@@ -268,12 +267,13 @@ function WorldStage({
     projection.deskRoster.find(({ desk }) => desk.key === context.selectedKey)?.desk.roomKey ??
     projection.roster.find(({ agent }) => agent.key === context.selectedKey)?.agent.roomKey ??
     null;
-  const agentBarWidth = officeLayout
-    ? agentBarWidthForOffice(officeLayout.officeWidth, projection.receptions.length)
-    : OFFICE_GEOMETRY.agentBarPreferredWidth;
-  const agentBarHeight = officeLayout
-    ? Math.max(1, officeLayout.ceoBandHeight - 4)
-    : OFFICE_GEOMETRY.ceoBandHeight - 4;
+  const agentBarRect = officeLayout?.agentBarRect;
+  const agentBarReady = Boolean(
+    officeLayout &&
+      !officeLayout.fallbackMessage &&
+      officeLayout.layoutRevision > 0 &&
+      officeLayout.layoutRevision === canvasRenderedRevision,
+  );
   const onCanvasHover = (hover: OfficeCanvasHover | null) => {
     if (!hover) {
       setCanvasHover(null);
@@ -818,8 +818,11 @@ function WorldStage({
             className="world-canvas-agent-bar"
             projection={projection}
             selectedKey={context.selectedKey}
-            barWidth={agentBarWidth}
-            barHeight={agentBarHeight}
+            barWidth={agentBarRect?.width ?? OFFICE_GEOMETRY.agentBarPreferredWidth}
+            barHeight={agentBarRect?.height ?? OFFICE_GEOMETRY.ceoBandHeight - 4}
+            left={agentBarRect?.x}
+            top={agentBarRect?.y}
+            interactive={agentBarReady}
             onSelect={context.onSelect}
             onActivateAgent={onActivateAgent}
           />
@@ -1087,6 +1090,9 @@ function WorldAgentBar({
   selectedKey,
   barWidth,
   barHeight,
+  left,
+  top,
+  interactive,
   onSelect,
   onActivateAgent,
 }: {
@@ -1095,6 +1101,9 @@ function WorldAgentBar({
   selectedKey: string | null;
   barWidth: number;
   barHeight: number;
+  left?: number;
+  top?: number;
+  interactive: boolean;
   onSelect: (key: string) => void;
   onActivateAgent: (key: string) => void;
 }) {
@@ -1107,9 +1116,13 @@ function WorldAgentBar({
     <section
       className={`world-office-overview${className ? ` ${className}` : ""}`}
       aria-label="Agent Bar"
+      aria-hidden={!interactive}
       style={{
         width: `${barWidth}px`,
         height: `${barHeight}px`,
+        ...(left === undefined ? {} : { left: `${left}px`, right: "auto" }),
+        ...(top === undefined ? {} : { top: `${top}px` }),
+        visibility: interactive ? "visible" : "hidden",
       }}
     >
       <div className="world-overview-heading">
@@ -1139,6 +1152,7 @@ function WorldAgentBar({
                   type="button"
                   aria-pressed={selectedKey === agent.key}
                   data-status={status}
+                  disabled={!interactive}
                   title={agent.taskSummary ?? `${agent.displayLabel} · ${statusLabel}`}
                   onClick={() => onSelect(agent.key)}
                   onDoubleClick={() => onActivateAgent(agent.key)}

@@ -5,6 +5,7 @@ import {
 } from "./officeGeometry";
 import {
   OfficeLayoutPublisher,
+  normalizeOfficeGeometryInput,
   resolveOfficeGeometry,
 } from "./officeLayout";
 
@@ -424,5 +425,269 @@ describe("Office layout contract", () => {
     expect(result.normalizationErrors).toEqual(["invalid-style-capacity"]);
     expect(result.fallbackMessage).toBe("Office layout unavailable");
     expect(result.layout.overflowMarker?.label).toBe("Office layout unavailable");
+  });
+
+  it("keeps the CEO region bounded by both vertical caps and accounts for omitted receptions", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasHeight: 320,
+      maximumExpandedRoomHeight: 280,
+      ceoReceptionCount: 6,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [],
+    });
+    const { layout } = result;
+    const canvas = { x: 0, y: 0, width: result.resolvedCanvasWidth, height: result.resolvedCanvasHeight };
+    expect(contains(canvas, layout.ceoRect)).toBe(true);
+    expect(contains(canvas, layout.agentBarRect)).toBe(true);
+    expect(layout.ceoBlocks.receptions.every((reception) =>
+      reception.y + reception.height <= result.resolvedCanvasHeight,
+    )).toBe(true);
+    expect(result.omissionSummary.byReason["canvas-capacity-exhausted"]).toBe(6);
+    expect(result.omissionSummary.byImportance.required).toBe(6);
+    expect(result.accessibleOverflow?.required).toBe(true);
+    expect(layout.ceoOverflowMarkerRect).toBeDefined();
+    expect(contains(layout.ceoRect, layout.ceoOverflowMarkerRect!)).toBe(true);
+  });
+
+  it("omits content whose minimum width cannot fit the capped content-safe area", () => {
+    const exactCap = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasWidth: 1000,
+      maximumExpandedRoomWidth: 300,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("exact-cap", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        contentItems: [{
+          id: "exact-cap-item",
+          kind: "board",
+          importance: "required",
+          order: 0,
+          minWidth: 300,
+          minHeight: 20,
+        }],
+      })],
+    });
+    expect(exactCap.layout.rooms[0].width).toBeLessThanOrEqual(300);
+    expect(exactCap.contentItems).toHaveLength(0);
+    expect(exactCap.omissions).toContainEqual({
+      reason: "required-minimum-exceeds-room-cap",
+      importance: "required",
+      id: "exact-cap-item",
+    });
+    expect(exactCap.layout.rooms[0].overflowMarkerRect).toBeDefined();
+    expect(contains(exactCap.layout.rooms[0].contentSafeRect, exactCap.layout.rooms[0].overflowMarkerRect!)).toBe(true);
+
+    const rowMinimums = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasWidth: 1000,
+      maximumExpandedRoomWidth: 300,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("row-cap", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        flow: "row",
+        contentItems: [
+          { id: "row-a", kind: "board", importance: "required", order: 0, minWidth: 180, minHeight: 20 },
+          { id: "row-b", kind: "board", importance: "required", order: 1, minWidth: 180, minHeight: 20 },
+        ],
+      })],
+    });
+    expect(rowMinimums.layout.rooms[0].width).toBeLessThanOrEqual(300);
+    expect(rowMinimums.contentItems).toHaveLength(1);
+    expect(rowMinimums.omissionSummary.byReason["canvas-capacity-exhausted"]).toBe(1);
+    expect(rowMinimums.layout.rooms[0].overflowMarkerRect).toBeDefined();
+  });
+
+  it("falls back when horizontal header chrome cannot fit the room ceiling", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasWidth: 1000,
+      maximumExpandedRoomWidth: 300,
+      style: {
+        fixedHeaderChromeWidth: 400,
+        roomSafeInset: 24,
+      },
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("style-capacity")],
+    });
+    const canvas = { x: 0, y: 0, width: result.resolvedCanvasWidth, height: result.resolvedCanvasHeight };
+    expect(result.normalizationErrors).toEqual(["invalid-style-capacity"]);
+    expect(result.fallbackMessage).toBe("Office layout unavailable");
+    expect(result.layout.rooms).toHaveLength(0);
+    expect(result.layout.ceoOverflowMarkerRect).toBeDefined();
+    expect(contains(canvas, result.layout.ceoRect)).toBe(true);
+    expect(contains(result.layout.ceoRect, result.layout.ceoOverflowMarkerRect!)).toBe(true);
+    expect(result.resolvedCanvasWidth).toBeLessThanOrEqual(1000);
+  });
+
+  it("keeps large descriptor and publication state bounded while retaining exact omission totals", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxContentItems: 128,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("large-input", {
+        contentItems: Array.from({ length: 3000 }, (_, index) => ({
+          id: `large-${index}`,
+          kind: "board",
+          importance: "optional" as const,
+          order: index,
+          minWidth: 20,
+          minHeight: 20,
+        })),
+      })],
+    });
+    const normalizedRoom = result.normalizedInput.rooms[0];
+    expect(normalizedRoom.contentItemCount).toBe(3000);
+    expect(normalizedRoom.contentItems).toHaveLength(128);
+    expect(result.omissionSummary.byReason["content-item-count-cap"]).toBe(2872);
+    expect(result.omissionSummary.samples["content-item-count-cap"]).toHaveLength(8);
+    expect(result.inputDigest).toMatch(/^office-v1-[0-9a-f]{16}$/);
+
+    const publisher = new OfficeLayoutPublisher();
+    const first = publisher.publish({ id: "large-generation", canonicalDigest: result.inputDigest }, result);
+    for (let index = 0; index < OFFICE_GEOMETRY.maxRooms * 2; index += 1) {
+      publisher.publish({ id: `bounded-generation-${index}`, canonicalDigest: result.inputDigest }, result);
+    }
+    const state = publisher as unknown as {
+      generationDigests: Map<string, string>;
+      generationOrder: string[];
+    };
+    expect(state.generationDigests.size).toBeLessThanOrEqual(OFFICE_GEOMETRY.maxRooms);
+    expect(state.generationOrder.length).toBeLessThanOrEqual(OFFICE_GEOMETRY.maxRooms);
+    expect(first.normalizedInput.rooms[0].contentItems).toHaveLength(128);
+  });
+
+  it("uses declared order for required items and priority then order for other items", () => {
+    const required = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxContentItems: 1,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("required-order", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        contentItems: [
+          { id: "declared-second", kind: "board", importance: "required", order: 2, priority: 999, minWidth: 20, minHeight: 20 },
+          { id: "declared-first", kind: "board", importance: "required", order: 1, priority: 0, minWidth: 20, minHeight: 20 },
+        ],
+      })],
+    });
+    expect(required.contentItems[0].id).toBe("declared-first");
+    expect(required.omissionSummary.byReason["content-item-count-cap"]).toBe(1);
+
+    const other = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxContentItems: 6,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("priority-order", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        contentItems: [
+          { id: "preferred-low", kind: "board", importance: "preferred", order: 0, priority: 1, minWidth: 20, minHeight: 20 },
+          { id: "preferred-high", kind: "board", importance: "preferred", order: 1, priority: 5, minWidth: 20, minHeight: 20 },
+          { id: "preferred-tie-b", kind: "board", importance: "preferred", order: 3, priority: 2, minWidth: 20, minHeight: 20 },
+          { id: "preferred-tie-a", kind: "board", importance: "preferred", order: 2, priority: 2, minWidth: 20, minHeight: 20 },
+          { id: "optional-high", kind: "board", importance: "optional", order: 0, priority: 100, minWidth: 20, minHeight: 20 },
+        ],
+      })],
+    });
+    expect(other.contentItems.map(({ id }) => id)).toEqual([
+      "preferred-high",
+      "preferred-tie-a",
+      "preferred-tie-b",
+      "preferred-low",
+      "optional-high",
+    ]);
+  });
+
+  it("orders generic regions deterministically before bounded truncation", () => {
+    const descriptors = [
+      room("work-b", { region: "work", precedence: 1, order: 1 }),
+      room("agent-bar", { region: "agent-bar", precedence: 9, order: 0 }),
+      room("ceo-b", { region: "ceo", precedence: 2, order: 1 }),
+      room("work-a", { region: "work", precedence: 1, order: 0 }),
+      room("ceo-a", { region: "ceo", precedence: 1, order: 0 }),
+    ];
+    const base = {
+      availableViewportWidth: 1000,
+      titleMode: "expand" as const,
+      roomAlignment: "left" as const,
+      rooms: descriptors,
+    };
+    const first = normalizeOfficeGeometryInput(base);
+    const shuffled = normalizeOfficeGeometryInput({ ...base, rooms: [...descriptors].reverse() });
+    const ids = first.rooms.map(({ id }) => id);
+    expect(ids).toEqual(["ceo-a", "ceo-b", "agent-bar", "work-a", "work-b"]);
+    expect(shuffled.rooms.map(({ id }) => id)).toEqual(ids);
+
+    const bounded = normalizeOfficeGeometryInput({
+      ...base,
+      maxContentItems: 1,
+      rooms: Array.from({ length: 130 }, (_, index) => room(`work-${index}`, {
+        region: "work",
+        precedence: index,
+        order: 0,
+      })).reverse(),
+    });
+    expect(bounded.rooms).toHaveLength(128);
+    expect(bounded.rooms[0].precedence).toBe(0);
+    expect(bounded.rooms.at(-1)?.precedence).toBe(127);
+  });
+
+  it("keeps wide, narrow, Unicode, and emoji emergency labels inside the capped header", () => {
+    for (const [index, title] of [
+      "WWWWWWWWWWWWWWWWWWWWWW",
+      "iiiiiiiiiiiiiiiiiiiiiiiiiiii",
+      "東京の長いオフィス名",
+      "🧑🏽‍💻🚀✨🚀✨🚀✨🚀✨",
+    ].entries()) {
+      const result = resolveOfficeGeometry({
+        availableViewportWidth: 1000,
+        maximumExpandedRoomWidth: 300,
+        titleMode: "expand",
+        roomAlignment: "left",
+        rooms: [room(`label-${index}`, {
+          title,
+          hostTitle: `${title}-host`,
+          deskCount: 0,
+        })],
+      });
+      const header = result.roomHeaders[0]!;
+      const rect = result.layout.rooms[0];
+      expect(header.emergencyEllipsis).toBe(true);
+      expect(rect.width).toBeLessThanOrEqual(300);
+      expect(header.titleBoxWidth).toBeLessThanOrEqual(
+        rect.headerRect.width - 2 * (
+          header.actionWidth + header.actionGap + header.actionWidth + header.closeGap
+        ) + 1,
+      );
+      expect(`${header.workspace}${header.host}`).toContain("…");
+    }
+  });
+
+  it("uses the published Agent Bar rectangle and rejects stale or future presenter acknowledgements", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [],
+    });
+    const publisher = new OfficeLayoutPublisher();
+    const published = publisher.publish({ id: "agent-bar-layout", canonicalDigest: result.inputDigest }, result);
+    expect(published.agentBarRect).toEqual(result.layout.agentBarRect);
+    expect(publisher.isCanvasReady(published.layoutRevision)).toBe(false);
+    expect(publisher.ackCanvasRendered(published.layoutRevision - 1)).toBe(false);
+    expect(publisher.ackCanvasRendered(published.layoutRevision + 1)).toBe(false);
+    expect(publisher.isCanvasReady(published.layoutRevision)).toBe(false);
+    expect(publisher.ackCanvasRendered(published.layoutRevision)).toBe(true);
+    expect(publisher.isCanvasReady(published.layoutRevision)).toBe(true);
   });
 });
