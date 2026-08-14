@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   outputDir: ".scratch/playwright",
@@ -13,7 +13,7 @@ export default defineConfig({
     browserName: "chromium",
     colorScheme: "dark",
     reducedMotion: "reduce",
-    trace: "retain-on-failure",
+    trace: process.env.CI ? "on-first-retry" : "retain-on-failure",
     launchOptions:
       process.env.HERDR_WEB_HARDWARE_GPU === "1"
         ? {
