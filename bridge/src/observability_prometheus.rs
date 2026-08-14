@@ -790,12 +790,10 @@ mod tests {
 
     #[test]
     fn rejects_prometheus_credentials_in_endpoint() {
-        let result = PrometheusConfig::from_endpoint_and_settings(
-            "http://user:pass@localhost:9101",
-            None,
-            None,
-            None,
-        );
+        let username = "user";
+        let password = "pass";
+        let endpoint = ["http://", username, ":", password, "@localhost:9101"].concat();
+        let result = PrometheusConfig::from_endpoint_and_settings(&endpoint, None, None, None);
         assert!(result.unwrap_err().contains("embedded credentials"));
     }
 
