@@ -11,7 +11,8 @@
 
 - **Implemented:**
   - Refreshed and audited the configured Herdr Web remotes; the audited
-    upstream head is `9897522` on `kcosr/herdr-web`.
+    upstream head is `98975226737821182f87a1eece8a080fffc4020e` (`9897522`),
+    the PR #56 favicon attribution follow-up on `kcosr/herdr-web`.
   - Audited canonical `herdrdev/herdr` `master` at
     `d76657f2c7fc18dcce3b9af43842c8afaba1646b`; its protocol-20 state remains a
     point-in-time, non-normative observation.
@@ -35,7 +36,8 @@
     tests, 148 bridge tests, and bridge/web production builds.
   - `git diff --check` — passed.
   - Direct remote checks confirmed `herdrdev/herdr` `master` at `d76657f` and
-    `kcosr/herdr-web` `main` at `9897522`.
+    `kcosr/herdr-web` `main` at
+    `98975226737821182f87a1eece8a080fffc4020e` (`9897522`).
 - **Constraints / operational notes:** The bridge still requires Herdr
   `v0.8.0` or newer with terminal protocol 19. The full Herdr source tree was
   not vendored, and protocol-20 support was not attempted. The production
@@ -52,6 +54,8 @@
 ## Delivery record
 
 The bounded synchronization implementation is complete and validated in the
-shared worktree. The clean PR commit is
-[`6375adc`](https://github.com/IvoryHeart/herdr-web/commit/6375adc), and it was
-submitted in [PR #11](https://github.com/IvoryHeart/herdr-web/pull/11).
+shared worktree. The clean rebased implementation commit is
+[`6b7a0b1`](https://github.com/IvoryHeart/herdr-web/commit/6b7a0b1), followed by
+the delivery-record commit
+[`8509663`](https://github.com/IvoryHeart/herdr-web/commit/8509663), and both
+remain submitted in [PR #11](https://github.com/IvoryHeart/herdr-web/pull/11).

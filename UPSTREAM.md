@@ -28,12 +28,14 @@ its observed `master` commit was:
 d76657f2c7fc18dcce3b9af43842c8afaba1646b
 ```
 
-The audited Herdr Web upstream head is `9897522` on `kcosr/herdr-web`. The
-Herdr source observation reported protocol 20 at that point; it is a dated,
-non-normative observation and does not change this repository's reviewed Herdr
-`v0.8.0` / terminal-protocol-19 compatibility contract. This synchronization
-slice adopts only the compatible Herdr Web favicon and square-icon alignment
-fixes.
+The audited Herdr Web upstream head is
+`98975226737821182f87a1eece8a080fffc4020e` (`9897522`), the PR #56 favicon
+attribution follow-up (`Reference PR 56 and credit favicon contributor.`) on
+`kcosr/herdr-web`. The Herdr source observation reported protocol 20 at that
+point; it is a dated, non-normative observation and does not change this
+repository's reviewed Herdr `v0.8.0` / terminal-protocol-19 compatibility
+contract. This synchronization slice adopts only the compatible Herdr Web
+favicon and square-icon alignment fixes.
 
 The adopted upstream source commits and contributor records are:
 
