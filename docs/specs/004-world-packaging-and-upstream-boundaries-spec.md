@@ -27,6 +27,10 @@ projections over shared Herdr state. The current repository and package paths
 may continue using `herdr-web` during migration, but all assembled components
 belong to the `herdr-world` product.
 
+The specification is intentionally a boundary and release-readiness contract,
+not a request to move every current file immediately. Physical extraction is
+allowed only after the interfaces and acceptance evidence below exist.
+
 ## 2. Scope
 
 This feature includes:
@@ -42,6 +46,8 @@ This feature includes:
   upstream references;
 - a downstream assembly model that pins or selects components without copying
   their source into multiple packages; and
+- a release manifest that records product identity, component revisions,
+  generated inputs, and artifact contents for every assembled build;
 - a migration path that allows a package to remain downstream-only if an
   upstream proposal is declined.
 
@@ -60,6 +66,21 @@ packaging/                pinned component assembly and release tooling
 Existing repository paths MAY be migrated toward this map incrementally. The
 boundary and dependency rules apply before physical extraction is complete.
 
+The transition ownership map is:
+
+| Boundary | Current implementation | Boundary owner | Intended upstream status |
+| --- | --- | --- | --- |
+| Herdr Web core and browser runtime | `web/src/`, `bridge/src/web_bridge.rs` | Herdr Web core maintainers | upstream candidate where generic |
+| Herdr compatibility | `vendor/herdr-compat/` | Herdr Web downstream compatibility owner | upstream-aligned compatibility slice |
+| Provider-neutral contracts | `contracts/observability/` | Herdr World contracts owner | separate contract proposal |
+| Provider transport and adapters | `bridge/src/observability*.rs` | Herdr World provider owner | downstream until a generic target is accepted |
+| World projections | `web/src/world/` and Office assets | Herdr World projection owner | downstream |
+| Assembly and release artifacts | `scripts/`, `packaging/` when extracted | Herdr World release owner | downstream |
+
+Each row is a temporary ownership assignment until the corresponding package
+is physically extracted. A change that crosses rows MUST identify each
+affected contribution unit in its change record.
+
 ## 3. Non-goals
 
 - No upstream PR is required by this specification.
@@ -68,8 +89,9 @@ boundary and dependency rules apply before physical extraction is complete.
 - No immediate physical repository rename or package extraction; the chosen
   product umbrella is `herdr-world`.
 - No multi-server gateway, SSH credential manager, or remote discovery system.
-- No OTEL provider implementation or Office observability board; those belong
-  to the separate observability provider/projection specification.
+- No new OTEL provider implementation or Office observability board behavior;
+  the existing downstream implementation remains governed by the separate
+  observability provider/projection specification.
 - No requirement that every package be independently versioned or released
   before the versioning policy is approved.
 
@@ -160,6 +182,62 @@ external checkout at build time.
 - **THEN** the baseline, compatibility tests, and any downstream adaptation
   are reviewable independently of projection changes.
 
+### Requirement: Make the repository independent of legacy workspaces
+
+The assembled product, its tests, and its active operator documentation SHALL
+work from a clean `herdr-web` checkout without an undeclared sibling checkout,
+absolute workstation path, or legacy project name. Historical provenance MAY
+refer to an earlier workspace, but it MUST be marked as historical and MUST
+NOT be an operational instruction or build input.
+
+#### Scenario: A new agent starts from the repository root
+
+- **GIVEN** only this repository and its declared package/build prerequisites
+  are available
+- **WHEN** the agent runs the documented startup, test, and packaging commands
+- **THEN** the commands do not require a legacy observability workspace or
+  another undeclared source tree.
+
+### Requirement: Separate stable identity from local configuration identity
+
+The assembled product SHALL distinguish the product namespace, package and
+artifact identifiers, upstream compatibility baseline, provider/source
+instance identity, browser-local bridge profile identity, and boot/generation
+identity. A browser-local storage key MUST NOT be used as a provider or
+artifact identity.
+
+Routes and persisted keys that change during a namespace migration SHALL have
+an idempotent compatibility migration. The migration MUST preserve existing
+hosts, Office settings, and completion state, and MUST be covered by a test.
+
+### Requirement: Define a core-only proof
+
+The repository SHALL provide a repeatable core-only build and dependency audit
+that succeeds without World projections, Office assets, observability provider
+implementations, or provider-specific bridge modules. The proof MUST inspect
+the compiled dependency graph or final bundle contents in addition to source
+keyword scans.
+
+#### Scenario: The Office package is unavailable
+
+- **GIVEN** the downstream Office projection and provider packages are absent
+  or disabled
+- **WHEN** the core-only build and test gate runs
+- **THEN** Herdr Web core builds, serves Spaces, and passes its core checks
+  without importing or bundling World code.
+
+### Requirement: Keep contract representations synchronized
+
+Each cross-language contract SHALL name one canonical representation. The
+repository MUST validate positive and negative fixtures against that source,
+exercise Rust and TypeScript decoding against the same fixtures, compare
+declared versions and limits, and fail when checked-in generated
+representations differ from the canonical source.
+
+Provider/source identity and display labels SHALL be separate fields in the
+contract or its surrounding provider descriptor. The contract MUST NOT infer
+identity from browser storage or credentials.
+
 ### Requirement: Keep optional packages non-blocking
 
 The absence or failure of an optional provider or projection SHALL NOT prevent
@@ -186,6 +264,43 @@ MUST NOT silently include unreviewed source copies.
 - **WHEN** a World release is assembled
 - **THEN** it can include the projection through the downstream assembly
   manifest without changing the contract or Herdr Web upstream units.
+
+### Requirement: Make assembly traceable
+
+Every assembled build SHALL produce a machine-readable manifest with this
+minimum shape:
+
+```text
+schema_version
+product_id
+release_id
+source_revision
+components[]:
+  component_id
+  role
+  source_repository
+  source_revision
+  upstream_target
+  upstream_status
+  content_sha256
+  generated_from
+artifacts[]:
+  artifact_id
+  path
+  content_sha256
+```
+
+The manifest MUST use immutable revisions or content-addressed inputs. Build
+scripts MUST NOT fetch arbitrary source at build time. A release check SHALL
+fail when a selected component lacks a revision, provenance status, or final
+artifact hash.
+
+#### Scenario: A contribution is declined upstream
+
+- **GIVEN** an upstream proposal is declined or deferred
+- **WHEN** the downstream assembly is rebuilt
+- **THEN** the component remains explicitly marked `downstream-only` in the
+  manifest and is not silently copied into an upstream contribution branch.
 
 ## 6. Data and interface contract
 
@@ -231,6 +346,12 @@ Acceptance SHALL include:
 - a provenance/vendor check for upstream compatibility code; and
 - a dry-run contribution review showing that contract, bridge, provider,
   projection, and packaging changes can be described separately.
+- a clean-checkout startup/test/package run with no legacy workspace;
+- a core-only build and compiled dependency or bundle-content audit;
+- a contract fixture and generated-representation drift check;
+- a storage-key/route migration test when identifiers change; and
+- an assembled release manifest containing immutable component revisions and
+  artifact hashes.
 
 ## 9. Deferred decisions
 
@@ -244,3 +365,5 @@ Acceptance SHALL include:
 - OTEL provider source, signal selection, cost calculation, and Office board
   design; these require the separate draft observability provider/projection
   specification.
+- The physical format and publication location of the assembly manifest; its
+  required fields and traceability rules above are not deferred.

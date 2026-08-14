@@ -1,3 +1,10 @@
+/*
+ * MODIFIED FILE NOTICE — Apache-2.0 Section 4(b)
+ *
+ * This TypeScript drawing adaptation is downstream Herdr World / Office work
+ * derived from the historical Claw-Empire Office renderer. Source provenance,
+ * source hashes, and license obligations are recorded in docs/world-assets.md.
+ */
 // Pixi's CSP-safe polyfill replaces its generated Function paths with static synchronizers.
 import "pixi.js/unsafe-eval";
 import {
@@ -5,10 +12,12 @@ import {
   CanvasSource,
   Container,
   Graphics,
+  Rectangle,
   Sprite,
   Text,
   TextStyle,
   Texture,
+  UPDATE_PRIORITY,
 } from "pixi.js";
 import type {
   HerdrOfficeProjection,
@@ -21,21 +30,31 @@ import type {
 import {
   agentBarSlot,
   deskAnchor,
-  minimumOfficeWidthForReceptions,
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
   receptionTableRect,
-  resolveCeoBlockLayout,
-  resolveOfficeLayout,
   standingAnchor,
 } from "./officeGeometry";
 import type {
   OfficeCeoBlockLayout,
   OfficeLayout,
+  OfficeLongRoomTitleMode,
   OfficeReceptionRect,
   OfficeRoomAlignment,
   OfficeRoomRect,
 } from "./officeGeometry";
+import {
+  OfficeLayoutPublisher,
+  resolveOfficeGeometry,
+} from "./officeLayout";
+import type {
+  OfficeGeometryRoomDescriptor,
+  PublishedOfficeLayout,
+} from "./officeLayout";
+import {
+  minimumRoomWidthForTitleBox,
+  officeHeaderLabels,
+} from "./officeLayout";
 import { officeDebug } from "../officeDebug";
 import { officeSceneSignature } from "./officeSceneSignature";
 import type { OfficeObservability } from "./officeObservability";
@@ -123,6 +142,8 @@ export type OfficeRendererDiagnostics = {
     ceoBandHeight: number;
     viewportHeight: number;
   };
+  /** Browser-test and observability hook for the immutable layout consumed by both presenters. */
+  publishedLayout: PublishedOfficeLayout | null;
   completionMarkers: number;
 };
 
@@ -140,6 +161,7 @@ export type OfficeRendererController = {
     completionSeenKeys?: ReadonlySet<string>,
     observability?: OfficeObservability,
     roomAlignment?: OfficeRoomAlignment,
+    longRoomTitleMode?: OfficeLongRoomTitleMode,
   ) => void;
   getAnchors: (
     selectedKey: string | null,
@@ -176,8 +198,10 @@ export async function createOfficeRenderer(
   canCreateSeat: (roomKey: string) => boolean,
   onNewSeat: (roomKey: string) => void,
   onHover: (hover: OfficeCanvasHover | null) => void,
-  onLayoutChange: (layout: OfficeLayout | null) => void,
+  onLayoutChange: (layout: PublishedOfficeLayout | null) => void,
+  onCanvasRendered: (revision: number) => void,
   roomAlignment: OfficeRoomAlignment,
+  longRoomTitleMode: OfficeLongRoomTitleMode,
 ): Promise<OfficeRendererController> {
   officeDebug("renderer:create-start", {
     rooms: projection.rooms.length,
@@ -200,12 +224,16 @@ export async function createOfficeRenderer(
   let currentCompletionSeenKeys = completionSeenKeys;
   let currentObservability = observability;
   let currentRoomAlignment = roomAlignment;
-  let currentLayout: OfficeLayout | null = null;
+  let currentLongRoomTitleMode = longRoomTitleMode;
+  const layoutPublisher = new OfficeLayoutPublisher();
+  let currentLayout: PublishedOfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
   let lastRendererSize = { width: 0, height: 0 };
   let lastSceneSignature: string | null = null;
   let tick = 0;
+  let pendingRenderRevision = 0;
+  let currentFontReady = officeFontReady();
   const animated: AnimatedItem[] = [];
   const scrollElement = element.closest<HTMLElement>(".world-stage-scroll");
   const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -380,6 +408,10 @@ export async function createOfficeRenderer(
         );
       }
     });
+    // Room floors/borders must not cover the road bands between rows and
+    // columns. The road pass uses the resolved outer rectangles, so it is
+    // safe to paint after rooms without entering their mathematical bounds.
+    drawRoomRoads(app.stage, layout);
     if (!diagnostics.ready) {
       officeDebug("renderer:scene-ready", {
         rooms: layout.rooms.length,
@@ -414,30 +446,74 @@ export async function createOfficeRenderer(
     diagnostics.activeListeners += 1;
   }
 
+  const acknowledgeAfterRenderedFrame = (revision: number) => {
+    pendingRenderRevision = revision;
+    app.ticker.addOnce(() => {
+      if (disposed || pendingRenderRevision !== revision || currentLayout?.layoutRevision !== revision) {
+        return;
+      }
+      if (layoutPublisher.ackCanvasRendered(revision)) {
+        onCanvasRendered(revision);
+      }
+    }, undefined, UPDATE_PRIORITY.UTILITY);
+  };
+
   const build = (requestedWidth = element.clientWidth) => {
     if (disposed) {
       return;
     }
     const viewportWidth = scrollElement?.clientWidth ?? element.clientWidth;
-    const width = Math.max(
-      minimumOfficeWidthForReceptions(currentProjection.receptions.length),
-      Math.floor(viewportWidth || requestedWidth || 0),
-    );
-    const layout = resolveOfficeLayout(
-      width,
-      currentProjection.rooms.map((room) => ({
+    const width = Math.floor(viewportWidth || requestedWidth || 0);
+    const roomDescriptors: OfficeGeometryRoomDescriptor[] = currentProjection.rooms.map((room) => {
+      const host = currentProjection.hosts.find(({ key }) => key === room.hostKey);
+      const roomTitle = room.accessibleLabel ?? room.displayLabel;
+      const hostTitle = host?.accessibleLabel ?? host?.displayLabel ?? "host";
+      const measuredHeader = measureOfficeRoomHeader(
+        roomTitle,
+        hostTitle,
+        currentLongRoomTitleMode,
+      );
+      return {
+        id: room.key,
+        role: "work",
+        region: "work",
+        title: roomTitle,
+        hostTitle,
+        visualTitle: measuredHeader.workspace,
+        visualHostTitle: measuredHeader.host,
+        headerMinTitleBoxWidth: measuredHeader.titleBoxWidth,
+        headerMinWidth: measuredHeader.roomWidth,
         deskCount: room.desks.length + (
           canCreateSeat(room.key) && room.desks.length < OFFICE_GEOMETRY.desksPerRoom ? 1 : 0
         ),
         standingCount: room.roomAgents.filter(({ placement }) => placement === "standing").length,
-      })),
-      currentRoomAlignment,
+        actions: {
+          rename: true,
+          close: true,
+          createSeat: canCreateSeat(room.key),
+        },
+      };
+    });
+    const geometry = resolveOfficeGeometry({
+      availableViewportWidth: width,
+      availableViewportHeight: scrollElement?.clientHeight ?? 0,
+      titleMode: currentLongRoomTitleMode,
+      roomAlignment: currentRoomAlignment,
+      ceoReceptionCount: currentProjection.receptions.length,
+      fontKey: "Inter, ui-sans-serif, system-ui, sans-serif",
+      fontReady: currentFontReady,
+      rooms: roomDescriptors,
+    });
+    const layout = layoutPublisher.publish(
+      { canonicalDigest: geometry.inputDigest },
+      geometry,
     );
     const viewportHeight = Math.min(
       layout.totalHeight,
       Math.max(1, scrollElement?.clientHeight ?? layout.totalHeight),
     );
     currentLayout = layout;
+    diagnostics.publishedLayout = layout;
     onLayoutChange(layout);
     lastWidth = layout.officeWidth;
     if (
@@ -451,12 +527,13 @@ export async function createOfficeRenderer(
     element.style.height = `${layout.totalHeight}px`;
     app.stage.position.y = -(scrollElement?.scrollTop ?? 0);
     renderScene(layout);
+    acknowledgeAfterRenderedFrame(layout.layoutRevision);
     diagnostics.layout = {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,
       rooms: layout.rooms.length,
       characterHeight: OFFICE_GEOMETRY.characterHeight,
-      ceoBandHeight: OFFICE_GEOMETRY.ceoBandHeight,
+      ceoBandHeight: layout.ceoBandHeight,
       viewportHeight,
     };
   };
@@ -479,6 +556,22 @@ export async function createOfficeRenderer(
     }
   };
   app.ticker.add(ticker);
+
+  const fontSet = document.fonts;
+  const refreshFontMetrics = () => {
+    if (disposed) {
+      return;
+    }
+    const ready = officeFontReady();
+    currentFontReady = ready;
+    lastSceneSignature = null;
+    build(lastWidth || element.clientWidth);
+  };
+  fontSet?.addEventListener("loadingdone", refreshFontMetrics);
+  if (fontSet) {
+    void fontSet.ready.then(refreshFontMetrics);
+    diagnostics.activeListeners += 1;
+  }
 
   const onMotionChange = (event: MediaQueryListEvent) => {
     reducedMotion = event.matches;
@@ -519,6 +612,7 @@ export async function createOfficeRenderer(
   } catch (error) {
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
+    fontSet?.removeEventListener("loadingdone", refreshFontMetrics);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
     app.canvas.removeEventListener("pointermove", hover);
     app.canvas.removeEventListener("pointerleave", leave);
@@ -533,7 +627,7 @@ export async function createOfficeRenderer(
     diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
     diagnostics.activeListeners = Math.max(
       0,
-      diagnostics.activeListeners - (scrollElement ? 5 : 4),
+      diagnostics.activeListeners - (scrollElement ? 6 : 5),
     );
     throw error;
   }
@@ -545,9 +639,14 @@ export async function createOfficeRenderer(
       nextCompletionSeenKeys = currentCompletionSeenKeys,
       nextObservability = currentObservability,
       nextRoomAlignment = currentRoomAlignment,
+      nextLongRoomTitleMode = currentLongRoomTitleMode,
     ) {
-      if (nextRoomAlignment !== currentRoomAlignment) {
+      if (
+        nextRoomAlignment !== currentRoomAlignment ||
+        nextLongRoomTitleMode !== currentLongRoomTitleMode
+      ) {
         currentRoomAlignment = nextRoomAlignment;
+        currentLongRoomTitleMode = nextLongRoomTitleMode;
         lastSceneSignature = null;
       }
       currentProjection = nextProjection;
@@ -577,6 +676,7 @@ export async function createOfficeRenderer(
       }
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
+      fontSet?.removeEventListener("loadingdone", refreshFontMetrics);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
       app.canvas.removeEventListener("pointermove", hover);
       app.canvas.removeEventListener("pointerleave", leave);
@@ -597,10 +697,11 @@ export async function createOfficeRenderer(
       diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
       diagnostics.activeListeners = Math.max(
         0,
-        diagnostics.activeListeners - (scrollElement ? 5 : 4),
+        diagnostics.activeListeners - (scrollElement ? 6 : 5),
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
+      diagnostics.publishedLayout = null;
       onLayoutChange(null);
     },
   };
@@ -642,7 +743,7 @@ function resolveOfficeDeskAnchor(
   }
   const roomIndex = projection.rooms.findIndex(({ key }) => key === desk.roomKey);
   const room = projection.rooms[roomIndex];
-  const rect = layout.rooms[roomIndex];
+  const rect = layout.rooms.find(({ index }) => index === roomIndex);
   if (!room || !rect) {
     return null;
   }
@@ -669,8 +770,7 @@ function resolveOfficeAgentAnchor(
       (reception) => reception.hostKey === agent.hostKey,
     );
     const reception = projection.receptions[receptionIndex];
-    const rect = resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length)
-      .receptions[receptionIndex];
+    const rect = layout.ceoBlocks.receptions[receptionIndex];
     if (!reception || !rect) {
       return null;
     }
@@ -686,15 +786,12 @@ function resolveOfficeAgentAnchor(
     if (barIndex < 0) {
       return null;
     }
-    const slot = agentBarSlot(
-      resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length),
-      barIndex,
-    );
+    const slot = agentBarSlot(layout.ceoBlocks, barIndex);
     return { x: slot.x, y: slot.characterFeetY - 42 };
   }
   const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
   const room = projection.rooms[roomIndex];
-  const rect = layout.rooms[roomIndex];
+  const rect = layout.rooms.find(({ index }) => index === roomIndex);
   if (!room || !rect) {
     return null;
   }
@@ -746,31 +843,35 @@ function drawCeoReception(
   onActivateAgent: (key: string) => void,
 ) {
   const band = new Container();
-  const ceoBlocks = resolveCeoBlockLayout(
-    layout.officeWidth,
-    projection.receptions.length,
-  );
-  const ceoRoomRight = ceoBlocks.agentBarX - OFFICE_GEOMETRY.agentBarGap;
+  if (layout.fallbackMessage) {
+    if (layout.ceoOverflowMarkerRect) {
+      drawRoomOverflowMarker(band, layout.ceoOverflowMarkerRect, 0xf0c878);
+    }
+    stage.addChild(band);
+    return;
+  }
+  const ceoBlocks = layout.ceoBlocks;
+  const ceoRoomRight = layout.ceoRect.x + layout.ceoRect.width;
   const floor = new Graphics();
   drawTiledFloor(
     floor,
     4,
     4,
     ceoRoomRight - 4,
-    OFFICE_GEOMETRY.ceoBandHeight - 4,
+    layout.ceoRect.height,
     0x131328,
     0x0e0e1d,
   );
   floor
-    .roundRect(4, 4, ceoRoomRight - 4, OFFICE_GEOMETRY.ceoBandHeight - 4, 4)
+    .roundRect(4, 4, ceoRoomRight - 4, layout.ceoRect.height, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
   drawVerticalRoad(
     band,
     ceoRoomRight,
     4,
-    OFFICE_GEOMETRY.agentBarGap,
-    OFFICE_GEOMETRY.ceoBandHeight - 4,
+    Math.max(0, layout.agentBarRect.x - ceoRoomRight),
+    layout.ceoRect.height,
   );
   const ceoContent = new Container();
   ceoContent.position.x = ceoBlocks.ceoOriginX;
@@ -818,6 +919,9 @@ function drawCeoReception(
     ceoContent.addChild(overflow);
   }
   band.addChild(ceoContent);
+  if (layout.ceoOverflowMarkerRect) {
+    drawRoomOverflowMarker(band, layout.ceoOverflowMarkerRect, 0xf0c878);
+  }
   drawAgentBar(
     band,
     ceoBlocks,
@@ -1127,7 +1231,12 @@ function drawReceptionDesk(
   });
 
   const desk = new Graphics();
-  desk.ellipse(table.x + table.width / 2, table.y + table.height + 6, table.width * 0.82, 10)
+  desk.ellipse(
+    table.x + table.width / 2,
+    table.y + table.height + 3,
+    Math.max(1, table.width * 0.38),
+    5,
+  )
     .fill({ color: 0x000000, alpha: 0.24 });
   desk.roundRect(table.x, table.y, table.width, table.height, 16).fill(0x4a3526);
   desk.roundRect(table.x + 4, table.y + 4, table.width - 8, table.height - 8, 13)
@@ -1158,14 +1267,13 @@ function drawReceptionDesk(
 
 function drawHallways(stage: Container, layout: OfficeLayout) {
   const hall = new Graphics();
-  const y = OFFICE_GEOMETRY.ceoBandHeight;
+  const y = layout.ceoBandHeight;
   hall.rect(4, y, layout.officeWidth - 8, OFFICE_GEOMETRY.hallwayHeight).fill(0x252537);
   hall.rect(4, y, layout.officeWidth - 8, 1).fill({ color: 0x6c6990, alpha: 0.35 });
   for (let x = 20; x < layout.officeWidth - 20; x += 18) {
     hall.rect(x, y + 16, 7, 1).fill({ color: 0x77749a, alpha: 0.38 });
   }
   stage.addChild(hall);
-  drawRoomRoads(stage, layout);
 }
 
 function drawRoomRoads(stage: Container, layout: OfficeLayout) {
@@ -1238,25 +1346,55 @@ function drawRoomHeading(
   onSelect: (key: string) => void,
   onActivateRoom: (key: string) => void,
 ) {
-  const workspace = label(shortLabel(room.displayLabel, 18).toUpperCase(), {
+  const fallbackActionWidth = OFFICE_GEOMETRY.roomHeaderActionWidth;
+  const fallbackTitleBoxWidth = Math.max(
+    0,
+    rect.headerRect.width - 2 * (
+      fallbackActionWidth +
+      OFFICE_GEOMETRY.roomHeaderActionGap +
+      fallbackActionWidth +
+      OFFICE_GEOMETRY.roomHeaderCloseGap
+    ),
+  );
+  const fallbackTitleBoxX = Math.max(0, (rect.headerRect.width - fallbackTitleBoxWidth) / 2);
+  const header = rect.header ?? {
+    workspace: shortLabel(room.displayLabel, 18),
+    host: shortLabel(host.displayLabel, 16),
+    width: rect.headerRect.width,
+    titleBoxX: fallbackTitleBoxX,
+    titleBoxWidth: fallbackTitleBoxWidth,
+    renameX: fallbackTitleBoxX + fallbackTitleBoxWidth + OFFICE_GEOMETRY.roomHeaderActionGap,
+    closeX: Math.max(0, rect.headerRect.width - fallbackActionWidth),
+    renameWidth: fallbackActionWidth,
+    closeWidth: fallbackActionWidth,
+    actionWidth: fallbackActionWidth,
+    actionGap: OFFICE_GEOMETRY.roomHeaderActionGap,
+    closeGap: OFFICE_GEOMETRY.roomHeaderCloseGap,
+    height: rect.headerRect.height,
+    emergencyEllipsis: false,
+  };
+  const x = rect.headerRect.x + header.titleBoxX;
+  const y = rect.headerRect.y;
+  const workspace = label(header.workspace.toUpperCase(), {
     size: OFFICE_HEADING_TEXT_SIZE,
     color: 0xffffff,
     anchor: { x: 0, y: 0.5 },
   });
-  const hostName = label(shortLabel(host.displayLabel, 16).toUpperCase(), {
+  const hostName = label(header.host.toUpperCase(), {
     size: OFFICE_HEADING_TEXT_SIZE,
     color: 0xf5d892,
     anchor: { x: 0, y: 0.5 },
   });
   const hyphenOne = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
   const hyphenTwo = label("-", { size: OFFICE_HEADING_TEXT_SIZE, color: 0xf0e6c6, anchor: 0.5 });
-  const width = 20 + 16 + 10 + hyphenOne.width + workspace.width + 12 + 20 + 10 + hyphenTwo.width + hostName.width;
-  const x = rect.x + (rect.width - width) / 2;
-  const y = rect.y - 6;
+  const titleBoxWidth = Math.min(
+    Math.max(0, rect.headerRect.width - header.titleBoxX),
+    Math.max(0, header.titleBoxWidth),
+  );
   const background = new Graphics();
-  background.roundRect(x, y, width, 22, 4)
+  background.roundRect(x, y, titleBoxWidth, Math.min(22, rect.headerRect.height), 4)
     .fill(selectedKey === room.key ? accent : blendColor(accent, 0x121522, 0.5));
-  background.roundRect(x, y, width, 22, 4)
+  background.roundRect(x, y, titleBoxWidth, Math.min(22, rect.headerRect.height), 4)
     .stroke({ width: selectedKey === room.key ? 2 : 1, color: blendColor(accent, 0xffffff, 0.35), alpha: 0.84 });
   makeInteractive(background, room.key, onSelect, onActivateRoom);
   parent.addChild(background);
@@ -1353,10 +1491,18 @@ function drawRoom(
   const floor = new Graphics();
   const floorA = active ? blendColor(theme.floorA, 0x5d5138, 0.34) : theme.floorA;
   const floorB = active ? blendColor(theme.floorB, 0x443a2a, 0.32) : theme.floorB;
-  drawTiledFloor(floor, rect.x, rect.y, rect.width, rect.height, floorA, floorB);
-  floor.rect(rect.x, rect.y, rect.width, 34).fill({ color: theme.wall, alpha: 0.76 });
-  floor.roundRect(rect.x, rect.y, rect.width, rect.height, 4).stroke({
-    width: roomSelected ? 4 : hasUnseenCompletion ? 3 : 2,
+  drawTiledFloor(floor, rect.wallRect.x, rect.wallRect.y, rect.wallRect.width, rect.wallRect.height, floorA, floorB);
+  floor.rect(rect.wallRect.x, rect.wallRect.y, rect.wallRect.width, Math.min(34, rect.wallRect.height))
+    .fill({ color: theme.wall, alpha: 0.76 });
+  const borderInset = 3;
+  floor.roundRect(
+    rect.x + borderInset,
+    rect.y + borderInset,
+    Math.max(0, rect.width - borderInset * 2),
+    Math.max(0, rect.height - borderInset * 2),
+    4,
+  ).stroke({
+    width: roomSelected ? 2 : hasUnseenCompletion ? 2 : 1,
     color: roomSelected
       ? 0xffffff
       : hasUnseenCompletion
@@ -1367,7 +1513,9 @@ function drawRoom(
   makeInteractive(floor, room.key, onSelect, onActivateRoom);
   parent.addChild(floor);
   drawRoomHeading(parent, room, host, rect, theme.accent, selectedKey, onSelect, onActivateRoom);
-  drawWindow(parent, rect.x + rect.width / 2 - 18, rect.y + 17);
+  if (rect.overflowMarkerRect) {
+    drawRoomOverflowMarker(parent, rect.overflowMarkerRect, theme.accent);
+  }
   drawPlant(parent, rect.x + 14, rect.y + rect.height - 18, theme.accent);
   drawPlant(parent, rect.x + rect.width - 16, rect.y + rect.height - 18, theme.accent);
 
@@ -1435,6 +1583,20 @@ function drawRoom(
     parent.addChild(stale);
   }
   stage.addChild(parent);
+}
+
+function drawRoomOverflowMarker(parent: Container, rect: { x: number; y: number; width: number; height: number }, accent: number) {
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+  const marker = new Graphics();
+  marker.roundRect(rect.x, rect.y, rect.width, rect.height, 3)
+    .fill({ color: 0x1b202b, alpha: 0.96 })
+    .stroke({ width: 1, color: accent, alpha: 0.86 });
+  parent.addChild(marker);
+  const text = label("MORE", { size: 7, color: 0xf0c878, anchor: 0.5 });
+  text.position.set(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  parent.addChild(text);
 }
 
 function drawNewSeatAction(
@@ -1687,7 +1849,7 @@ function drawAgentBar(
   const x = blocks.agentBarX;
   const y = 4;
   const width = blocks.agentBarWidth;
-  const height = OFFICE_GEOMETRY.ceoBandHeight - 4;
+  const height = blocks.agentBarHeight;
   const room = new Container();
   const floor = new Graphics();
   drawTiledFloor(floor, x, y, width, height, 0x17140f, 0x11100d);
@@ -1891,7 +2053,26 @@ function drawCharacter(
 ) {
   const container = new Container();
   container.position.set(x, feetY);
+  // The sprite texture contains transparent pixels and is not a comfortable
+  // interaction target by itself. Give the whole character silhouette a
+  // stable rectangular hit region so the tooltip follows ordinary pointer
+  // movement over the character, not only opaque texture pixels.
+  container.hitArea = new Rectangle(
+    -30,
+    -OFFICE_GEOMETRY.characterHeight - 8,
+    60,
+    OFFICE_GEOMETRY.characterHeight + 18,
+  );
   addCharacterSprite(container, texture);
+  const hitTarget = new Graphics();
+  hitTarget.rect(
+    -30,
+    -OFFICE_GEOMETRY.characterHeight - 8,
+    60,
+    OFFICE_GEOMETRY.characterHeight + 18,
+  ).fill({ color: 0xffffff, alpha: 0.0001 });
+  makeInteractive(hitTarget, key, onSelect, onActivateAgent);
+  container.addChild(hitTarget);
   if (selectedKey === key) {
     const selected = new Graphics();
     selected.ellipse(0, -2, 25, 8).stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
@@ -1972,16 +2153,6 @@ function drawDesk(
     animated.push({ kind: "monitor", node: glow, baseAlpha: 0.18, phase: animated.length * 7 });
   }
   return desk;
-}
-
-function drawWindow(parent: Container, x: number, y: number) {
-  const windowNode = new Graphics();
-  windowNode.roundRect(x, y, 36, 23, 3).fill(0x504955);
-  windowNode.rect(x + 3, y + 3, 14, 7).fill(0x3f6888);
-  windowNode.rect(x + 19, y + 3, 14, 7).fill(0x537b96);
-  windowNode.rect(x + 3, y + 12, 14, 7).fill(0x355d7c);
-  windowNode.rect(x + 19, y + 12, 14, 7).fill(0x446f8d);
-  parent.addChild(windowNode);
 }
 
 function drawPlant(parent: Container, x: number, y: number, accent: number) {
@@ -2119,6 +2290,88 @@ function label(
   return text;
 }
 
+function officeFontReady() {
+  const fonts = document.fonts;
+  return !fonts || (
+    fonts.status === "loaded" &&
+    fonts.check(`600 ${OFFICE_HEADING_TEXT_SIZE}px Inter`)
+  );
+}
+
+function measureOfficeRoomHeader(
+  title: string,
+  hostTitle: string,
+  titleMode: OfficeLongRoomTitleMode,
+) {
+  const labels = officeHeaderLabels(title, hostTitle, titleMode);
+  const hyphenWidth = measureOfficeHeadingText("-");
+  const fixedWidth = 10 + 16 + hyphenWidth + 12 + 20 + hyphenWidth + 10;
+  const maximumTitleBoxWidth = Math.max(
+    0,
+    OFFICE_GEOMETRY.maxExpandedRoomWidth -
+      2 * OFFICE_GEOMETRY.roomHeaderSafeInset -
+      2 * (
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderActionGap +
+        OFFICE_GEOMETRY.roomHeaderActionWidth +
+        OFFICE_GEOMETRY.roomHeaderCloseGap
+      ),
+  );
+  let workspace = labels.workspace;
+  let host = labels.host;
+  if (fixedWidth + measureOfficeHeadingText(workspace) + measureOfficeHeadingText(host) > maximumTitleBoxWidth) {
+    const available = Math.max(0, maximumTitleBoxWidth - fixedWidth);
+    const workspaceBudget = Math.floor(available * 0.52);
+    workspace = fitOfficeLabelForCanvas(workspace, workspaceBudget);
+    host = fitOfficeLabelForCanvas(host, Math.max(0, available - workspaceBudget));
+  }
+  const titleBoxWidth = Math.ceil(
+    fixedWidth + measureOfficeHeadingText(workspace) + measureOfficeHeadingText(host),
+  );
+  return {
+    titleBoxWidth,
+    roomWidth: minimumRoomWidthForTitleBox(titleBoxWidth),
+    workspace,
+    host,
+  };
+}
+
+function measureOfficeHeadingText(value: string) {
+  const text = new Text({
+    text: value.toUpperCase(),
+    resolution: 4,
+    style: new TextStyle({
+      fontSize: OFFICE_HEADING_TEXT_SIZE,
+      fill: 0xffffff,
+      fontWeight: "600",
+      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+      dropShadow: { alpha: 0.24, distance: 1, color: 0x000000 },
+    }),
+  });
+  const width = text.width;
+  text.destroy();
+  return width;
+}
+
+function fitOfficeLabelForCanvas(value: string, maximumWidth: number) {
+  if (maximumWidth <= 0) {
+    return "";
+  }
+  if (measureOfficeHeadingText(value) <= maximumWidth) {
+    return value;
+  }
+  const ellipsis = "…";
+  if (measureOfficeHeadingText(ellipsis) > maximumWidth) {
+    return "";
+  }
+  const points = [...value];
+  let end = points.length;
+  while (end > 0 && measureOfficeHeadingText(`${points.slice(0, end).join("")}${ellipsis}`) > maximumWidth) {
+    end -= 1;
+  }
+  return end > 0 ? `${points.slice(0, end).join("")}${ellipsis}` : ellipsis;
+}
+
 function shortLabel(value: string, limit: number) {
   const points = [...value];
   return points.length <= limit ? value : `${points.slice(0, Math.max(1, limit - 1)).join("")}…`;
@@ -2161,6 +2414,7 @@ function ensureDiagnostics(): OfficeRendererDiagnostics {
       lastError: null,
       animation: { characters: 0, monitors: 0, statuses: 0 },
       layout: null,
+      publishedLayout: null,
       completionMarkers: 0,
     };
   }

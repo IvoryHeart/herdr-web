@@ -57,8 +57,19 @@ All commits after the pinned baseline belong to one of these reviewed groups:
    Origin configuration;
 4. verification: unit, bridge, multi-host, partial-failure, terminal-fanout,
    browser, responsive, accessibility, security, and independence fixtures;
-5. operations and provenance: CI, trusted-access guidance, SSH-forwarding
-   examples, acceptance evidence, and this auditable delta record.
+5. World downstream integration: the optional Pixel Office projection, bounded
+   observability contract/provider seam, Office settings, and browser lifecycle
+   coverage;
+6. operations and provenance: CI containment, trusted-access guidance,
+   acceptance evidence, source/asset provenance, and this auditable delta
+   record.
 
-No local category introduces World, Pixel Office, OpenTelemetry, authentication,
-RBAC, SSH management, a public plugin SDK, or a central fleet gateway.
+The World, Pixel Office, and observability work is downstream integration in
+this fork. It is intentionally not represented as an upstream Herdr Web
+requirement. The upstreamable units remain the generic contracts, bridge
+capability/transport changes, and any independently reviewable compatibility
+fixes; Office presentation, provider deployment assumptions, and assembled
+World packaging remain downstream until their boundaries are accepted.
+
+This repository does not add authentication, RBAC, SSH management, a public
+plugin SDK, or a central fleet gateway.

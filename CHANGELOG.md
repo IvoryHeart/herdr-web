@@ -97,6 +97,11 @@
 
 ### Fixed
 
+- Fixed the Pixel Office Economy board overflowing long Anthropic model names into the token
+  column by displaying the model family and version only, for example `Haiku 4.5`.
+- Fixed saved Office observability settings being applied after the first data refresh by waiting
+  for configuration synchronization and the provider's initial Prometheus query.
+
 - Fixed Office room roads being visually swallowed by room borders by widening
   the packed room gap to the road width, and corrected vertical-road lane marks
   to run vertically while horizontal-road marks remain horizontal.

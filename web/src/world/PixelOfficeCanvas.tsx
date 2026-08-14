@@ -4,7 +4,11 @@ import { createOfficeRenderer } from "./officeRenderer";
 import type { OfficeRendererController } from "./officeRenderer";
 import type { OfficeCanvasHover } from "./officeRenderer";
 import type { OfficeObservability } from "./officeObservability";
-import type { OfficeLayout, OfficeRoomAlignment } from "./officeGeometry";
+import type {
+  OfficeLongRoomTitleMode,
+  OfficeRoomAlignment,
+} from "./officeGeometry";
+import type { PublishedOfficeLayout } from "./officeLayout";
 import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
@@ -44,7 +48,9 @@ export function PixelOfficeCanvas({
   onAnchorChange,
   onSelectedAnchorChange,
   onLayoutChange,
+  onCanvasRendered,
   roomAlignment,
+  longRoomTitleMode,
   children,
 }: {
   projection: HerdrOfficeProjection;
@@ -60,8 +66,10 @@ export function PixelOfficeCanvas({
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
   onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
-  onLayoutChange?: (layout: OfficeLayout | null) => void;
+  onLayoutChange?: (layout: PublishedOfficeLayout | null) => void;
+  onCanvasRendered?: (revision: number) => void;
   roomAlignment: OfficeRoomAlignment;
+  longRoomTitleMode: OfficeLongRoomTitleMode;
   children?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +89,9 @@ export function PixelOfficeCanvas({
     onAnchorChange,
     onSelectedAnchorChange,
     onLayoutChange,
+    onCanvasRendered,
     roomAlignment,
+    longRoomTitleMode,
   });
   const [failure, setFailure] = useState(false);
   latestRef.current = {
@@ -99,7 +109,9 @@ export function PixelOfficeCanvas({
     onAnchorChange,
     onSelectedAnchorChange,
     onLayoutChange,
+    onCanvasRendered,
     roomAlignment,
+    longRoomTitleMode,
   };
 
   const reportAnchors = () => {
@@ -205,7 +217,9 @@ export function PixelOfficeCanvas({
       (roomKey) => latestRef.current.onNewSeat(roomKey),
       (hover) => latestRef.current.onHover?.(hover),
       (layout) => latestRef.current.onLayoutChange?.(layout),
+      (revision) => latestRef.current.onCanvasRendered?.(revision),
       latestRef.current.roomAlignment,
+      latestRef.current.longRoomTitleMode,
     )
       .then((controller) => {
         if (disposed) {
@@ -225,6 +239,7 @@ export function PixelOfficeCanvas({
           latest.completionSeenKeys,
           latest.observability,
           latest.roomAlignment,
+          latest.longRoomTitleMode,
         );
         window.requestAnimationFrame(() => reportAnchorsRef.current());
       })
@@ -249,9 +264,24 @@ export function PixelOfficeCanvas({
   }, []);
 
   useEffect(() => {
-    controllerRef.current?.update(projection, selectedKey, completionSeenKeys, observability);
+    controllerRef.current?.update(
+      projection,
+      selectedKey,
+      completionSeenKeys,
+      observability,
+      roomAlignment,
+      longRoomTitleMode,
+    );
     window.requestAnimationFrame(() => reportAnchorsRef.current());
-  }, [completionSeenKeys, conversationTargets, observability, projection, roomAlignment, selectedKey]);
+  }, [
+    completionSeenKeys,
+    conversationTargets,
+    longRoomTitleMode,
+    observability,
+    projection,
+    roomAlignment,
+    selectedKey,
+  ]);
 
   useEffect(() => {
     const host = hostRef.current;

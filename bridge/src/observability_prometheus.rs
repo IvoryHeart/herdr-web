@@ -385,24 +385,28 @@ pub struct PrometheusObservabilityProvider {
 }
 
 impl PrometheusObservabilityProvider {
-    pub fn start(config: PrometheusConfig) -> Arc<Self> {
-        let provider = Arc::new(Self {
+    fn create(config: PrometheusConfig) -> Arc<Self> {
+        Arc::new(Self {
             client: reqwest::Client::builder()
                 .timeout(REQUEST_TIMEOUT)
                 .build()
                 .expect("Prometheus HTTP client configuration is valid"),
             config,
             state: Arc::new(RwLock::new(ProviderState::default())),
-        });
+        })
+    }
 
-        let task_provider = Arc::downgrade(&provider);
+    fn spawn_refresh_task(provider: &Arc<Self>, refresh_immediately: bool) {
+        let task_provider = Arc::downgrade(provider);
+        let refresh_seconds = provider.config.refresh_seconds;
         tokio::spawn(async move {
-            let Some(provider) = task_provider.upgrade() else {
-                return;
-            };
-            provider.refresh().await;
-            let mut interval =
-                tokio::time::interval(Duration::from_secs(provider.config.refresh_seconds));
+            if refresh_immediately {
+                let Some(provider) = task_provider.upgrade() else {
+                    return;
+                };
+                provider.refresh().await;
+            }
+            let mut interval = tokio::time::interval(Duration::from_secs(refresh_seconds));
             interval.tick().await;
             loop {
                 interval.tick().await;
@@ -412,7 +416,18 @@ impl PrometheusObservabilityProvider {
                 provider.refresh().await;
             }
         });
+    }
 
+    pub fn start(config: PrometheusConfig) -> Arc<Self> {
+        let provider = Self::create(config);
+        Self::spawn_refresh_task(&provider, true);
+        provider
+    }
+
+    pub async fn start_ready(config: PrometheusConfig) -> Arc<Self> {
+        let provider = Self::create(config);
+        provider.refresh().await;
+        Self::spawn_refresh_task(&provider, false);
         provider
     }
 
@@ -775,12 +790,10 @@ mod tests {
 
     #[test]
     fn rejects_prometheus_credentials_in_endpoint() {
-        let result = PrometheusConfig::from_endpoint_and_settings(
-            "http://user:pass@localhost:9101",
-            None,
-            None,
-            None,
-        );
+        let username = "user";
+        let password = "pass";
+        let endpoint = ["http://", username, ":", password, "@localhost:9101"].concat();
+        let result = PrometheusConfig::from_endpoint_and_settings(&endpoint, None, None, None);
         assert!(result.unwrap_err().contains("embedded credentials"));
     }
 

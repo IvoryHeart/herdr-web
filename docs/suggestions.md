@@ -73,7 +73,7 @@ of hidden requirements.
 
 ### SUG-001 — Generic Herdr Web extension registry
 
-- **Status:** candidate
+- **Status:** promoted
 - **Scope:** `herdr-web`, `bridge`, `herdr-server`
 - **Value:** Allow future OTEL, Git, CI, and other extensions to advertise
   capabilities and data without adding one-off bridge routes for every feature.
@@ -83,7 +83,8 @@ of hidden requirements.
 - **Dependencies:** SUG-002; approved observability contract specification.
 - **Owner:** Open
 - **Added:** 2026-08-06
-- **Related:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
+- **Related:** [`010-generic-extension-registry-spec.md`](specs/010-generic-extension-registry-spec.md)
+- **Dependencies:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
 
 ### SUG-002 — OTEL-backed Office observability boards
 

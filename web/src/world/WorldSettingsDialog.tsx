@@ -6,14 +6,15 @@ import {
   fetchWorldObservabilityConfiguration,
   hasStoredWorldSettings,
   normalizeWorldPrometheusUrl,
+  readWorldLongRoomTitleMode,
   readWorldRoomAlignment,
   readWorldSettings,
   updateWorldObservabilityConfiguration,
-  writeWorldRoomAlignment,
+  writeWorldLayoutSettings,
   writeWorldSettings,
 } from "./worldSettings";
 import type { WorldObservabilityConfiguration } from "./worldSettings";
-import type { OfficeRoomAlignment } from "./officeGeometry";
+import type { OfficeLongRoomTitleMode, OfficeRoomAlignment } from "./officeGeometry";
 
 type Props = {
   onClose: () => void;
@@ -33,6 +34,9 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
   );
   const [prometheusUrl, setPrometheusUrl] = useState("");
   const [roomAlignment, setRoomAlignment] = useState<OfficeRoomAlignment>(readWorldRoomAlignment);
+  const [longRoomTitleMode, setLongRoomTitleMode] = useState<OfficeLongRoomTitleMode>(
+    readWorldLongRoomTitleMode,
+  );
   const [configuration, setConfiguration] = useState<WorldObservabilityConfiguration | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -101,7 +105,7 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
         setPrometheusUrl(next.endpoint ?? "");
         setConfiguration(next);
       }
-      writeWorldRoomAlignment(roomAlignment);
+      writeWorldLayoutSettings({ roomAlignment, longRoomTitleMode });
       onSaved?.();
       setMessage(runtime
         ? normalized ? "Prometheus URL saved." : "Prometheus provider disabled."
@@ -186,6 +190,18 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
               disabled={!runtime || loading || busy}
               onChange={(event) => setPrometheusUrl(event.target.value)}
             />
+          </label>
+          <label className="field-label">
+            <span>Long room titles</span>
+            <select
+              className="field"
+              value={longRoomTitleMode}
+              disabled={busy}
+              onChange={(event) => setLongRoomTitleMode(event.target.value as OfficeLongRoomTitleMode)}
+            >
+              <option value="expand">Expand long room titles</option>
+              <option value="compact">Compact long room titles</option>
+            </select>
           </label>
           <div className="world-settings-health" data-status={configuration?.configured ? "available" : "unavailable"}>
             {configuration?.configured ? <CheckCircle2 size={14} /> : <CircleOff size={14} />}

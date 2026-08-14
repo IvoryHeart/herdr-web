@@ -247,7 +247,19 @@ export function formatOfficeModelNames(models: readonly OfficeObservabilityModel
 }
 
 export function formatOfficeModelName(model: string) {
-  return model
+  const name = model.split("/").at(-1) ?? model;
+  const parts = name.split("-");
+  const familyIndex = parts.findIndex((part) => /^(opus|sonnet|haiku)$/iu.test(part));
+  if (familyIndex >= 0) {
+    const isVersionPart = (part: string) => /^\d{1,2}$/u.test(part);
+    const afterFamily = parts.slice(familyIndex + 1).filter(isVersionPart);
+    const beforeFamily = parts.slice(0, familyIndex).filter(isVersionPart);
+    const version = (afterFamily.length ? afterFamily : beforeFamily).slice(0, 2).join(".");
+    const family = parts[familyIndex].charAt(0).toUpperCase()
+      + parts[familyIndex].slice(1).toLowerCase();
+    return [family, version].filter(Boolean).join(" ");
+  }
+  return name
     .replace(/^claude-/u, "")
     .replace(/^gpt-[\d.-]+-/u, "")
     .replace(/^codex-/u, "");

@@ -23,7 +23,11 @@ export function officeSceneSignature({
     layout: {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,
-      rooms: visibleRoomIndices.map((index) => layout.rooms[index] ?? null),
+      layoutRevision: layout.layoutRevision,
+      inputDigest: layout.inputDigest ?? null,
+      rooms: visibleRoomIndices.map((index) =>
+        layout.rooms.find(({ index: roomIndex }) => roomIndex === index) ?? null,
+      ),
     },
     hosts: projection.hosts,
     rooms: visibleRoomIndices.map((index) => projection.rooms[index] ?? null),

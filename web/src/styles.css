@@ -991,12 +991,17 @@ button {
 
 .world-room-actions {
   position: absolute;
-  display: inline-flex;
-  gap: 2px;
+  display: block;
+  pointer-events: none;
+}
+
+.world-room-actions-stale {
+  visibility: hidden;
   pointer-events: none;
 }
 
 .world-room-overlay-action {
+  position: absolute;
   display: inline-grid;
   width: 20px;
   height: 20px;

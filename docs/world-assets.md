@@ -1,14 +1,27 @@
 # Pixel Office asset provenance
 
-The Herdr Web Pixel Office port uses repository-owner-provided reference material from the
-read-only workspace path
-`/home/ny/Forge/ai-observability/visualizations/public/office/`. Herdr Web has no build or runtime
-dependency on that checkout. The copied character sprites now live under
+The Herdr Web Pixel Office port uses character assets traceable to the
+Claw-Empire repository at revision
+`66a24ea7df2435ef897c48c147deb7ec572c01c2`, under `public/sprites/`. The
+tracked PNGs are byte-identical to those source files. That source carries the
+Apache License 2.0 and the copyright notice `Copyright 2026 GreenSheep01201
+(seowongil@gmail.com)`. Herdr Web has no build or runtime dependency on the
+reference workspace. The copied character sprites now live under
 `web/public/world/characters/`.
 
-The reference Office directory was untracked in the source checkout at port time, so there is no
-source commit to cite. The immutable Extension 001 approval commit authorizing this port is
-`7be916e3c4713582c72665cd787ef0300658ea26`. These SHA-256 hashes identify the exact copied assets:
+The reference workspace is historical provenance only; contributors do not
+need to clone or start another repository to build, test, or run Herdr Web.
+The release notice bundle MUST include the Apache-2.0 license and this
+attribution. The adapted TypeScript geometry/drawing files are modified files
+and MUST carry a prominent modification notice as required by Apache-2.0
+Section 4(b); the provenance manifest will identify the exact source hashes,
+copied-file hashes, and notices.
+
+The historical reference Office directory was untracked in the source
+checkout at port time, so that local directory has no source commit to cite.
+The immutable Extension 001 approval commit authorizing this port is
+`7be916e3c4713582c72665cd787ef0300658ea26`. The Claw-Empire revision and
+these SHA-256 values identify the exact copied assets:
 
 | Asset | SHA-256 |
 | --- | --- |
@@ -34,5 +47,5 @@ time were respectively:
 - `f4975a6e840506a003f39153dfa6e32830d311624402980a1884ecb5351a1e3f`
 
 PixiJS `8.3.4` is pinned as an npm dependency. Its MIT license is retained at
-`web/public/world/LICENSE-PixiJS.txt`. The owner-provided character art is copied without a
-third-party attribution because none accompanied the reference assets.
+`web/public/world/LICENSE-PixiJS.txt`. The Claw-Empire Apache-2.0 license is a
+release requirement and is not inferred from PixiJS or any neighboring asset.
