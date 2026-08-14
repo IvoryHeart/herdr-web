@@ -52,6 +52,6 @@
 ## Delivery record
 
 The bounded synchronization implementation is complete and validated in the
-shared worktree. It was committed as
-[`2babeaa`](https://github.com/IvoryHeart/herdr-web/commit/2babeaa) and
+shared worktree. The clean PR commit is
+[`6375adc`](https://github.com/IvoryHeart/herdr-web/commit/6375adc), and it was
 submitted in [PR #11](https://github.com/IvoryHeart/herdr-web/pull/11).
