@@ -78,6 +78,14 @@ describe("Office layout contract", () => {
     expect(expanded.roomHeaders[0]?.width).toBeLessThanOrEqual(300);
     expect(compact.roomHeaders[0]?.workspace).not.toContain("2025");
     expect(compact.roomHeaders[0]?.width).toBeLessThanOrEqual(300);
+
+    const measured = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("measured", { headerMinTitleBoxWidth: 500 })],
+    });
+    expect(measured.roomHeaders[0]!.titleBoxWidth).toBeGreaterThanOrEqual(500);
   });
 
   it("makes the room wide enough for either the header group or a desk row", () => {
@@ -153,6 +161,7 @@ describe("Office layout contract", () => {
     const publishedB = publisher.publish({ id: "generation-b", canonicalDigest: second.inputDigest }, second);
     expect(publishedB.layoutRevision).toBe(2);
     expect(publisher.ackCanvasRendered(publishedA.layoutRevision)).toBe(false);
+    expect(publisher.ackCanvasRendered(publishedB.layoutRevision + 1)).toBe(false);
     expect(publisher.canvasRenderedRevision).toBe(publishedA.layoutRevision);
 
     const backToA = publisher.publish({ id: "generation-a-3", canonicalDigest: first.inputDigest }, first);
@@ -161,6 +170,67 @@ describe("Office layout contract", () => {
       .toThrow(/reused with different input/);
     expect(() => publisher.publish({ id: "generation-c", canonicalDigest: "wrong" }, first))
       .toThrow(/does not match/);
+  });
+
+  it("publishes the complete immutable geometry snapshot", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("published")],
+    });
+    const published = new OfficeLayoutPublisher().publish(
+      { id: "published-generation", canonicalDigest: result.inputDigest },
+      result,
+    );
+    expect(published.generationId).toBe("published-generation");
+    expect(published.normalizedInput.minimumLogicalCanvasWidth).toBeDefined();
+    expect(published.roomHeaders).toEqual(result.roomHeaders);
+    expect(published.rows).toEqual(result.rows);
+    expect(published.contentItems).toEqual(result.contentItems);
+    expect(published.omissionSummary).toEqual(result.omissionSummary);
+    expect(Object.isFrozen(published)).toBe(true);
+    expect(Object.isFrozen(published.rooms)).toBe(true);
+    expect(Object.isFrozen(published.rooms[0])).toBe(true);
+    expect(Object.isFrozen(published.normalizedInput)).toBe(true);
+    expect(Object.isFrozen(published.normalizedInput.rooms)).toBe(true);
+    expect(Object.isFrozen(published.normalizedInput.rooms[0].contentItems)).toBe(true);
+    expect(Object.isFrozen(published.ceoBlocks)).toBe(true);
+    expect(Object.isFrozen(published.ceoBlocks.receptions)).toBe(true);
+  });
+
+  it("uses a stable digest for equivalent descriptor property order", () => {
+    const firstRoom = {
+      id: "same",
+      title: "Same title",
+      hostTitle: "Same host",
+      deskCount: 1,
+      standingCount: 0,
+      contentItems: [],
+      ignored: "not part of the contract",
+    };
+    const secondRoom = {
+      contentItems: [],
+      standingCount: 0,
+      deskCount: 1,
+      hostTitle: "Same host",
+      title: "Same title",
+      id: "same",
+      ignored: { changed: true },
+    };
+    const first = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [firstRoom],
+    });
+    const second = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [secondRoom],
+    });
+    expect(second.inputDigest).toBe(first.inputDigest);
   });
 
   it("bounds omission samples while reporting aggregate required overflow", () => {
@@ -214,6 +284,132 @@ describe("Office layout contract", () => {
     expect(result.contentItems.filter(({ roomIndex }) => roomIndex === -1).every((item) =>
       contains(result.layout.ceoRect, item.clipRect) && contains(item.clipRect, item.inkBounds),
     )).toBe(true);
+  });
+
+  it("accounts for every item beyond the bounded content cap", () => {
+    const result = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxContentItems: 128,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("large-input", {
+        contentItems: Array.from({ length: 3000 }, (_, index) => ({
+          id: `large-${index}`,
+          kind: "board",
+          importance: "optional" as const,
+          order: index,
+          minWidth: 20,
+          minHeight: 20,
+        })),
+      })],
+    });
+    expect(result.omissionSummary.byReason["content-item-count-cap"]).toBe(2872);
+    expect(result.omissionSummary.samples["content-item-count-cap"]).toHaveLength(8);
+  });
+
+  it("reserves width for explicit room and content minima", () => {
+    const roomMinimum = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasWidth: 2200,
+      maximumExpandedRoomWidth: 2000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("room-minimum", { contentMinWidth: 1800 })],
+    });
+    expect(roomMinimum.layout.rooms[0].width).toBeGreaterThanOrEqual(1800);
+
+    const contentMinimum = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maximumExpandedCanvasWidth: 2200,
+      maximumExpandedRoomWidth: 2000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("content-minimum", {
+        contentItems: [{
+          id: "wide-board",
+          kind: "board",
+          importance: "required",
+          order: 0,
+          minWidth: 1600,
+          minHeight: 20,
+        }],
+      })],
+    });
+    expect(contentMinimum.layout.rooms[0].width).toBeGreaterThanOrEqual(1600);
+    expect(contentMinimum.contentItems[0].width).toBeGreaterThanOrEqual(1600);
+  });
+
+  it("places the first column item in row zero and honors exact row capacity", () => {
+    const oneRow = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxLayoutRows: 1,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("column-one", {
+        flow: "column",
+        contentItems: [
+          { id: "first", kind: "board", importance: "required", order: 0, minWidth: 40, minHeight: 40 },
+        ],
+      })],
+    });
+    expect(oneRow.contentItems).toHaveLength(1);
+    expect(oneRow.contentItems[0].y).toBe(oneRow.layout.rooms[0].contentSafeRect.y);
+
+    const twoRows = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      maxLayoutRows: 2,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("column-two", {
+        flow: "column",
+        contentItems: [
+          { id: "first", kind: "board", importance: "required", order: 0, minWidth: 40, minHeight: 40 },
+          { id: "second", kind: "board", importance: "required", order: 1, minWidth: 40, minHeight: 40 },
+        ],
+      })],
+    });
+    expect(twoRows.contentItems).toHaveLength(2);
+    expect(twoRows.contentItems[1].y).toBeGreaterThan(twoRows.contentItems[0].y);
+    expect(twoRows.contentItems[1].y).toBe(
+      twoRows.contentItems[0].y + twoRows.contentItems[0].height + 8,
+    );
+  });
+
+  it("keeps row flow bounded while wrapping and spanning remain explicit", () => {
+    const items = [
+      { id: "first", kind: "board", importance: "required" as const, order: 0, minWidth: 40, minHeight: 40, preferredWidth: 160 },
+      { id: "second", kind: "board", importance: "required" as const, order: 1, minWidth: 40, minHeight: 40, preferredWidth: 160 },
+    ];
+    const row = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("row-flow", { title: "ROOM", hostTitle: "HOST", flow: "row", contentItems: items })],
+    });
+    expect(row.contentItems).toHaveLength(1);
+    expect(row.omissionSummary.byReason["canvas-capacity-exhausted"]).toBe(1);
+
+    const wrapped = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("grid-flow", { title: "ROOM", hostTitle: "HOST", flow: "grid", contentItems: items })],
+    });
+    expect(wrapped.contentItems).toHaveLength(2);
+    expect(wrapped.contentItems[1].y).toBeGreaterThan(wrapped.contentItems[0].y);
+
+    const spanning = resolveOfficeGeometry({
+      availableViewportWidth: 1000,
+      titleMode: "expand",
+      roomAlignment: "left",
+      rooms: [room("span-flow", {
+        title: "ROOM",
+        hostTitle: "HOST",
+        spanPolicy: "multi-row",
+        contentItems: [items[0]],
+      })],
+    });
+    expect(spanning.contentItems[0].width).toBe(spanning.layout.rooms[0].contentSafeRect.width);
   });
 
   it("uses the bounded fallback when fixed chrome cannot fit the room cap", () => {

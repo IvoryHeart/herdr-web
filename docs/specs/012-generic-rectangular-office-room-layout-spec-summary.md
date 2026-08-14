@@ -7,10 +7,17 @@
 ### 2026-08-13 — Delivered implementation
 
 - **Implemented:** Commit [`657e560`](../../commit/657e560) adds the bounded pure Office geometry resolver, publication controller, immutable layout revisions, stale-canvas acknowledgement gating, title-safe room headers, nested room bounds, wrapped CEO reception/content layout, vertically elastic Agent Bar, logical-canvas scrolling, synchronized DOM/Pixi geometry, accessible overflow markers, and preserving Office layout settings. Apache-derived geometry and drawing files carry the required downstream modification notices. Observability/settings synchronization was delivered separately in [`241c2cb`](../../commit/241c2cb), which is pushed to the feature branch.
-- **Evidence:** `npm run lint`; `npm test` — 51 files, 353 tests; `npm run build`; targeted Playwright checks for persistent World navigation and narrow horizontal Office scrolling — 2 passed; room capability actions — 1 passed; narrow and desktop visual capture checks — passed. Focused layout tests cover 19 geometry/publication/bounded-content cases, including A → B → A revisions, stale acknowledgements, emergency ellipsis, CEO wrapping, nested bounds, settings preservation, and bounded omission samples.
+- **Evidence:** `npm run lint`; `npm test` — 51 files, 360 tests; `npm run build`; targeted Playwright checks for persistent World navigation and narrow horizontal Office scrolling — 2 passed; room capability actions — 1 passed; narrow and desktop visual capture checks — passed. Focused layout tests cover the geometry/publication/bounded-content contract, including A → B → A revisions, stale acknowledgements, emergency ellipsis, CEO wrapping, nested bounds, settings preservation, and bounded omission samples.
 - **Constraints / operational notes:** The approved logical-scroll mode remains in effect: the viewport bounds the scroll container, while the resolved logical canvas may be wider. Mobile-specific composition remains deferred by the approved contract. Existing generated evidence images and the pre-existing repository analysis file were intentionally left outside the implementation commit.
 - **Drift from approved spec:** None for the implemented slice. Future CEO boards/control types are supported by bounded synthetic content descriptors in the pure geometry contract; the current renderer continues to draw the approved existing CEO boards/receptions and does not invent a new product content type.
 - **Follow-up extension:** None.
+
+### 2026-08-14 — Review contract corrections
+
+- **Implemented:** The review corrections now publish one deep-frozen presenter-facing geometry snapshot, use an explicit normalized DTO with canonical serialization, account for every content descriptor beyond the bounded cap, include room/content minima in width resolution, and implement distinct bounded row/column/wrap/grid/span placement behavior. CEO reception and Agent Bar rectangles are carried by the resolved layout and consumed directly by drawing and anchor paths.
+- **Implemented:** Font readiness and Pixi text measurement are supplied by the presentation layer; font completion triggers remeasurement and a new published revision when geometry changes. Canvas acknowledgement is deferred to a post-render ticker priority, and stale acknowledgements remain rejected by revision.
+- **Evidence:** The web suite now passes 51 files / 360 tests, including complete published-snapshot immutability, property-order digest equivalence, 3,000-item omission accounting, explicit content minima, and exact column-row capacity. `npm run lint --prefix web` and `npm run build --prefix web` pass; the full root test suite also passes (114 compatibility tests and 148 bridge tests).
+- **Drift from approved spec:** None. These are implementation-level clarifications from the approved Extensions 001/002 review and do not change the product scope or mobile deferral.
 
 ## Delivery record
 
@@ -26,7 +33,7 @@ The approved parent specification, Extensions 001 and 002, and their implementat
 ### 2026-08-13 — Per-room action-zone correction
 
 - **Implemented:** The room-header renderer now reserves the edit/trash action zone for every room and applies renderer-font measurement with deterministic ellipsis to both workspace and host labels before that boundary. This covers the asymmetric collision visible only on some room titles.
-- **Evidence:** Fresh 1440×900 and 375×812 captures were inspected after rebuilding `web/dist`; all visible room headers keep text separate from their action controls. `npm run lint`, the full 353-test web suite, and `npm run build` pass.
+- **Evidence:** Fresh 1440×900 and 375×812 captures were inspected after rebuilding `web/dist`; all visible room headers keep text separate from their action controls. `npm run lint`, the full 360-test web suite, and `npm run build` pass.
 - **Drift from approved spec:** None.
 
 ### 2026-08-13 — Separate title boxes from room actions

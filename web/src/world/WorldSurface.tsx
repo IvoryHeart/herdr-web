@@ -34,10 +34,10 @@ import {
   OFFICE_GEOMETRY,
 } from "./officeGeometry";
 import type {
-  OfficeLayout,
   OfficeLongRoomTitleMode,
   OfficeRoomAlignment,
 } from "./officeGeometry";
+import type { PublishedOfficeLayout } from "./officeLayout";
 import {
   MAX_SAVED_WORLD_WINDOWS,
   readWorldViewPrefs,
@@ -215,7 +215,7 @@ function WorldStage({
   const scrollRestoreRef = useRef(false);
   const scrollSaveTimerRef = useRef<number | null>(null);
   const [conversationAnchors, setConversationAnchors] = useState<OfficeConversationAnchors>({});
-  const [officeLayout, setOfficeLayout] = useState<OfficeLayout | null>(null);
+  const [officeLayout, setOfficeLayout] = useState<PublishedOfficeLayout | null>(null);
   const [canvasRenderedRevision, setCanvasRenderedRevision] = useState(0);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [conversationRects, setConversationRects] = useState<Record<string, DOMRect>>({});
@@ -937,7 +937,7 @@ function WorldRoomActions({
   context,
   canvasRenderedRevision,
 }: {
-  layout: OfficeLayout;
+  layout: PublishedOfficeLayout;
   projection: HerdrOfficeProjection;
   selectedRoomKey: string | null;
   context: WorldSurfaceContext;

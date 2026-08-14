@@ -5,10 +5,10 @@ import type { OfficeRendererController } from "./officeRenderer";
 import type { OfficeCanvasHover } from "./officeRenderer";
 import type { OfficeObservability } from "./officeObservability";
 import type {
-  OfficeLayout,
   OfficeLongRoomTitleMode,
   OfficeRoomAlignment,
 } from "./officeGeometry";
+import type { PublishedOfficeLayout } from "./officeLayout";
 import { officeDebug } from "../officeDebug";
 
 export type OfficeCanvasAnchor = {
@@ -66,7 +66,7 @@ export function PixelOfficeCanvas({
   onHover?: (hover: OfficeCanvasHover | null) => void;
   onAnchorChange?: (anchors: OfficeConversationAnchors | null) => void;
   onSelectedAnchorChange?: (anchor: OfficeCanvasAnchor | null) => void;
-  onLayoutChange?: (layout: OfficeLayout | null) => void;
+  onLayoutChange?: (layout: PublishedOfficeLayout | null) => void;
   onCanvasRendered?: (revision: number) => void;
   roomAlignment: OfficeRoomAlignment;
   longRoomTitleMode: OfficeLongRoomTitleMode;

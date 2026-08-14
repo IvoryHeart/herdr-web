@@ -16,6 +16,7 @@ import {
   Text,
   TextStyle,
   Texture,
+  UPDATE_PRIORITY,
 } from "pixi.js";
 import type {
   HerdrOfficeProjection,
@@ -31,7 +32,6 @@ import {
   OFFICE_GEOMETRY,
   receptionAgentAnchor,
   receptionTableRect,
-  resolveCeoBlockLayout,
   standingAnchor,
 } from "./officeGeometry";
 import type {
@@ -46,7 +46,14 @@ import {
   OfficeLayoutPublisher,
   resolveOfficeGeometry,
 } from "./officeLayout";
-import type { OfficeGeometryRoomDescriptor } from "./officeLayout";
+import type {
+  OfficeGeometryRoomDescriptor,
+  PublishedOfficeLayout,
+} from "./officeLayout";
+import {
+  minimumRoomWidthForTitleBox,
+  officeHeaderLabels,
+} from "./officeLayout";
 import { officeDebug } from "../officeDebug";
 import { officeSceneSignature } from "./officeSceneSignature";
 import type { OfficeObservability } from "./officeObservability";
@@ -188,7 +195,7 @@ export async function createOfficeRenderer(
   canCreateSeat: (roomKey: string) => boolean,
   onNewSeat: (roomKey: string) => void,
   onHover: (hover: OfficeCanvasHover | null) => void,
-  onLayoutChange: (layout: OfficeLayout | null) => void,
+  onLayoutChange: (layout: PublishedOfficeLayout | null) => void,
   onCanvasRendered: (revision: number) => void,
   roomAlignment: OfficeRoomAlignment,
   longRoomTitleMode: OfficeLongRoomTitleMode,
@@ -216,12 +223,14 @@ export async function createOfficeRenderer(
   let currentRoomAlignment = roomAlignment;
   let currentLongRoomTitleMode = longRoomTitleMode;
   const layoutPublisher = new OfficeLayoutPublisher();
-  let currentLayout: OfficeLayout | null = null;
+  let currentLayout: PublishedOfficeLayout | null = null;
   let lastWidth = 0;
   let resizeTimer: number | null = null;
   let lastRendererSize = { width: 0, height: 0 };
   let lastSceneSignature: string | null = null;
   let tick = 0;
+  let pendingRenderRevision = 0;
+  let currentFontReady = officeFontReady();
   const animated: AnimatedItem[] = [];
   const scrollElement = element.closest<HTMLElement>(".world-stage-scroll");
   const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -434,6 +443,18 @@ export async function createOfficeRenderer(
     diagnostics.activeListeners += 1;
   }
 
+  const acknowledgeAfterRenderedFrame = (revision: number) => {
+    pendingRenderRevision = revision;
+    app.ticker.addOnce(() => {
+      if (disposed || pendingRenderRevision !== revision || currentLayout?.layoutRevision !== revision) {
+        return;
+      }
+      if (layoutPublisher.ackCanvasRendered(revision)) {
+        onCanvasRendered(revision);
+      }
+    }, undefined, UPDATE_PRIORITY.UTILITY);
+  };
+
   const build = (requestedWidth = element.clientWidth) => {
     if (disposed) {
       return;
@@ -442,12 +463,19 @@ export async function createOfficeRenderer(
     const width = Math.floor(viewportWidth || requestedWidth || 0);
     const roomDescriptors: OfficeGeometryRoomDescriptor[] = currentProjection.rooms.map((room) => {
       const host = currentProjection.hosts.find(({ key }) => key === room.hostKey);
+      const measuredHeader = measureOfficeRoomHeader(
+        room.displayLabel,
+        host?.displayLabel ?? "host",
+        currentLongRoomTitleMode,
+      );
       return {
         id: room.key,
         role: "work",
         region: "work",
         title: room.displayLabel,
         hostTitle: host?.displayLabel ?? "host",
+        headerMinTitleBoxWidth: measuredHeader.titleBoxWidth,
+        headerMinWidth: measuredHeader.roomWidth,
         deskCount: room.desks.length + (
           canCreateSeat(room.key) && room.desks.length < OFFICE_GEOMETRY.desksPerRoom ? 1 : 0
         ),
@@ -466,7 +494,7 @@ export async function createOfficeRenderer(
       roomAlignment: currentRoomAlignment,
       ceoReceptionCount: currentProjection.receptions.length,
       fontKey: "Inter, ui-sans-serif, system-ui, sans-serif",
-      fontReady: true,
+      fontReady: currentFontReady,
       rooms: roomDescriptors,
     });
     const layout = layoutPublisher.publish(
@@ -491,8 +519,7 @@ export async function createOfficeRenderer(
     element.style.height = `${layout.totalHeight}px`;
     app.stage.position.y = -(scrollElement?.scrollTop ?? 0);
     renderScene(layout);
-    layoutPublisher.ackCanvasRendered(layout.layoutRevision);
-    onCanvasRendered(layout.layoutRevision);
+    acknowledgeAfterRenderedFrame(layout.layoutRevision);
     diagnostics.layout = {
       officeWidth: layout.officeWidth,
       totalHeight: layout.totalHeight,
@@ -521,6 +548,22 @@ export async function createOfficeRenderer(
     }
   };
   app.ticker.add(ticker);
+
+  const fontSet = document.fonts;
+  const refreshFontMetrics = () => {
+    if (disposed) {
+      return;
+    }
+    const ready = officeFontReady();
+    currentFontReady = ready;
+    lastSceneSignature = null;
+    build(lastWidth || element.clientWidth);
+  };
+  fontSet?.addEventListener("loadingdone", refreshFontMetrics);
+  if (fontSet) {
+    void fontSet.ready.then(refreshFontMetrics);
+    diagnostics.activeListeners += 1;
+  }
 
   const onMotionChange = (event: MediaQueryListEvent) => {
     reducedMotion = event.matches;
@@ -561,6 +604,7 @@ export async function createOfficeRenderer(
   } catch (error) {
     observer.disconnect();
     motionPreference.removeEventListener("change", onMotionChange);
+    fontSet?.removeEventListener("loadingdone", refreshFontMetrics);
     scrollElement?.removeEventListener("scroll", syncScrollPosition);
     app.canvas.removeEventListener("pointermove", hover);
     app.canvas.removeEventListener("pointerleave", leave);
@@ -575,7 +619,7 @@ export async function createOfficeRenderer(
     diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
     diagnostics.activeListeners = Math.max(
       0,
-      diagnostics.activeListeners - (scrollElement ? 5 : 4),
+      diagnostics.activeListeners - (scrollElement ? 6 : 5),
     );
     throw error;
   }
@@ -624,6 +668,7 @@ export async function createOfficeRenderer(
       }
       observer.disconnect();
       motionPreference.removeEventListener("change", onMotionChange);
+      fontSet?.removeEventListener("loadingdone", refreshFontMetrics);
       scrollElement?.removeEventListener("scroll", syncScrollPosition);
       app.canvas.removeEventListener("pointermove", hover);
       app.canvas.removeEventListener("pointerleave", leave);
@@ -644,7 +689,7 @@ export async function createOfficeRenderer(
       diagnostics.activeObservers = Math.max(0, diagnostics.activeObservers - 1);
       diagnostics.activeListeners = Math.max(
         0,
-        diagnostics.activeListeners - (scrollElement ? 5 : 4),
+        diagnostics.activeListeners - (scrollElement ? 6 : 5),
       );
       diagnostics.canvases = document.querySelectorAll("canvas[data-office-canvas='true']").length;
       diagnostics.ready = false;
@@ -716,8 +761,7 @@ function resolveOfficeAgentAnchor(
       (reception) => reception.hostKey === agent.hostKey,
     );
     const reception = projection.receptions[receptionIndex];
-    const rect = resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length)
-      .receptions[receptionIndex];
+    const rect = layout.ceoBlocks.receptions[receptionIndex];
     if (!reception || !rect) {
       return null;
     }
@@ -733,10 +777,7 @@ function resolveOfficeAgentAnchor(
     if (barIndex < 0) {
       return null;
     }
-    const slot = agentBarSlot(
-      resolveCeoBlockLayout(layout.officeWidth, projection.receptions.length),
-      barIndex,
-    );
+    const slot = agentBarSlot(layout.ceoBlocks, barIndex);
     return { x: slot.x, y: slot.characterFeetY - 42 };
   }
   const roomIndex = projection.rooms.findIndex(({ key: roomKey }) => roomKey === agent.roomKey);
@@ -793,31 +834,28 @@ function drawCeoReception(
   onActivateAgent: (key: string) => void,
 ) {
   const band = new Container();
-  const ceoBlocks = resolveCeoBlockLayout(
-    layout.officeWidth,
-    projection.receptions.length,
-  );
-  const ceoRoomRight = ceoBlocks.agentBarX - OFFICE_GEOMETRY.agentBarGap;
+  const ceoBlocks = layout.ceoBlocks;
+  const ceoRoomRight = layout.ceoRect.x + layout.ceoRect.width;
   const floor = new Graphics();
   drawTiledFloor(
     floor,
     4,
     4,
     ceoRoomRight - 4,
-    ceoBlocks.ceoBandHeight - 4,
+    layout.ceoRect.height,
     0x131328,
     0x0e0e1d,
   );
   floor
-    .roundRect(4, 4, ceoRoomRight - 4, ceoBlocks.ceoBandHeight - 4, 4)
+    .roundRect(4, 4, ceoRoomRight - 4, layout.ceoRect.height, 4)
     .stroke({ width: 2, color: 0x8d7135, alpha: 0.8 });
   band.addChild(floor);
   drawVerticalRoad(
     band,
     ceoRoomRight,
     4,
-    OFFICE_GEOMETRY.agentBarGap,
-    ceoBlocks.ceoBandHeight - 4,
+    Math.max(0, layout.agentBarRect.x - ceoRoomRight),
+    layout.ceoRect.height,
   );
   const ceoContent = new Container();
   ceoContent.position.x = ceoBlocks.ceoOriginX;
@@ -2215,6 +2253,48 @@ function label(
     text.anchor.set(options.anchor.x, options.anchor.y);
   }
   return text;
+}
+
+function officeFontReady() {
+  const fonts = document.fonts;
+  return !fonts || (
+    fonts.status === "loaded" &&
+    fonts.check(`600 ${OFFICE_HEADING_TEXT_SIZE}px Inter`)
+  );
+}
+
+function measureOfficeRoomHeader(
+  title: string,
+  hostTitle: string,
+  titleMode: OfficeLongRoomTitleMode,
+) {
+  const labels = officeHeaderLabels(title, hostTitle, titleMode);
+  const hyphenWidth = measureOfficeHeadingText("-");
+  const titleBoxWidth = Math.ceil(
+    10 + 16 + hyphenWidth + measureOfficeHeadingText(labels.workspace) +
+      12 + 20 + hyphenWidth + measureOfficeHeadingText(labels.host) + 10,
+  );
+  return {
+    titleBoxWidth,
+    roomWidth: minimumRoomWidthForTitleBox(titleBoxWidth),
+  };
+}
+
+function measureOfficeHeadingText(value: string) {
+  const text = new Text({
+    text: value.toUpperCase(),
+    resolution: 4,
+    style: new TextStyle({
+      fontSize: OFFICE_HEADING_TEXT_SIZE,
+      fill: 0xffffff,
+      fontWeight: "600",
+      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+      dropShadow: { alpha: 0.24, distance: 1, color: 0x000000 },
+    }),
+  });
+  const width = text.width;
+  text.destroy();
+  return width;
 }
 
 function shortLabel(value: string, limit: number) {

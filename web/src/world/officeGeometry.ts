@@ -67,6 +67,7 @@ export type OfficeRoomPresentation = {
   standingCount: number;
   contentMinWidth?: number;
   headerMinWidth?: number;
+  headerMinTitleBoxWidth?: number;
   headerMinHeight?: number;
   preferredWidth?: number;
   preferredHeight?: number;
@@ -172,6 +173,7 @@ export type OfficeLayout = {
   ceoRect: OfficeRect;
   ceoContentRect: OfficeRect;
   agentBarRect: OfficeRect;
+  ceoBlocks: OfficeCeoBlockLayout;
   rooms: readonly OfficeRoomRect[];
   layoutRevision: number;
   inputDigest?: string;
@@ -184,6 +186,7 @@ export function resolveOfficeLayout(
   requestedRooms: number | readonly OfficeRoomPresentation[],
   roomAlignment: OfficeRoomAlignment = DEFAULT_OFFICE_ROOM_ALIGNMENT,
   requestedCeoBandHeight: number = OFFICE_GEOMETRY.ceoBandHeight,
+  requestedCeoReceptionCount: number = 0,
 ): OfficeLayout {
   const officeWidth = Math.max(
     OFFICE_GEOMETRY.minOfficeWidth,
@@ -199,7 +202,7 @@ export function resolveOfficeLayout(
       )
     : requestedRooms
         .slice(0, OFFICE_GEOMETRY.maxRooms)
-        .map(({ deskCount, standingCount, contentMinWidth, headerMinWidth, headerMinHeight, preferredWidth, preferredHeight }) => ({
+        .map(({ deskCount, standingCount, contentMinWidth, headerMinWidth, headerMinTitleBoxWidth, headerMinHeight, preferredWidth, preferredHeight }) => ({
           deskCount: boundedCount(deskCount, OFFICE_GEOMETRY.desksPerRoom),
           standingCount: boundedCount(
             standingCount,
@@ -207,18 +210,24 @@ export function resolveOfficeLayout(
           ),
           contentMinWidth,
           headerMinWidth,
+          headerMinTitleBoxWidth,
           headerMinHeight,
           preferredWidth,
           preferredHeight,
         }));
   const count = presentations.length;
   const availableRoomWidth = Math.max(0, officeWidth - 24);
+  const requestedReceptionCount = boundedCount(
+    requestedCeoReceptionCount,
+    OFFICE_GEOMETRY.maxReceptionDesks,
+  );
+  const ceoBlocks = resolveCeoBlockLayout(officeWidth, requestedReceptionCount);
   const ceoBandHeight = Math.max(
     OFFICE_GEOMETRY.ceoBandHeight,
+    ceoBlocks.ceoBandHeight,
     Math.floor(Number(requestedCeoBandHeight) || 0),
   );
   const roomStartY = ceoBandHeight + OFFICE_GEOMETRY.hallwayHeight;
-  const ceoBlocks = resolveCeoBlockLayout(officeWidth, 0);
   const agentBarX = ceoBlocks.agentBarX;
   const agentBarWidth = ceoBlocks.agentBarWidth;
   const ceoRect = {
@@ -244,6 +253,7 @@ export function resolveOfficeLayout(
     standingCount,
     contentMinWidth = 0,
     headerMinWidth = 0,
+    headerMinTitleBoxWidth = 0,
     headerMinHeight = OFFICE_GEOMETRY.roomHeaderHeight,
     preferredWidth,
     preferredHeight,
@@ -271,6 +281,7 @@ export function resolveOfficeLayout(
       preferredWidth: Math.max(
         OFFICE_GEOMETRY.minRoomWidth,
         headerMinWidth,
+        headerMinTitleBoxWidth,
         contentMinWidth,
         preferredWidth ?? 0,
         OFFICE_GEOMETRY.roomPadding * 2 +
@@ -390,6 +401,11 @@ export function resolveOfficeLayout(
     ceoRect,
     ceoContentRect,
     agentBarRect,
+    ceoBlocks: {
+      ...ceoBlocks,
+      ceoBandHeight,
+      agentBarHeight: ceoBandHeight - 4,
+    },
     rooms,
     layoutRevision: 0,
   };
