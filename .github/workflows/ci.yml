@@ -5,10 +5,13 @@ on:
   push:
     branches:
       - main
-      - "feat/**"
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -36,19 +39,46 @@ jobs:
         run: npm ci --prefix web
       - name: Run complete non-live checks
         run: npm run check
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run browser federation, responsive, and accessibility checks
-        run: npm run test:e2e
-      - name: Upload Playwright diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-diagnostics
-          path: .scratch/playwright
-          if-no-files-found: ignore
       - name: Run independence audit
         run: npm run test:independence
       - uses: taiki-e/install-action@cargo-audit
       - name: Run dependency and secret security checks
         run: npm run test:security
+
+  browser:
+    name: Browser shard ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install web dependencies
+        run: npm ci --prefix web
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run test-level browser shard
+        run: >-
+          npm run test:e2e --
+          --fully-parallel
+          --workers=1
+          --shard=${{ matrix.shard }}/4
+          --fail-on-flaky-tests
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: .scratch/playwright
+          if-no-files-found: ignore

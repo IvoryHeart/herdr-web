@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   deskAnchor,
   receptionAgentAnchor,
@@ -364,21 +364,12 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
     page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
   ).toBeVisible();
 
-  // Keep the conversation window out of the room while inspecting the next
-  // seat; the responsive layout may place the room beneath the default window.
-  const conversationHeader = page.locator(".world-conversation-header");
-  for (let index = 0; index < 12; index += 1) {
-    await conversationHeader.focus();
-    await page.keyboard.press("Shift+ArrowRight");
-  }
-  for (let index = 0; index < 6; index += 1) {
-    await conversationHeader.focus();
-    await page.keyboard.press("Shift+ArrowDown");
-  }
-
   const newSeatButton = page.getByRole("button", { name: /^New seat in / }).first();
   await expect(newSeatButton).toBeVisible();
-  await newSeatButton.click();
+  const conversation = page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" });
+  await moveConversationUntilClear(page, conversation, newSeatButton);
+  await newSeatButton.click({ trial: true, timeout: 5_000 });
+  await newSeatButton.click({ timeout: 5_000 });
   await expect(page.locator("form.launch-modal")).toBeVisible();
   await expect(
     page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
@@ -1218,6 +1209,79 @@ async function publishedOfficeLayout(page: Page): Promise<PublishedOfficeLayout>
   const layout = await page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.publishedLayout ?? null);
   expect(layout).not.toBeNull();
   return layout as PublishedOfficeLayout;
+}
+
+type Rectangle = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+async function moveConversationUntilClear(page: Page, conversation: Locator, target: Locator) {
+  const header = conversation.locator(".world-conversation-header");
+  const moves = [
+    "Shift+ArrowRight",
+    "Shift+ArrowLeft",
+    "Shift+ArrowDown",
+    "Shift+ArrowUp",
+  ] as const;
+
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const rectangles = await conversationAndTargetRectangles(conversation, target);
+    if (!rectanglesIntersect(rectangles.conversation, rectangles.target)) {
+      return;
+    }
+
+    const horizontalMove = rectangles.target.x + rectangles.target.width / 2
+      >= rectangles.conversation.x + rectangles.conversation.width / 2
+      ? "Shift+ArrowLeft"
+      : "Shift+ArrowRight";
+    const verticalMove = rectangles.target.y + rectangles.target.height / 2
+      >= rectangles.conversation.y + rectangles.conversation.height / 2
+      ? "Shift+ArrowUp"
+      : "Shift+ArrowDown";
+    const candidates = [horizontalMove, verticalMove, ...moves] as const;
+    let moved = false;
+
+    for (const move of candidates) {
+      const before = await conversation.boundingBox();
+      await header.focus();
+      await page.keyboard.press(move);
+      const after = await conversation.boundingBox();
+      if (before && after && (before.x !== after.x || before.y !== after.y)) {
+        moved = true;
+        break;
+      }
+    }
+
+    if (!moved) {
+      throw new Error("Could not move the Office conversation away from the New seat control");
+    }
+  }
+
+  throw new Error("Office conversation still intersects the New seat control after repositioning");
+}
+
+async function conversationAndTargetRectangles(conversation: Locator, target: Locator) {
+  const [conversationBox, targetBox] = await Promise.all([
+    conversation.boundingBox(),
+    target.boundingBox(),
+  ]);
+  if (!conversationBox || !targetBox) {
+    throw new Error("Could not measure the Office conversation and New seat control");
+  }
+  return {
+    conversation: conversationBox,
+    target: targetBox,
+  } satisfies { conversation: Rectangle; target: Rectangle };
+}
+
+function rectanglesIntersect(first: Rectangle, second: Rectangle) {
+  return first.x < second.x + second.width
+    && first.x + first.width > second.x
+    && first.y < second.y + second.height
+    && first.y + first.height > second.y;
 }
 
 async function waitForLiveOffice(page: import("@playwright/test").Page) {
