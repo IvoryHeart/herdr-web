@@ -347,7 +347,12 @@ test("shows Office callouts and targets a new seat to the hovered room", async (
   await expect(page.getByRole("tooltip")).toContainText("Running");
   const officeScroll = page.locator(".world-stage-scroll");
   const characterScrollTop = Math.max(0, firstDesk.characterFeetY - 260);
-  await officeScroll.evaluate((element, top) => element.scrollTo({ top, behavior: "auto" }), characterScrollTop);
+  await officeScroll.evaluate((element, top) => {
+    element.scrollTo({ top, behavior: "auto" });
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+  }, characterScrollTop);
   await expect.poll(() => officeScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   const visibleCanvasBox = await canvas.boundingBox();
   expect(visibleCanvasBox).not.toBeNull();
