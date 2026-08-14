@@ -6,6 +6,10 @@
 
 ### Added
 
+- Declared the existing Herdr SVG logo as the browser favicon, synchronized
+  from the audited Herdr Web upstream head `9897522`. Contributed by
+  [Craig P. Motlin (@motlin)](https://github.com/motlin) in
+  [PR #56](https://github.com/kcosr/herdr-web/pull/56).
 - Added a bounded Office productivity slice: browser-local restoration of Office window geometry,
   ordering, and scroll position; responsive room sizing; persistent selected-agent callouts for
   optional harness task summaries; and direct-federation Enable all / Disable all bridge controls.
@@ -97,6 +101,10 @@
 
 ### Fixed
 
+- Fixed icons rendering slightly off-center in square icon buttons by resetting
+  browser-default button padding and removing the compensating filter-icon transform.
+  Contributed by [Philippe SEGATORI (@tigitz)](https://github.com/tigitz) in
+  [PR #55](https://github.com/kcosr/herdr-web/pull/55).
 - Fixed the Pixel Office Economy board overflowing long Anthropic model names into the token
   column by displaying the model family and version only, for example `Haiku 4.5`.
 - Fixed saved Office observability settings being applied after the first data refresh by waiting
