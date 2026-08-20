@@ -4861,7 +4861,7 @@ mod tests {
         let static_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web");
         let app = static_routes(static_dir);
 
-        for path in ["/world", "/world/"] {
+        for path in ["/", "/world", "/world/"] {
             let response = app
                 .clone()
                 .oneshot(
