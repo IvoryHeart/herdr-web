@@ -10,6 +10,7 @@
   `npm run dev` workflow with child-process tests, and an opt-in bounded terminal screen-reader
   text mirror. The replay preserves downstream World and multi-bridge behavior; Web v0.4.2/v0.4.3
   development/IME/focus/accessibility details are covered by this work unit's focused commits.
+  [PR #16](https://github.com/IvoryHeart/herdr-web/pull/16).
 - Added `npm run dev` with a supervised loopback bridge/Vite workflow, bounded
   bridge readiness checks, clean child-process shutdown, and `test:dev`
   coverage for startup and signal/error paths. [Upstream PR #57](https://github.com/kcosr/herdr-web/pull/57),
