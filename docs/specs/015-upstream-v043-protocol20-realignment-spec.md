@@ -1,12 +1,12 @@
 # Herdr Web v0.4.3 and Herdr protocol 20 realignment
 
 - **Spec ID:** `015-upstream-v043-protocol20-realignment`
-- **Status:** Draft
+- **Status:** Approved
 - **Created:** 2026-08-20
 - **Owner:** Herdr Web compatibility / Herdr World downstream
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** IvoryHeart
+- **Approved at:** 2026-08-20
 
 > This specification succeeds the completed Spec 013 synchronization slice; it
 > does not rewrite that immutable protocol-19 delivery record. It addresses the
