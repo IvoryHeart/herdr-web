@@ -82,14 +82,14 @@ of hidden requirements.
   canonical plugin/session APIs and Herdr Web's existing `/api/capabilities`,
   and allow a downstream provider contract only for a documented remaining
   semantic or historical-data gap.
-- **Dependencies:** SUG-002; approved observability contract specification.
+- **Dependencies:** SUG-002 and the approved
+  [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md).
 - **Owner:** Open
 - **Added:** 2026-08-06
 - **Reassessed:** 2026-08-20. The earlier generic `/api/extensions` proposal was
   withdrawn after the current upstream audit found overlapping authoritative
   plugin discovery and browser capability mechanisms.
 - **Related:** [`010-upstream-extension-alignment-spec.md`](specs/010-upstream-extension-alignment-spec.md)
-- **Dependencies:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
 
 ### SUG-002 — OTEL-backed Office observability boards
 

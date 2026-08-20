@@ -272,9 +272,40 @@ or asset.
   file from the artifact, and retains notices only where still required by
   distributed or adapted material.
 
+### Requirement: Remediate the already-public source checkout
+
+The current `IvoryHeart/herdr-web` repository is already a public source
+distribution with GitHub-generated commit and branch archives. Implementation
+of this specification SHALL begin by auditing the current default branch and
+publishing a remediation record for every known source, art, license, notice,
+identity, and provenance gap. This specification cannot retroactively make
+already accessible commits private or compliant.
+
+For each unresolved item, the owner SHALL select and record one action before
+the next tag or Herdr World-branded artifact: publish the missing evidence,
+replace or remove the item from the default branch, or take an explicitly
+approved repository/legal containment action. Making the repository private or
+rewriting published history is not authorized by this specification and
+requires a separate owner decision informed by the rights holder and, where
+appropriate, qualified counsel. The remediation record SHALL state any limits
+that remain in historical Git objects or previously generated archives.
+
+#### Scenario: Current public source has incomplete adaptation evidence
+
+- **GIVEN** an adapted file is already present in the public default branch but
+  its exact permission evidence is incomplete
+- **WHEN** the open-source readiness work begins
+- **THEN** the gap and owner decision are published, the default branch is
+  remediated or supported by reviewable evidence before the next release, and
+  no automatic history rewrite is performed.
+
 ### Requirement: Ship complete open-source compliance material
 
-Every public source or binary release SHALL include, as applicable:
+For this specification, a Herdr World release artifact means a new version tag,
+GitHub Release asset, generated source archive, binary tarball, container,
+mobile package, package-registry publication, or other artifact presented as a
+Herdr World release. Every such source or binary artifact SHALL include, as
+applicable:
 
 - the project license and approved copyright-holder statement;
 - upstream Herdr Web MIT and Herdr/vendored Apache-2.0 notices;

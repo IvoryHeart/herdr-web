@@ -47,6 +47,8 @@ This feature includes:
 - a typed binding between a surface definition, context factory, and lazy
   component;
 - separate generic Web and World assembly entry points;
+- one optional assembly-owned product-settings contribution that preserves the
+  existing Office settings entry without importing World from generic code;
 - exact route and surface-ID validation for compiled-in definitions;
 - a read-only host adapter over existing bridge and federated runtime state;
 - allow-listed semantic navigation, command, and terminal operations;
@@ -76,7 +78,7 @@ Herdr World assembly: shell + Spaces + Office
 - No generic extension registry or provider registry.
 - No general context-version negotiation, new capability namespace/catalogue,
   per-target policy language, minimum-host arithmetic, pattern routes,
-  persistent sidebar contributions, or composable settings catalogue.
+  persistent sidebar contributions, or multi-entry settings catalogue.
 - No Graph or City implementation.
 - No product rename, public release, observability schema change, or provider
   migration.
@@ -119,7 +121,7 @@ type SurfaceRegistration<Context> = {
   load: () => Promise<{
     default: React.ComponentType<{ context: Context }>;
   }>;
-  dispose?: (context: Context) => void;
+  dispose: (context: Context) => void;
 };
 ```
 
@@ -128,12 +130,35 @@ MUST NOT receive a Spaces context through an `unknown`, `any`, or unpaired cast.
 The host MAY erase the generic only after it stores the bound registration as
 one opaque value.
 
+The host SHALL create one abort controller for each admitted surface
+generation and expose its signal through `SurfaceHostV1.lifecycle`. It SHALL
+complete `load` before invoking `createContext`, then invoke `createContext`
+exactly once for that generation. A load failure therefore creates no context.
+Every registration SHALL provide `dispose`; a context with no non-abortable
+resources MAY use a no-op disposer. Subscriptions and asynchronous work MUST
+observe the generation abort signal.
+
+On navigation away, admission loss, render failure, explicit retry, or assembly
+teardown, the host SHALL abort the generation and, if a context was created,
+invoke its disposer exactly once. Retry SHALL start only after that cleanup and
+SHALL use a fresh abort signal, loaded component generation, and context. If
+`createContext` throws before returning a context, the host SHALL abort the
+generation and SHALL NOT call the disposer with a partial value.
+
 #### Scenario: A registration is mismatched
 
 - **GIVEN** an assembly attempts to pair an Office factory with another
   surface's loaded component
 - **WHEN** type checking or registration validation runs
 - **THEN** the assembly fails before the component can mount.
+
+#### Scenario: A mounted surface fails and retries
+
+- **GIVEN** an admitted surface created subscriptions and then fails while
+  rendering
+- **WHEN** the host contains the failure and the user retries
+- **THEN** the old generation is aborted and disposed exactly once before a
+  fresh generation is loaded, and no old subscription remains active.
 
 ### Requirement: Keep the registry descriptive and the host authoritative
 
@@ -224,12 +249,72 @@ Product selection SHALL occur through explicit build entries or equivalent
 compile-time configuration whose dependency graph is visible to the build
 audit. It MUST NOT depend on runtime filesystem scanning or remote module URLs.
 
+The assembly MAY also supply the single optional product-settings contribution
+defined below. It is part of the same compile-time dependency graph.
+
 #### Scenario: The generic app is built
 
 - **GIVEN** the generic assembly entry is selected
 - **WHEN** Vite resolves and emits the production graph
 - **THEN** it contains Spaces and the shell but no World module, Office asset,
   World contract, or provider implementation.
+
+### Requirement: Preserve Office settings through one assembly seam
+
+The application assembly SHALL have one optional product-settings contribution
+with these semantics:
+
+```ts
+type ProductSettingsContribution<Context> = {
+  id: string;
+  label: string;
+  createContext: (host: SurfaceHostV1) => Context;
+  load: () => Promise<{
+    default: React.ComponentType<{
+      context: Context;
+      onClose: () => void;
+    }>;
+  }>;
+  dispose: (context: Context) => void;
+};
+
+type ProductAssembly = {
+  surfaces: readonly OpaqueSurfaceRegistration[];
+  productSettings?: OpaqueProductSettingsContribution;
+};
+```
+
+The generic assembly SHALL omit `productSettings`. The World assembly SHALL
+supply one contribution labelled Office. The generic settings shell and
+`BackendSettingsDialog` SHALL render its label and trigger when it is present
+but MUST NOT import a World module. Activating the trigger SHALL load the
+World-owned settings module before creating its context, then create the
+context exactly once. That module owns Office configuration, validation, and
+synchronization. The host SHALL give the settings generation its own abort
+signal and apply the same required-disposer ordering as a surface generation.
+Closing the dialog, leaving the assembly, load/render failure, or retry SHALL
+abort and, if context creation completed, dispose its generation exactly once.
+
+This is a single compile-time product integration point, not a runtime settings
+registry, arbitrary collection of sections, or public surface API. Adding more
+than one product contribution or allowing individual surfaces/plugins to
+register settings requires a spec extension.
+
+#### Scenario: Office settings open from the global settings path
+
+- **GIVEN** the World assembly is active and the user opens global settings
+  from Spaces or Office
+- **WHEN** the user activates the Office entry
+- **THEN** the World settings dialog is lazy-loaded through the assembly,
+  existing settings and synchronization behavior remain available, and the
+  generic settings code has no World import.
+
+#### Scenario: Generic Web opens settings
+
+- **GIVEN** the generic assembly is active
+- **WHEN** the user opens global settings
+- **THEN** no Office entry or World chunk is present and ordinary bridge
+  settings remain available.
 
 ### Requirement: Move World orchestration behind the World registration
 
@@ -282,9 +367,9 @@ factory. Load or render failures SHALL be contained by the active surface error
 boundary, keep navigation to Spaces usable, and MUST NOT stop global runtime
 observation or close unrelated terminal sessions.
 
-One explicit retry SHALL create a fresh surface generation and clean up the
-failed context. No broader registered/loading/ready/degraded state machine is
-required by this slice.
+One explicit retry SHALL follow the abort/dispose ordering defined above before
+creating a fresh surface generation. No broader
+registered/loading/ready/degraded state machine is required by this slice.
 
 #### Scenario: Office fails during lazy load
 
@@ -356,6 +441,8 @@ An implementation summary SHALL include:
 
 - final typed registration and `SurfaceHostV1` definitions;
 - generic and World assembly source and build entries;
+- generic and World settings-path tests, including opening Office settings from
+  Spaces without a generic World import;
 - route/ID/registration validation tests;
 - characterization of existing Spaces and Office selection, handoff,
   observability, settings, terminal, responsive, and accessibility behavior;
@@ -367,7 +454,8 @@ An implementation summary SHALL include:
 
 ## 8. Deferred decisions
 
-- A settings contribution API or persistent sidebar slot.
+- A multi-entry settings catalogue, per-surface settings registration, or
+  persistent sidebar slot beyond the single assembly seam above.
 - Context major/minor negotiation across independently versioned packages.
 - A formal capability catalogue beyond existing bridge capability fields.
 - Dynamic, isolated, or remotely installed browser extensions.

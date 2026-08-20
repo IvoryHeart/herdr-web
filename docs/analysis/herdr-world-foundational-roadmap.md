@@ -127,6 +127,9 @@ external provider.
   isolating downstream contracts, providers, surfaces, plugins, and packaging.
 - Add `CONTRIBUTING.md`, `SECURITY.md`, code-of-conduct/governance decisions,
   and a clear guide to the separate Herdr, Herdr Web, and World lanes.
+- Audit the already-public default branch, publish a remediation record, and
+  resolve each current compliance gap before the next tag or branded artifact
+  without assuming that already published history can be undone.
 - Create machine-readable source/art provenance, complete offline licenses and
   notices, Apache-2.0 modified-file notices, npm/Cargo/font/art review, and
   browser/bridge/artifact SBOMs.
@@ -140,6 +143,8 @@ external provider.
 
 - No public artifact is possible with unresolved ownership, license, notice,
   provenance, supported-version, or SBOM data.
+- The current public default branch has an explicit remediation disposition for
+  every known compliance gap and historical limitation.
 - A clean checkout needs no legacy workspace or absolute workstation path.
 - Generic and World outputs are independently identifiable and traceable.
 - Contributors can tell where and how a change may be submitted without

@@ -224,10 +224,20 @@ session facade and keep that compatibility layer isolated.
 
 ### Requirement: Keep provider contracts narrow and evidence-based
 
-A downstream provider contract SHALL contain only data that cannot be obtained
-reliably through the selected public Herdr mechanism. It SHALL define canonical
-schema ownership, bounded collections and strings, version compatibility,
-source identity, freshness, partial failure, and cross-language fixtures.
+A downstream provider contract's provider-owned semantic payload fields SHALL
+contain only data that cannot be obtained reliably through the selected public
+Herdr mechanism. Its envelope MAY carry canonical Herdr-qualified target
+identity and correlation required by the approved observability contract, as
+well as contract version, provider/source identity, observation/freshness,
+health, and bounded transport metadata. Those fields reference authoritative
+Herdr or transport facts; they do not make the provider their source of truth.
+
+The audit SHALL NOT remove or change an existing duplicate field in this
+classification-only slice. Every duplicate SHALL receive an explicit migration
+decision of `retain-for-compatibility`, `derive-from-herdr`, `deprecate`, or
+`remove-in-approved-extension`, including the compatibility window and reader
+behavior. Until that decision is implemented through an approved extension,
+the existing observability payload remains conformant.
 
 Provider descriptors MUST NOT duplicate Herdr plugin source metadata or Herdr
 Web bridge compatibility fields. Credentials, backend URLs, raw query strings,
@@ -239,8 +249,9 @@ browser payloads or checked-in fixtures.
 - **GIVEN** a later Herdr public API supplies all semantics previously provided
   by an adapter
 - **WHEN** the compatibility plan is reviewed
-- **THEN** the adapter can be deprecated behind the canonical contract without
-  changing surface identity or inventing a second source of truth.
+- **THEN** provider-owned duplicate semantics receive an explicit migration
+  decision, while canonical qualified targets and envelope metadata remain
+  available and no immediate audit-only payload break occurs.
 
 ### Requirement: Avoid unsupervised plugin-daemon assumptions
 

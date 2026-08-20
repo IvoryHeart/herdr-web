@@ -238,11 +238,15 @@ an external client first and ask upstream only for neutral missing facts.
 
 ## Open-source and attribution assessment
 
-The repository is not ready to claim a public Herdr World release merely
-because its current code builds. It lacks complete public-release governance
-and compliance outputs such as a downstream copyright-holder decision,
-complete notice bundle, machine-readable provenance, SBOMs, contributor guide,
-security policy, and release manifest.
+The repository is not ready to claim a compliant Herdr World release merely
+because its current code builds. It lacks complete release governance and
+compliance outputs such as a downstream copyright-holder decision, complete
+notice bundle, machine-readable provenance, SBOMs, contributor guide, security
+policy, and release manifest. Because the fork and its GitHub source archives
+are already public, the first Spec 004 implementation step is an immediate
+default-branch audit and remediation record; the release gate applies to every
+new tag and Herdr World-branded or generated artifact and does not pretend
+earlier publication did not occur.
 
 Current asset evidence must remain file-specific:
 

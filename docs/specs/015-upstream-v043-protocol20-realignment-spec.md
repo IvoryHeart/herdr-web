@@ -164,33 +164,48 @@ Browser terminal sockets SHALL continue to identify as
 NOT select `AppDirectGraphics`, read a Herdr-supplied graphics file path, write
 Kitty commands to an outer terminal, or send graphics transmission results.
 
-The bridge SHALL treat `GraphicsFile` and `GraphicsTransmissionRetired` as
-invalid or safely ignored for a terminal-attach connection according to one
-documented tested policy. Under neither policy may it open, stat, expose, log,
-or forward the supplied path or control payload.
+The bridge SHALL ignore `GraphicsFile` and `GraphicsTransmissionRetired` on a
+terminal-attach connection and SHALL keep the socket open. On the first
+occurrence of each unexpected message type in a connection, it SHALL emit
+exactly one local warning and suppress later warnings of that type for the same
+connection. The warning MUST contain only the message type and the fact that it
+was ignored; it MUST NOT contain the path, control payload, image/transfer
+identifiers, or any other message field. The bridge MUST NOT open, stat, expose,
+log, or forward a supplied path or control payload, and it MUST NOT send a
+browser message or a graphics transmission response.
 
 #### Scenario: A direct graphics message reaches an attach test double
 
-- **GIVEN** a test server sends `GraphicsFile` to a browser terminal attach
+- **GIVEN** a test server sends repeated `GraphicsFile` and
+  `GraphicsTransmissionRetired` messages to a browser terminal attach
 - **WHEN** the bridge handles the message
-- **THEN** no filesystem access or browser payload occurs and the bounded
-  documented policy is applied.
+- **THEN** no filesystem access or browser payload occurs, the socket remains
+  usable, and each message type produces exactly one payload-free local warning
+  for that connection.
 
 ### Requirement: Preserve terminal bell behavior safely
 
-The bridge SHALL define and test terminal-attach behavior for
-`ServerMessage::TerminalBell`. If browser terminal semantics support BEL input,
-the bridge SHALL convert the bounded `u16` count into equivalent terminal
-output without unbounded allocation. Otherwise it SHALL expose one bounded
-typed terminal event and document browser behavior. Silently losing the
-message without a compatibility decision is not allowed.
+The bridge SHALL represent `ServerMessage::TerminalBell` through the existing
+binary terminal-output path, not a new typed WebSocket event. It SHALL forward
+`min(count, 16)` BEL (`0x07`) bytes in one bounded output frame. A zero count
+produces no output frame; counts from one through sixteen preserve their exact
+count; larger counts are coalesced to sixteen. The frontend SHALL feed those
+bytes through the existing terminal renderer without a parallel bell protocol.
 
 #### Scenario: Herdr reports three bells
 
 - **GIVEN** an attached terminal receives `TerminalBell { count: 3 }`
 - **WHEN** the bridge forwards terminal behavior
-- **THEN** the browser observes the documented bounded bell behavior and the
-  terminal connection remains usable.
+- **THEN** the browser terminal receives exactly three BEL bytes through the
+  existing binary output path and the terminal connection remains usable.
+
+#### Scenario: Bell count is zero or excessive
+
+- **GIVEN** attached terminals receive bell counts of zero and 65,535
+- **WHEN** the bridge forwards terminal behavior
+- **THEN** zero creates no output frame, 65,535 creates one frame containing
+  sixteen BEL bytes, and neither case allocates in proportion to the input
+  count.
 
 ### Requirement: Adopt upstream Web changes as focused units
 
