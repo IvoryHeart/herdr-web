@@ -66,24 +66,177 @@ if rg -n '\bcustom_status\b' "$COMPAT" >/dev/null; then
   exit 1
 fi
 
-verify_manifest_hashes() {
-  while IFS='|' read -r destination expected_hash; do
-    [[ -n "$destination" ]] || continue
-    if [[ ! -f "$COMPAT/$destination" ]]; then
-      echo "manifest destination is missing: $destination" >&2
+parse_manifest_entries() {
+  awk '
+    function fail(message) {
+      print "invalid vendor manifest: " message > "/dev/stderr"
+      failed = 1
       exit 1
-    fi
-    actual_hash="$(sha256sum "$COMPAT/$destination" | awk '{print $1}')"
-    if [[ "$actual_hash" != "$expected_hash" ]]; then
-      echo "manifest hash mismatch for $destination" >&2
-      echo "expected: $expected_hash" >&2
-      echo "found:    $actual_hash" >&2
-      exit 1
-    fi
-  done < <(awk -F'"' '/^destination = / { destination = $2 } /^destination_sha256 = / { print destination "|" $2 }' "$COMPAT/VENDOR-MANIFEST.toml")
+    }
+
+    function parse_quoted(name, line, value) {
+      value = line
+      sub("^[[:space:]]*" name "[[:space:]]*=[[:space:]]*\"", "", value)
+      if (value == line || value !~ /\"[[:space:]]*$/) {
+        fail(name " must be a quoted string")
+      }
+      sub("\"[[:space:]]*$", "", value)
+      if (value ~ /\"/) {
+        fail(name " contains an unescaped quote")
+      }
+      return value
+    }
+
+    function emit(    source_key, destination_key) {
+      if (!has_source) {
+        fail("[[files]] entry is missing source")
+      }
+      if (!has_destination) {
+        fail("[[files]] entry is missing destination")
+      }
+      if (!has_source_sha) {
+        fail("[[files]] entry is missing source_sha256")
+      }
+      if (!has_destination_sha) {
+        fail("[[files]] entry is missing destination_sha256")
+      }
+      if (source == "" || destination == "") {
+        fail("[[files]] entry has an empty source or destination path")
+      }
+      if (source ~ /^\// || source ~ /(^|\/)\.\.?($|\/)/) {
+        fail("source path must be relative and cannot contain dot components: " source)
+      }
+      if (destination ~ /^\// || destination ~ /(^|\/)\.\.?($|\/)/) {
+        fail("destination path must be relative and cannot contain dot components: " destination)
+      }
+      if (source ~ /[[:cntrl:]|]/ || destination ~ /[[:cntrl:]|]/) {
+        fail("source and destination paths contain unsupported characters")
+      }
+      if (length(source_sha) != 64 || source_sha ~ /[^0-9a-f]/) {
+        fail("source_sha256 must be 64 lowercase hexadecimal characters for " source)
+      }
+      if (length(destination_sha) != 64 || destination_sha ~ /[^0-9a-f]/) {
+        fail("destination_sha256 must be 64 lowercase hexadecimal characters for " destination)
+      }
+      if (seen_source[source]++) {
+        fail("source path is not unique: " source)
+      }
+      if (seen_destination[destination]++) {
+        fail("destination path is not unique: " destination)
+      }
+      print source "\t" destination "\t" source_sha "\t" destination_sha
+      entries++
+    }
+
+    /^\[\[files\]\][[:space:]]*$/ {
+      if (in_entry) {
+        emit()
+      }
+      in_entry = 1
+      has_source = has_destination = has_source_sha = has_destination_sha = 0
+      source = destination = source_sha = destination_sha = ""
+      next
+    }
+
+    in_entry && /^[[:space:]]*source[[:space:]]*=/ {
+      if (has_source) {
+        fail("duplicate source field")
+      }
+      has_source = 1
+      source = parse_quoted("source", $0)
+      next
+    }
+
+    in_entry && /^[[:space:]]*destination[[:space:]]*=/ {
+      if (has_destination) {
+        fail("duplicate destination field")
+      }
+      has_destination = 1
+      destination = parse_quoted("destination", $0)
+      next
+    }
+
+    in_entry && /^[[:space:]]*source_sha256[[:space:]]*=/ {
+      if (has_source_sha) {
+        fail("duplicate source_sha256 field")
+      }
+      has_source_sha = 1
+      source_sha = parse_quoted("source_sha256", $0)
+      next
+    }
+
+    in_entry && /^[[:space:]]*destination_sha256[[:space:]]*=/ {
+      if (has_destination_sha) {
+        fail("duplicate destination_sha256 field")
+      }
+      has_destination_sha = 1
+      destination_sha = parse_quoted("destination_sha256", $0)
+      next
+    }
+
+    END {
+      if (failed) {
+        exit 1
+      }
+      if (in_entry) {
+        emit()
+      }
+      if (entries == 0) {
+        fail("manifest has no [[files]] entries")
+      }
+    }
+  ' "$COMPAT/VENDOR-MANIFEST.toml"
 }
 
-verify_manifest_hashes
+verify_manifest_hashes() {
+  local source_root="${1:-}"
+  local manifest_entries
+  local source destination expected_source_hash expected_destination_hash
+  local actual_source_hash actual_destination_hash
+  local entry_count=0
+
+  if ! manifest_entries="$(parse_manifest_entries)"; then
+    return 1
+  fi
+
+  while IFS=$'\t' read -r source destination expected_source_hash expected_destination_hash; do
+    [[ -n "$source" ]] || continue
+    if [[ ! -f "$COMPAT/$destination" ]]; then
+      echo "manifest destination is missing: $destination" >&2
+      return 1
+    fi
+    actual_destination_hash="$(sha256sum "$COMPAT/$destination" | awk '{print $1}')"
+    if [[ "$actual_destination_hash" != "$expected_destination_hash" ]]; then
+      echo "manifest destination hash mismatch for $destination" >&2
+      echo "expected: $expected_destination_hash" >&2
+      echo "found:    $actual_destination_hash" >&2
+      return 1
+    fi
+
+    if [[ -n "$source_root" ]]; then
+      if [[ ! -f "$source_root/$source" ]]; then
+        echo "manifest source is missing from HERDR_SRC: $source" >&2
+        return 1
+      fi
+      actual_source_hash="$(sha256sum "$source_root/$source" | awk '{print $1}')"
+      if [[ "$actual_source_hash" != "$expected_source_hash" ]]; then
+        echo "manifest source hash mismatch for $source (destination $destination)" >&2
+        echo "expected: $expected_source_hash" >&2
+        echo "found:    $actual_source_hash" >&2
+        return 1
+      fi
+    fi
+    entry_count=$((entry_count + 1))
+  done <<< "$manifest_entries"
+
+  if (( entry_count == 0 )); then
+    echo "vendor manifest contains no file entries" >&2
+    return 1
+  fi
+  if [[ -n "$source_root" ]]; then
+    echo "verified upstream and destination hashes for $entry_count vendor manifest entries"
+  fi
+}
 
 unexpected_path_deps="$(
   rg -n '(^|[[:space:]{,])path[[:space:]]*=' "$ROOT/bridge/Cargo.toml" "$COMPAT/Cargo.toml" \
@@ -115,6 +268,8 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
     git -C "$HERDR_SRC" status --short >&2
     exit 1
   fi
+
+  verify_manifest_hashes "$HERDR_SRC"
 
   compare_exact() {
     local upstream_rel="$1"
@@ -183,6 +338,7 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
 
   echo "Herdr $EXPECTED_HERDR_RELEASE compatibility vendor layout and HERDR_SRC drift checks passed"
 else
+  verify_manifest_hashes
   echo "Herdr $EXPECTED_HERDR_RELEASE compatibility vendor layout and manifest hashes look clean"
   echo "Set HERDR_SRC=/path/to/clean/herdr-v0.8.2 to compare exact upstream schema/wire copies"
 fi
