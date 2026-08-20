@@ -16,6 +16,10 @@ import { ConfirmDialog } from "./overlays";
 import { addNativeResumeHandler } from "./native";
 import { shellQuote } from "./shell";
 import {
+  shouldRestoreTerminalFocus,
+  type TerminalAttachFocusSnapshot,
+} from "./terminalAttachFocus";
+import {
   isNonRetryableTerminalClose,
   isTerminalAttachConflictClose,
   MAX_TERMINAL_ATTACH_CONFLICT_RETRIES,
@@ -808,8 +812,10 @@ export function TerminalView({
       if (socket) {
         closeActiveSocket();
       }
-      const autoFocusTarget = document.activeElement;
-      const autoFocusSequence = externalFocusSequenceRef.current;
+      const attachFocusSnapshot: TerminalAttachFocusSnapshot = {
+        target: document.activeElement,
+        externalFocusSequence: externalFocusSequenceRef.current,
+      };
       reconnectScheduledForSocket.clear();
       const nextSocket = new WebSocket(
         terminalSocketUrl(wsUrl, terminalId, initialSize, terminalOutputCoalesceMs),
@@ -846,16 +852,19 @@ export function TerminalView({
         if (size) {
           sendResize(size);
         }
-        if (
-          autoFocusRef.current
-          && externalFocusSequenceRef.current === autoFocusSequence
-          && document.activeElement === autoFocusTarget
-        ) {
+        if (shouldRestoreTerminalFocus({
+          autoFocus: autoFocusRef.current,
+          currentTarget: document.activeElement,
+          currentExternalFocusSequence: externalFocusSequenceRef.current,
+          attachSnapshot: attachFocusSnapshot,
+        })) {
           window.setTimeout(() => {
-            if (
-              externalFocusSequenceRef.current === autoFocusSequence
-              && document.activeElement === autoFocusTarget
-            ) {
+            if (shouldRestoreTerminalFocus({
+              autoFocus: autoFocusRef.current,
+              currentTarget: document.activeElement,
+              currentExternalFocusSequence: externalFocusSequenceRef.current,
+              attachSnapshot: attachFocusSnapshot,
+            })) {
               ready.renderer.focus();
             }
           }, 0);
