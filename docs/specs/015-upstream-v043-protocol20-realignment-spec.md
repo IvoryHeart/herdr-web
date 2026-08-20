@@ -186,26 +186,39 @@ browser message or a graphics transmission response.
 ### Requirement: Preserve terminal bell behavior safely
 
 The bridge SHALL represent `ServerMessage::TerminalBell` through the existing
-binary terminal-output path, not a new typed WebSocket event. It SHALL forward
-`min(count, 16)` BEL (`0x07`) bytes in one bounded output frame. A zero count
-produces no output frame; counts from one through sixteen preserve their exact
-count; larger counts are coalesced to sixteen. The frontend SHALL feed those
-bytes through the existing terminal renderer without a parallel bell protocol.
+binary terminal-output path, not a new typed WebSocket event. It SHALL enqueue
+`min(count, 16)` BEL (`0x07`) bytes as one bounded byte sequence. A zero count
+enqueues nothing; counts from one through sixteen preserve their exact count;
+larger counts are reduced to sixteen. The existing terminal-output coalescer
+owns WebSocket frame boundaries and MAY concatenate the sequence with adjacent
+ordinary terminal bytes. No dedicated-frame boundary is promised. The
+coalescer MUST preserve the byte sequence's order relative to terminal output
+received before and after the bell. The frontend SHALL feed the resulting byte
+stream through the existing terminal renderer without a parallel bell protocol.
 
 #### Scenario: Herdr reports three bells
 
 - **GIVEN** an attached terminal receives `TerminalBell { count: 3 }`
 - **WHEN** the bridge forwards terminal behavior
-- **THEN** the browser terminal receives exactly three BEL bytes through the
-  existing binary output path and the terminal connection remains usable.
+- **THEN** the browser terminal byte stream contains exactly three consecutive
+  BEL bytes at the bell's ordered position and the terminal connection remains
+  usable, regardless of WebSocket frame boundaries.
 
 #### Scenario: Bell count is zero or excessive
 
 - **GIVEN** attached terminals receive bell counts of zero and 65,535
 - **WHEN** the bridge forwards terminal behavior
-- **THEN** zero creates no output frame, 65,535 creates one frame containing
-  sixteen BEL bytes, and neither case allocates in proportion to the input
-  count.
+- **THEN** zero enqueues no bytes, 65,535 enqueues a sequence of sixteen BEL
+  bytes, and neither case allocates in proportion to the input count or
+  requires a dedicated WebSocket frame.
+
+#### Scenario: Bells preserve order across coalescing modes
+
+- **GIVEN** ordinary terminal bytes `A`, a two-count terminal bell, and ordinary
+  terminal bytes `B` arrive in that order
+- **WHEN** terminal output is exercised with coalescing enabled and disabled
+- **THEN** the browser observes the byte sequence `A`, BEL, BEL, `B` in both
+  modes, even though the enabled mode MAY deliver them in one combined frame.
 
 ### Requirement: Adopt upstream Web changes as focused units
 
@@ -310,7 +323,8 @@ The implementation summary SHALL include:
 - fetched upstream heads and the selected immutable release commits;
 - the vendor manifest/diff and protocol-20 frozen fixtures;
 - tests for every new enum/field and exhaustive bridge handling;
-- explicit direct-graphics exclusion and bell behavior tests;
+- explicit direct-graphics exclusion plus bell count/order tests with ordinary
+  output before and after bells and coalescing enabled and disabled;
 - stock Herdr v0.8.2 live bridge/browser evidence;
 - multi-bridge and terminal regression results;
 - a per-concern v0.4.2/v0.4.3 adoption matrix with source attribution;

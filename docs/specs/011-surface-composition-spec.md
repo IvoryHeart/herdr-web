@@ -143,7 +143,13 @@ teardown, the host SHALL abort the generation and, if a context was created,
 invoke its disposer exactly once. Retry SHALL start only after that cleanup and
 SHALL use a fresh abort signal, loaded component generation, and context. If
 `createContext` throws before returning a context, the host SHALL abort the
-generation and SHALL NOT call the disposer with a partial value.
+generation and SHALL NOT call the disposer with a partial value. The context
+factory MUST provide strong exception safety: before it propagates an error, it
+MUST release every resource or subscription acquired during that invocation.
+It MUST NOT acquire a non-abortable resource unless a local cleanup guard is
+already able to release it if a later construction step fails. The host abort
+signal remains a backstop for abort-aware work; it does not transfer ownership
+of a partially constructed context to the host.
 
 #### Scenario: A registration is mismatched
 
@@ -159,6 +165,15 @@ generation and SHALL NOT call the disposer with a partial value.
 - **WHEN** the host contains the failure and the user retries
 - **THEN** the old generation is aborted and disposed exactly once before a
   fresh generation is loaded, and no old subscription remains active.
+
+#### Scenario: Context creation throws after partial acquisition
+
+- **GIVEN** a synthetic context factory acquires a tracked non-abortable
+  resource and a later construction step throws
+- **WHEN** the error leaves `createContext`
+- **THEN** the factory releases the tracked resource before propagating, the
+  host aborts the generation without calling `dispose` on a partial value, and
+  a later retry observes no resource from the failed generation.
 
 ### Requirement: Keep the registry descriptive and the host authoritative
 
@@ -444,6 +459,8 @@ An implementation summary SHALL include:
 - generic and World settings-path tests, including opening Office settings from
   Spaces without a generic World import;
 - route/ID/registration validation tests;
+- a strong-exception-safety test in which context construction releases a
+  tracked non-abortable resource before throwing;
 - characterization of existing Spaces and Office selection, handoff,
   observability, settings, terminal, responsive, and accessibility behavior;
 - tests for one incompatible/offline bridge among multiple enabled bridges;
