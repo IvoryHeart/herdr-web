@@ -48,4 +48,3 @@ describe("terminal IME focus redirect", () => {
     cleanup();
   });
 });
-

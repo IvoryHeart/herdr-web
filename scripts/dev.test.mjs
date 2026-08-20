@@ -311,4 +311,3 @@ test("SIGTERM during an automatic bridge build stops the build process", { concu
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });
-

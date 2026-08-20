@@ -316,4 +316,3 @@ function requiredElement<T extends Element = HTMLElement>(container: ParentNode,
   }
   return element;
 }
-

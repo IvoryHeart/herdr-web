@@ -354,4 +354,3 @@ describe("IME textarea anchor", () => {
     ).toMatchObject({ left: 790, top: 583 });
   });
 });
-

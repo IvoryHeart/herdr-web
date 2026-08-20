@@ -236,4 +236,3 @@ function normalizedLimit(value: number | undefined, fallback: number) {
     ? fallback
     : Math.max(0, Math.floor(value));
 }
-

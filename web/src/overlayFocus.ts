@@ -124,4 +124,3 @@ function isFocusable(element: HTMLElement) {
   }
   return true;
 }
-

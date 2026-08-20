@@ -22,4 +22,3 @@ export function installTerminalImeFocusRedirect(options: {
   options.container.addEventListener("focusin", onFocusIn);
   return () => options.container.removeEventListener("focusin", onFocusIn);
 }
-
