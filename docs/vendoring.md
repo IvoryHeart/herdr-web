@@ -127,21 +127,26 @@ scripts/check-vendor.sh
 HERDR_SRC="$HERDR_SRC" scripts/check-vendor.sh
 ```
 
-The focused provenance regression creates a temporary compatibility copy, corrupts an adapted
-entry's recorded source hash, and confirms that `HERDR_SRC` verification fails closed:
+The focused provenance regression creates temporary compatibility copies, corrupts an adapted
+entry's recorded source hash, removes an adapted manifest entry, and confirms that `HERDR_SRC`
+verification fails closed:
 
 ```bash
 HERDR_SRC="$HERDR_SRC" scripts/check-vendor-regression.sh
 ```
 
-The optional `HERDR_SRC` mode parses every `[[files]]` manifest entry and verifies its source hash
-against the clean upstream checkout as well as its destination hash. It also exact-compares every
-copied source file and the protocol-20 markers. The default mode verifies the manifest's destination
-hashes, required protocol-20 wire shapes, and crate layout. Locally adapted files are intentionally
-excluded from exact byte comparison, but their upstream source hashes are still verified; review
-their local adaptations manually during refresh. `PopupSize` is compared with only the documented
-visibility adaptation allowed. Frozen protocol frames live in `vendor/herdr-compat/tests/` and are
-tested by `protocol20_fixtures.rs`.
+The optional `HERDR_SRC` mode parses every `[[files]]` manifest entry, requires the complete
+reviewed 23-entry source-to-destination set, and verifies each source hash against the clean
+upstream checkout as well as each destination hash. It also exact-compares every copied source file
+and the protocol-20 markers. The default mode verifies the manifest's destination hashes, required
+protocol-20 wire shapes, and crate layout. Locally adapted files are intentionally excluded from
+exact byte comparison, but their upstream source hashes and manifest presence are still verified;
+review their local adaptations manually during refresh. `PopupSize` is compared with only the
+documented visibility adaptation allowed. Frozen protocol frames live in `vendor/herdr-compat/tests/`
+and are tested by `protocol20_fixtures.rs`.
+
+The regression also removes the adapted `src/api/client.rs` manifest entry and confirms that the
+checker rejects the resulting 22-entry manifest.
 
 5. Re-run validation:
 

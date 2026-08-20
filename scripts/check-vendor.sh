@@ -6,6 +6,34 @@ COMPAT="$ROOT/vendor/herdr-compat"
 EXPECTED_HERDR_COMMIT="9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c"
 EXPECTED_HERDR_RELEASE="v0.8.2"
 
+# This is the reviewed bridge compatibility surface. Keep the set explicit so
+# deleting a manifest entry cannot silently narrow the provenance claim.
+EXPECTED_MANIFEST_ENTRIES=(
+  "src/api/schema.rs|src/api/schema.rs"
+  "src/api/schema/agents.rs|src/api/schema/agents.rs"
+  "src/api/schema/common.rs|src/api/schema/common.rs"
+  "src/api/schema/events.rs|src/api/schema/events.rs"
+  "src/api/schema/integrations.rs|src/api/schema/integrations.rs"
+  "src/api/schema/panes.rs|src/api/schema/panes.rs"
+  "src/api/schema/plugins.rs|src/api/schema/plugins.rs"
+  "src/api/schema/response.rs|src/api/schema/response.rs"
+  "src/api/schema/server.rs|src/api/schema/server.rs"
+  "src/api/schema/session.rs|src/api/schema/session.rs"
+  "src/api/schema/worktrees.rs|src/api/schema/worktrees.rs"
+  "src/api/schema/tests.rs|src/api/schema/tests.rs"
+  "src/protocol/wire.rs|src/protocol/wire.rs"
+  "src/api/client.rs|src/api/client.rs"
+  "src/api/status.rs|src/api/status.rs"
+  "src/api/schema/tabs.rs|src/api/schema/tabs.rs"
+  "src/api/schema/workspaces.rs|src/api/schema/workspaces.rs"
+  "src/input/model.rs|src/input.rs"
+  "src/raw_input.rs|src/raw_input.rs"
+  "src/ipc.rs|src/ipc.rs"
+  "src/logging.rs|src/logging.rs"
+  "src/popup_size.rs|src/popup_size.rs"
+  "src/server/socket_paths.rs|src/server/socket_paths.rs"
+)
+
 if ! command -v rg >/dev/null; then
   echo "ripgrep (rg) is required for vendor checks" >&2
   exit 1
@@ -194,6 +222,8 @@ verify_manifest_hashes() {
   local source destination expected_source_hash expected_destination_hash
   local actual_source_hash actual_destination_hash
   local entry_count=0
+  local expected_entry expected_source expected_destination manifest_key
+  declare -A actual_manifest_entries=()
 
   if ! manifest_entries="$(parse_manifest_entries)"; then
     return 1
@@ -205,6 +235,8 @@ verify_manifest_hashes() {
       echo "manifest destination is missing: $destination" >&2
       return 1
     fi
+    manifest_key="$source|$destination"
+    actual_manifest_entries["$manifest_key"]=1
     actual_destination_hash="$(sha256sum "$COMPAT/$destination" | awk '{print $1}')"
     if [[ "$actual_destination_hash" != "$expected_destination_hash" ]]; then
       echo "manifest destination hash mismatch for $destination" >&2
@@ -233,6 +265,19 @@ verify_manifest_hashes() {
     echo "vendor manifest contains no file entries" >&2
     return 1
   fi
+  if (( entry_count != ${#EXPECTED_MANIFEST_ENTRIES[@]} )); then
+    echo "vendor manifest entry count mismatch: expected ${#EXPECTED_MANIFEST_ENTRIES[@]}, found $entry_count" >&2
+    return 1
+  fi
+  for expected_entry in "${EXPECTED_MANIFEST_ENTRIES[@]}"; do
+    expected_source="${expected_entry%%|*}"
+    expected_destination="${expected_entry#*|}"
+    manifest_key="$expected_source|$expected_destination"
+    if [[ -z "${actual_manifest_entries[$manifest_key]+present}" ]]; then
+      echo "vendor manifest is missing expected entry: $expected_source -> $expected_destination" >&2
+      return 1
+    fi
+  done
   if [[ -n "$source_root" ]]; then
     echo "verified upstream and destination hashes for $entry_count vendor manifest entries"
   fi

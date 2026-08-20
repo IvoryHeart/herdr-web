@@ -10,10 +10,16 @@ if [[ -z "$HERDR_SOURCE" ]]; then
 fi
 
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/herdr-vendor-regression.XXXXXX")"
-mkdir -p "$TEST_ROOT/scripts" "$TEST_ROOT/bridge" "$TEST_ROOT/vendor"
-cp "$ROOT/scripts/check-vendor.sh" "$TEST_ROOT/scripts/check-vendor.sh"
-cp "$ROOT/bridge/Cargo.toml" "$TEST_ROOT/bridge/Cargo.toml"
-rsync -a --exclude target "$ROOT/vendor/herdr-compat/" "$TEST_ROOT/vendor/herdr-compat/"
+
+copy_test_tree() {
+  local target="$1"
+  mkdir -p "$target/scripts" "$target/bridge" "$target/vendor"
+  cp "$ROOT/scripts/check-vendor.sh" "$target/scripts/check-vendor.sh"
+  cp "$ROOT/bridge/Cargo.toml" "$target/bridge/Cargo.toml"
+  rsync -a --exclude target "$ROOT/vendor/herdr-compat/" "$target/vendor/herdr-compat/"
+}
+
+copy_test_tree "$TEST_ROOT"
 
 manifest="$TEST_ROOT/vendor/herdr-compat/VENDOR-MANIFEST.toml"
 sed -i \
@@ -34,5 +40,52 @@ if ! rg -q 'manifest source hash mismatch for src/api/client.rs' "$evidence"; th
   exit 1
 fi
 
+MISSING_ENTRY_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/herdr-vendor-regression-missing.XXXXXX")"
+copy_test_tree "$MISSING_ENTRY_ROOT"
+missing_manifest="$MISSING_ENTRY_ROOT/vendor/herdr-compat/VENDOR-MANIFEST.toml"
+missing_manifest_tmp="$missing_manifest.tmp"
+awk '
+  function flush_block() {
+    if (block ~ /source = "src\/api\/client\.rs"/) {
+      block = ""
+    } else if (block != "") {
+      printf "%s", block
+    }
+  }
+
+  /^\[\[files\]\]$/ {
+    flush_block()
+    block = $0 "\n"
+    in_entry = 1
+    next
+  }
+
+  in_entry {
+    block = block $0 "\n"
+    next
+  }
+
+  { print }
+
+  END {
+    flush_block()
+  }
+' "$missing_manifest" >"$missing_manifest_tmp"
+mv "$missing_manifest_tmp" "$missing_manifest"
+
+missing_evidence="$MISSING_ENTRY_ROOT/check.log"
+if HERDR_SRC="$HERDR_SOURCE" "$MISSING_ENTRY_ROOT/scripts/check-vendor.sh" >"$missing_evidence" 2>&1; then
+  echo "vendor provenance regression failed: removed adapted manifest entry was accepted" >&2
+  cat "$missing_evidence" >&2
+  exit 1
+fi
+if ! rg -q 'vendor manifest entry count mismatch: expected 23, found 22' "$missing_evidence"; then
+  echo "vendor provenance regression failed: missing adapted entry rejected for an unexpected reason" >&2
+  cat "$missing_evidence" >&2
+  exit 1
+fi
+
 echo "vendor provenance regression passed: incorrect adapted source hash was rejected"
 echo "evidence: $evidence"
+echo "vendor manifest completeness regression passed: removed adapted entry was rejected"
+echo "evidence: $missing_evidence"
