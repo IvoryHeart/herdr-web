@@ -349,12 +349,21 @@ export class GhosttyRenderer implements TerminalRenderer {
     textarea.classList.add("ghostty-keyboard-input");
     textarea.focus({ preventScroll: true });
     window.setTimeout(() => {
-      if (textarea.isConnected) {
-        positionGhosttyTextareaForInput(textarea, this.#terminal);
-        textarea.classList.add("ghostty-keyboard-input");
-        if (document.activeElement !== textarea) {
-          textarea.focus({ preventScroll: true });
-        }
+      if (!textarea.isConnected || !this.#isCurrentTerminal(terminal)) {
+        return;
+      }
+      const activeElement = document.activeElement;
+      if (
+        activeElement
+        && activeElement !== document.body
+        && !this.#container?.contains(activeElement)
+      ) {
+        return;
+      }
+      positionGhosttyTextareaForInput(textarea, terminal);
+      textarea.classList.add("ghostty-keyboard-input");
+      if (document.activeElement !== textarea) {
+        textarea.focus({ preventScroll: true });
       }
     }, 0);
   }

@@ -211,6 +211,7 @@ export function TerminalView({
   // Read at attach time without re-running the effect (which would re-attach the socket).
   const autoFocusRef = useRef(autoFocus);
   autoFocusRef.current = autoFocus;
+  const externalFocusSequenceRef = useRef(0);
   const scrollSensitivityRef = useRef(scrollSensitivity);
   scrollSensitivityRef.current = scrollSensitivity;
   const mobileControlsRef = useRef(mobileControls);
@@ -239,6 +240,18 @@ export function TerminalView({
   terminalInputBatchDelayMsRef.current = terminalInputBatchDelayMs;
   connectionKeyRef.current = connectionKey;
   terminalIdRef.current = pane?.terminal_id ?? null;
+
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || stageRef.current?.contains(target)) {
+        return;
+      }
+      externalFocusSequenceRef.current += 1;
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
+  }, []);
 
   const focusMobileCommandInput = useCallback(() => {
     if (!mobileControlsRef.current) {
@@ -795,6 +808,8 @@ export function TerminalView({
       if (socket) {
         closeActiveSocket();
       }
+      const autoFocusTarget = document.activeElement;
+      const autoFocusSequence = externalFocusSequenceRef.current;
       reconnectScheduledForSocket.clear();
       const nextSocket = new WebSocket(
         terminalSocketUrl(wsUrl, terminalId, initialSize, terminalOutputCoalesceMs),
@@ -831,8 +846,19 @@ export function TerminalView({
         if (size) {
           sendResize(size);
         }
-        if (autoFocusRef.current) {
-          window.setTimeout(() => ready.renderer.focus(), 0);
+        if (
+          autoFocusRef.current
+          && externalFocusSequenceRef.current === autoFocusSequence
+          && document.activeElement === autoFocusTarget
+        ) {
+          window.setTimeout(() => {
+            if (
+              externalFocusSequenceRef.current === autoFocusSequence
+              && document.activeElement === autoFocusTarget
+            ) {
+              ready.renderer.focus();
+            }
+          }, 0);
         }
         flushBatchedTerminalInput();
         flushQueuedTerminalInput();
