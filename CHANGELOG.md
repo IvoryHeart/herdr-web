@@ -6,6 +6,10 @@
 
 ### Added
 
+- Added Spec 015 work unit 1 compatibility for Herdr `v0.8.2` and exact terminal protocol `20`,
+  including the refreshed bridge wire/API slice, frozen protocol fixtures, bounded admission
+  diagnostics, safe direct-graphics exclusions, and terminal-bell handling. Web v0.4.2/v0.4.3
+  replay remains follow-up work.
 - Declared the existing Herdr SVG logo as the browser favicon, synchronized
   from the audited Herdr Web upstream head `9897522`. Contributed by
   [Craig P. Motlin (@motlin)](https://github.com/motlin) in

@@ -32,9 +32,9 @@ registry.
 | Project | Current audited state | Consequence |
 | --- | --- | --- |
 | Herdr Web | v0.4.3; main `cff6335683acc20cbb76c24b67d03f9e75dd78e6` | New dev, IME, focus, accessibility, and contribution-policy work should be assessed and replayed by concern. |
-| Herdr | v0.8.2 at `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`; protocol 20 | Current protocol-19 bridge is incompatible and needs Spec 015 before stable live acceptance. |
+| Herdr | v0.8.2 at `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`; protocol 20 | Spec 015 work unit 1 refreshes the bridge to the complete protocol-20 wire shape and records stock-daemon evidence. |
 | Herdr plugins | Manifest actions/hooks/panes/link handlers; full public CLI/socket access; public terminal session observe/control | Prefer plugins/public APIs for executable workflows and companion clients; native browser UI remains outside plugin v1. |
-| Herdr Web issue #65 | Open protocol-20 incompatibility report | Monitor and adopt an upstream fix; do not create a duplicate proposal without issue alignment. |
+| Herdr Web issue #65 | Open protocol-20 incompatibility report | No upstream fix was present at the 2026-08-20 audit; work unit 1 resolves the downstream gap and records the disposition. |
 | herdr-mirror | Active MIT Herdr plugin using public terminal session APIs | Evidence that public APIs/plugins can cover companion and multi-host workflows without another registry. |
 
 ## Target architecture
@@ -94,14 +94,14 @@ external provider.
 ### Work
 
 - Fetch current Herdr Web and Herdr again immediately before implementation.
-- Monitor Herdr Web issue #65; adopt the upstream protocol-20 fix if it lands.
+- Monitor Herdr Web issue #65; adopt an upstream protocol-20 fix if it lands before review.
 - Refresh the narrow compatibility crate to stable Herdr v0.8.2/protocol 20,
   including the complete enum/field delta rather than only the version constant.
 - Keep browser terminals in `TerminalAttach`; explicitly exclude direct
   graphics file forwarding and define terminal-bell behavior.
 - Validate an unmodified Herdr v0.8.2 daemon end to end.
-- Assess and replay v0.4.2/v0.4.3 Web changes by concern with attribution and
-  regression tests.
+- Defer v0.4.2/v0.4.3 Web replay by concern with attribution and regression tests
+  to the next separate reviewable unit.
 - Update active compatibility docs while preserving Spec 013 as historical
   protocol-19 evidence.
 
