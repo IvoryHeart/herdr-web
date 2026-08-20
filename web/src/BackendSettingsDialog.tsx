@@ -59,6 +59,7 @@ import type { NavigationSyncMode } from "./navigationPrefs";
 import { TERMINAL_INPUT_BATCH_DELAY_OPTIONS_MS } from "./terminalInputTransport";
 import type { TerminalInputTransport } from "./terminalInputTransport";
 import { TERMINAL_OUTPUT_COALESCE_OPTIONS_MS } from "./terminalOutputCoalescing";
+import { trapFocusWithin, useFocusReturn } from "./overlayFocus";
 
 type Props = {
   showMobileTerminalSettings: boolean;
@@ -168,6 +169,7 @@ export function BackendSettingsDialog({
   const [message, setMessage] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<BridgeBackendProfile | null>(null);
   const [activeArea, setActiveArea] = useState<SettingsArea>("bridge");
+  useFocusReturn();
 
   const selectedBackend = useMemo(
     () => bridge.store.backends.find((backend) => backend.id === form.id) ?? null,
@@ -316,7 +318,9 @@ export function BackendSettingsDialog({
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+            return;
           }
+          trapFocusWithin(event);
         }}
         onSubmit={(event) => {
           event.preventDefault();
