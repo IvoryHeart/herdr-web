@@ -52,7 +52,7 @@ were Herdr Web `main`
 
 | Concern | Classification | Source and attribution | Downstream result |
 | --- | --- | --- | --- |
-| Supervised development, readiness/shutdown, signals, static-asset cache policy | adopted | PR #57 merge `4c2ef62aca1bd7320d026791602a0b36cedd247e`; implementation `09d386ab303f1babd4a06974f9de2c8c5d3159fd`; Hopkins (`@LosEcher`), PR #51 | Loopback-safe supervised `npm run dev`, bounded readiness/error handling, child cleanup, namespaced environment, immutable hashed assets, revalidated entrypoints, and route-level `/world` and `/world/` cache regression coverage. |
+| Supervised development, readiness/shutdown, signals, static-asset cache policy | adopted | PR #57 merge `4c2ef62aca1bd7320d026791602a0b36cedd247e`; implementation `09d386ab303f1babd4a06974f9de2c8c5d3159fd`; Hopkins (`@LosEcher`), PR #51 | Loopback-safe supervised `npm run dev`, bounded readiness/error handling, child cleanup, namespaced environment, immutable hashed assets, revalidated entrypoints, and route-level `/`, `/world`, and `/world/` cache regression coverage. |
 | Contribution guidance | conflicted | PR #57 commit `4bac49fb76a23edfb9c57fd6b1f7fabc75a25ade`; Kevin (`kcosrdev@gmail.com`) | Assessed but not copied into downstream governance because Spec 004 World ownership and contribution-lane decisions remain unresolved. |
 | Terminal IME composition, cancellation, fallback preedit, desktop focus | adopted | PR #58 merge `e13c83d429d1f51199ca0eee1810485acf47ad60`; commits `3f39d3be243ff6313e404db19852dbac8b18b21e`, `db88e34567a2c68fe8814777ddaac6fb2ef60e2e`, `052c638982449deec7f6fc08b2110ccf3c2328aa`, `3c7d0b93a3cd50044dbb55a5c66f3f1f09fbdf5c`; Hopkins (`@LosEcher`), PR #51 | Reconciled with the existing renderer. Preedit remains local, cancellation is not replayed, fallback input is handled, desktop focus is retained, and mobile input remains intact. |
 | Dialog/menu activation and focus restoration | adopted | PR #62 merge `346beeee614cb54da32f29e3a22c1e44d8133014`; commits `8af7cd62a56894dcaf89f58b1016a1654d158dda`, `276ca305bfab9c7a1e772d8110c26b060e308361`, `0870cd3efd518e822111b72d6ffa30e892567694`; shuv (`@shuv1337`), PR #37 | Shared focus-return/trap behavior is integrated across Spaces, Office, notes, settings, launchers, and pane menus. |
@@ -92,7 +92,10 @@ the changed and unchanged attach-time focus states.
 - GitHub Actions run
   [`32421052400`](https://github.com/IvoryHeart/herdr-web/actions/runs/32421052400)
   passed all five CI jobs on final review-fix head
-  `7101892aa4787aaaacbf1d32de7d655a64045ae3`.
+  `ee9b061b86584ac353118993a7d9bd715b62da94`. The subsequent
+  `94638e6` change adds only the explicitly requested `/` route assertion;
+  its focused bridge test passed and the final-head CI rerun is recorded in
+  the PR.
 
 ## Constraints and remaining limitations
 
