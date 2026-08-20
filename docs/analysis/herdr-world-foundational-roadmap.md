@@ -1,260 +1,277 @@
 # Herdr World foundational roadmap
 
-- **Status:** Planning baseline; implementation still requires approved specs
-- **Date:** 2026-08-12
-- **Based on:** [`herdr-world-repository-analysis.md`](herdr-world-repository-analysis.md)
-- **Branch:** `codex/foundational-extension-registry`
+- **Status:** Planning baseline; implementation requires approved specs
+- **Revised:** 2026-08-20
+- **Downstream baseline:** `ad5fe9a`
+- **Upstream reassessment:**
+  [`upstream-plugin-surface-reassessment-2026-08-20.md`](upstream-plugin-surface-reassessment-2026-08-20.md)
 
 ## Decision
 
-The analysis findings are accepted. No material finding is being refuted.
-The only clarification is that the repository has no active build-time or
-runtime dependency on `ai-observability`; the remaining problem is active setup
-documentation, test wording, historical provenance, and adapted Office source
-and art provenance.
+Herdr World will be an open downstream distribution, not a competing Herdr
+runtime, plugin system, extension registry, or bridge coordinator.
 
-The work will proceed in this order:
+The project will:
+
+- consume Herdr's public CLI/socket/session APIs and plugin model first;
+- keep Herdr Web's existing `BridgeManager`, `/api/capabilities`, runtime cache,
+  and terminal transport authoritative in the browser;
+- compose World visualizations as trusted compile-time surfaces;
+- retain custom providers only for documented semantic or historical-data gaps;
+- preserve Herdr Web Git ancestry and reconstruct one focused upstream concern
+  at a time from current upstream; and
+- release original and redistributed material only after source/art provenance,
+  licensing, notices, governance, security, SBOM, and reproducibility gates pass.
+
+The earlier generic `/api/extensions` direction is withdrawn. Spec 010 now
+defines extension alignment and an observability source audit rather than a new
+registry.
+
+## Current upstream baseline
+
+| Project | Current audited state | Consequence |
+| --- | --- | --- |
+| Herdr Web | v0.4.3; main `cff6335683acc20cbb76c24b67d03f9e75dd78e6` | New dev, IME, focus, accessibility, and contribution-policy work should be assessed and replayed by concern. |
+| Herdr | v0.8.2 at `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`; protocol 20 | Current protocol-19 bridge is incompatible and needs Spec 015 before stable live acceptance. |
+| Herdr plugins | Manifest actions/hooks/panes/link handlers; full public CLI/socket access; public terminal session observe/control | Prefer plugins/public APIs for executable workflows and companion clients; native browser UI remains outside plugin v1. |
+| Herdr Web issue #65 | Open protocol-20 incompatibility report | Monitor and adopt an upstream fix; do not create a duplicate proposal without issue alignment. |
+| herdr-mirror | Active MIT Herdr plugin using public terminal session APIs | Evidence that public APIs/plugins can cover companion and multi-host workflows without another registry. |
+
+## Target architecture
 
 ```text
-P0 release safety and identity
-        ↓
-P1 package, surface, bridge, and contract boundaries
-        ↓
-P2 upstream contribution reconstruction
-        ↓
-P3 generic extension registry and provider expansion
-        ↓
-P4 public Herdr World release
+Herdr runtime
+  authoritative session facts, public APIs, plugin registry
+        │
+        ├── optional Herdr plugins / supervised companion processes
+        │
+        v
+Herdr Web core
+  bridge + multi-bridge profiles + capabilities + runtime cache + terminals
+        │
+        ├── generic Web assembly: Spaces
+        │
+        └── Herdr World assembly: Spaces + Office + later compiled surfaces
+                                      │
+                                      └── optional narrow provider contracts
+                                          only for documented upstream gaps
 ```
 
-The current daily-use Office experience remains stable throughout this work.
-Foundational changes must preserve core Herdr Web operation when World,
-Office, or optional providers are absent.
+Product and package identity remain distinct:
 
-## Progress on this roadmap
+- Herdr is the upstream runtime.
+- Herdr Web is the upstream browser application and bridge.
+- Herdr World is this downstream distribution and product assembly.
+- Office, Graph, and City are compiled World surfaces.
+- Reusable executable workflows are separately identifiable Herdr plugins.
+- Providers are optional data adapters, not plugins or surfaces by default.
 
-The first non-licensing tranche is now prepared on this branch:
+## Delivery order
 
-- P0-D active legacy-reference cleanup is complete for operational docs and
-  the World E2E network guard. The historical analysis remains the sole audit
-  record for the former workspace relationship.
-- Draft Spec 004 has been revised with package ownership, clean-checkout
-  independence, identity separation, core-only proof, contract drift gates,
-  and traceable assembly-manifest requirements.
-- Draft Spec 011 defines the typed surface host context, trusted assembly
-  registration, slot/route ownership, admission states, and core-only proof.
-- Draft Spec 010 remains intentionally unimplemented until the surface and
-  bridge extension boundaries are reviewed; no registry runtime behavior has
-  been added by this branch.
+```text
+P0 stable compatibility (Spec 015)
+        ↓
+P1 open-source/package boundaries (Spec 004)
+        ↓
+P2 extension and data-source alignment (Spec 010)
+        ↓
+P3 minimal surface composition (Spec 011)
+        ↓
+P4 focused upstream proposals and public World release
+```
 
-The next action requiring product-code changes is approval of the revised
-packaging and surface drafts. Until then, implementation remains limited to
-mechanical documentation/test corrections and reviewable planning artifacts.
+Spec 004 compliance/documentation work can be prepared while Spec 015 is in
+review. Implementation should not freeze a new browser host API until Spec 010
+has identified which current observability semantics belong to Herdr versus an
+external provider.
 
-## Current baseline
+## P0 — restore current stable compatibility
 
-Already delivered and treated as compatibility constraints:
+### Governing draft
 
-- Herdr-authoritative sessions, tabs, panes, agents, and terminal state.
-- Host-qualified federation, generation-safe caches, capability admission, and
-  operation-level command allow-listing.
-- Optional observability contract, Prometheus adapter, provider health, and
-  bounded Office projection.
-- Responsive Pixel Office, Agent Bar, settings, room/seat actions, callouts,
-  completion markers, and terminal/window persistence.
+[`015-upstream-v043-protocol20-realignment-spec.md`](../specs/015-upstream-v043-protocol20-realignment-spec.md)
 
-Partially delivered but not yet cleanly separated:
+### Work
 
-- Surface registry: useful discovery/lazy loading, but Office is still a core
-  registration and `App.tsx` remains the orchestration boundary.
-- Bridge extensions: observability is bounded and tested, but its provider
-  implementation is still compiled into the main bridge module.
-- Contract boundary: Rust, TypeScript, JSON Schema, and fixtures are manually
-  maintained and need drift verification.
-- Packaging: a private tarball exists, but it lacks complete notices,
-  provenance, SBOM, and release-manifest enforcement.
-- Generic extension registry: `010-generic-extension-registry-spec.md` is a
-  draft only and must be revised after the surface and extension taxonomy are
-  agreed.
+- Fetch current Herdr Web and Herdr again immediately before implementation.
+- Monitor Herdr Web issue #65; adopt the upstream protocol-20 fix if it lands.
+- Refresh the narrow compatibility crate to stable Herdr v0.8.2/protocol 20,
+  including the complete enum/field delta rather than only the version constant.
+- Keep browser terminals in `TerminalAttach`; explicitly exclude direct
+  graphics file forwarding and define terminal-bell behavior.
+- Validate an unmodified Herdr v0.8.2 daemon end to end.
+- Assess and replay v0.4.2/v0.4.3 Web changes by concern with attribution and
+  regression tests.
+- Update active compatibility docs while preserving Spec 013 as historical
+  protocol-19 evidence.
 
-## P0 — release safety and identity
+### Exit gate
 
-P0 is the first implementation tranche because it protects every later
-architecture and upstream contribution from releasing material whose rights,
-origin, or identity cannot be explained.
+- Stock Herdr v0.8.2 starts and passes snapshot, events, commands, terminal,
+  detach/reattach, and multi-bridge acceptance.
+- Protocol 19 and unknown protocols fail clearly.
+- Every protocol-20 message has explicit safe bridge handling.
+- Current setup/release docs no longer instruct users to install protocol 19.
 
-### P0-A: provenance and redistribution gate
+## P1 — make the repository genuinely open-source ready
 
-Create an approved machine-readable provenance manifest covering source,
-images, fonts, generated artifacts, vendored Herdr compatibility code, and
-bundled dependencies. Add a deterministic check that validates hashes,
-required fields, and redistribution status.
+### Governing draft
 
-The exact Pixel Office character assets are now traceable to Claw-Empire
-revision `66a24ea7df2435ef897c48c147deb7ec572c01c2`, whose repository carries
-an Apache-2.0 license and copyright notice for GreenSheep01201. The remaining
-work is to encode that evidence in the repository's provenance manifest,
-retain the Apache license in the release notice bundle, identify the adapted
-files, and add required modified-file notices. The release gate must still
-reject artifacts when attribution, modified-file notices, or packaging
-compliance is absent; the rights decision itself is no longer the blocker.
+[`004-world-packaging-and-upstream-boundaries-spec.md`](../specs/004-world-packaging-and-upstream-boundaries-spec.md)
 
-### P0-B: notices, licenses, and SBOM
+### Work
 
-Add the project notice bundle, upstream Herdr Web and Herdr notices, vendored
-Herdr compatibility notice, third-party npm/Cargo notices, required font/art
-licenses, and machine-readable browser/bridge SBOMs. Package them into the
-tarball and expose an offline path for inspection.
+- Approve downstream legal copyright holder, license, Herdr World name,
+  non-endorsement wording, package/artifact IDs, and legacy aliases.
+- Keep upstream-aligned `bridge`, `web`, and vendor paths easy to compare while
+  isolating downstream contracts, providers, surfaces, plugins, and packaging.
+- Add `CONTRIBUTING.md`, `SECURITY.md`, code-of-conduct/governance decisions,
+  and a clear guide to the separate Herdr, Herdr Web, and World lanes.
+- Create machine-readable source/art provenance, complete offline licenses and
+  notices, Apache-2.0 modified-file notices, npm/Cargo/font/art review, and
+  browser/bridge/artifact SBOMs.
+- Add immutable assembly manifests, source archives, checksums, clean-checkout
+  builds, and fail-closed release validation.
+- Distinguish tracked Claw-Empire sprites, separately hashed historical source
+  adaptations, PixiJS, possible Pixel Agents design/reference evidence,
+  generated work, and original World material file by file.
 
-### P0-C: product identity and version source
+### Exit gate
 
-Choose the downstream legal copyright holder, Herdr World branding relationship,
-package namespaces, binary names, Android identity, schema domain, storage-key
-migration policy, and one release-version source. Record legacy aliases and
-migration behavior rather than silently changing them.
+- No public artifact is possible with unresolved ownership, license, notice,
+  provenance, supported-version, or SBOM data.
+- A clean checkout needs no legacy workspace or absolute workstation path.
+- Generic and World outputs are independently identifiable and traceable.
+- Contributors can tell where and how a change may be submitted without
+  violating upstream policy.
 
-### P0-D: legacy-reference cleanup
+## P2 — align plugins, capabilities, providers, and observability
 
-Replace active `ai-observability` setup instructions with Herdr World-owned
-examples or generic configured-service guidance. Replace the production test’s
-legacy-name network assertion with an explicit allowed-origin assertion.
-Preserve historical evidence in a clearly labeled archive. Correct `UPSTREAM.md`
-so it describes the current World and observability delta.
+### Governing draft
 
-### P0 exit gate
+[`010-upstream-extension-alignment-spec.md`](../specs/010-upstream-extension-alignment-spec.md)
 
-- Clean checkout builds and tests without an external legacy checkout.
-- No active documentation or test requires an absolute workstation path.
-- Assets without the required attribution, modified-file notices, or
-  packaging evidence cannot enter a public package.
-- Every distributed item has verified provenance and applicable notices.
-- Names, versions, routes, package identities, and storage migration are
-  documented before implementation of public-release machinery.
+### Work
 
-## P1 — enforce internal boundaries
+- Add one extension decision record for every proposed integration.
+- Complete a field-level observability matrix against current Herdr API,
+  events, reports, plugin methods, and terminal session streams.
+- Source authoritative Herdr facts from Herdr; keep provider adapters only for
+  historical/aggregate data Herdr does not represent.
+- Use Herdr plugin manifests for actions/hooks/panes and separately supervise
+  any long-running companion process.
+- Keep browser feature admission in `/api/capabilities`.
+- Prevent a generic `/api/extensions` route, duplicated plugin registry, or
+  duplicated bridge profile/capability owner.
+- Characterize why any remaining private protocol client cannot yet use public
+  `terminal session observe/control`.
 
-P1 turns the intended architecture into typed, testable seams before adding
-more extensions.
+### Exit gate
 
-### P1-A: packaging-boundary specification
+- Office, observability, generic Web, and any companion plugin have explicit,
+  non-overlapping owners and lifecycle.
+- Every provider-only field has a documented public-API gap.
+- Existing observability behavior remains compatible while duplicate data
+  sources have a migration decision.
+- No new registry or generic transport exists without demonstrated consumers.
 
-Revise draft spec 004 with the analysis requirements: package ownership,
-dependency direction, contribution matrix, assembly manifest, provenance
-inputs, optional-failure behavior, and core-only acceptance proof. Approve it
-before physical extraction or release restructuring.
+## P3 — extract the minimal compiled surface boundary
 
-### P1-B: surface-composition specification and implementation
+### Governing draft
 
-Create and approve a new surface specification defining:
+[`011-surface-composition-spec.md`](../specs/011-surface-composition-spec.md)
 
-- typed host context and the smallest read/command capabilities;
-- route, navigation, stage, sidebar, settings, and lifecycle ownership;
-- loading, error, unavailable, and degraded surface states;
-- selected/all scope, per-host minimums, and layered capability admission;
-- assembly-owned downstream surface registration;
-- synthetic-surface validation independent of the provider registry; and
-- a core-only build/test proof with no Office imports or assets.
+### Work
 
-Implement the seam around the existing registry incrementally. Do not move
-large files merely to create folders; move code only when the contract and
-tests prove ownership.
+- Bind each surface definition, context factory, and lazy component with a
+  preserved TypeScript generic.
+- Build a thin `SurfaceHostV1` adapter over existing bridge, federated runtime,
+  command, and terminal services.
+- Move World orchestration out of generic `App.tsx` into the World registration
+  and World-owned modules.
+- Produce explicit generic Web and World assembly entries.
+- Preserve current behavior before adding another visualization.
+- Audit final emitted module graphs and assets, not only imports by keyword.
 
-### P1-C: bridge core/provider split
+### Exit gate
 
-Define and implement separate responsibilities for core bridge transport,
-trusted extension host, provider-neutral contract validation, provider
-adapters, and World assembly. Preserve existing observability endpoints and
-behavior while moving provider ownership behind an explicit boundary.
+- Generic Web builds and serves Spaces with no World source, assets, providers,
+  or branding.
+- World adds Office only through its assembly entry.
+- Both surfaces use the same qualified runtime, command, and terminal owners.
+- Route-local errors cannot tear down core runtime observation or unrelated
+  terminals.
+- No speculative settings registry, slot platform, capability DSL, or dynamic
+  browser plugin system was introduced.
 
-### P1-D: canonical contract and drift check
+## P4 — engage upstream and release World
 
-Choose the canonical observability representation, then validate every fixture
-against it and verify Rust/TypeScript decoding against the same fixtures.
-Generate or mechanically compare declared versions, limits, and enum values.
+Upstream discussion should start before all downstream refactors finish, but
+implementation proposals must remain independent and current.
 
-### P1 exit gate
+### Herdr Web
 
-- Core-only build succeeds without Office, World assets, or providers.
-- `App.tsx` does not own downstream Office implementation imports.
-- Core bridge does not own Prometheus/OTEL provider behavior.
-- Optional provider/projection failure leaves core Herdr operation usable.
-- Contract fixtures and language implementations cannot silently drift.
+1. Search current issues, pull requests, releases, and main.
+2. Open a short issue before a larger feature or architectural change.
+3. If aligned, reconstruct one generic concern from current upstream main.
+4. Include only its tests, necessary docs, and changelog.
+5. Exclude World code, art, provider contracts, packaging, and unrelated
+   downstream history.
+6. Track accepted/declined/superseded status in the World assembly manifest.
 
-## P2 — reconstruct upstream contribution units
+### Herdr
 
-Upstream discussion begins while the P1 drafts are in review, before the
-surface contract is frozen. The goal is to collect upstream constraints early;
-no upstream implementation branch is cut until the relevant draft is
-approved and the proposed slice has a concrete upstream target.
+1. Use Discussions for product/API gaps and questions.
+2. Use the bug template only for a personally reproduced bug and omit a
+   speculative implementation plan.
+3. Do not open an implementation pull request unless the acting account is a
+   current maintainer or approved contributor.
+4. Ask for neutral shared runtime facts or APIs, never Office/browser widget
+   concepts.
+5. Continue downstream against public APIs if upstream declines or defers.
 
-During and after P1 boundary work:
+### World release
 
-1. fetch and audit current `upstream/main` and Herdr compatibility revisions;
-2. create one branch from current upstream per independent concern;
-3. select generic, upstream-useful candidates such as federation identity,
-   capability admission, bridge security, and surface composition;
-4. remove Herdr World branding, Office assets, provider-specific contracts, and
-   downstream product copy from each upstream branch;
-5. add upstream-focused tests and documentation; and
-6. record accepted, declined, or superseded outcomes in the assembly manifest.
-
-The extension registry is discussed with upstream at this stage, not assumed
-to be an upstream contract merely because it is generic in shape. A second
-projection or synthetic surface can validate Spec 011 independently; it does
-not wait for the P3 bridge-extension registry.
-
-## P3 — generic registry and provider expansion
-
-Revise draft spec 010 after the extension taxonomy, surface boundary, and
-upstream intent are settled. Then implement the smallest compile-time trusted
-registry:
-
-- bounded discovery metadata;
-- no dynamic code loading or marketplace semantics;
-- observability registered through an adapter;
-- existing observability routes retained for compatibility; and
-- no provider credentials, backend URLs, or mutation authority in registry
-  responses.
-
-Only after this is stable should additional provider adapters or Graph/City
-projections be considered.
-
-## P4 — public Herdr World release
-
-Define a separate release specification for versioning, signing, SBOMs,
-provenance attestations, compatibility support, upgrade/storage migration,
-rollback, offline notices, and security reporting. Produce public artifacts
-only after P0 gates pass and the Office attribution/packaging evidence is
-complete.
+The first public source/binary release occurs only after Spec 004's gates pass,
+the selected compatibility matrix is live-tested, and generic/World assemblies
+are mechanically distinct. Registry publication can remain deferred; source,
+licenses, notices, provenance, checksums, SBOMs, security reporting, and
+reproducible assembly cannot.
 
 ## Proposed reviewable work units
 
-Each unit should be its own branch/PR and should not mix Office UX changes:
+Each unit should be a separate branch/PR and should not mix unrelated Office
+UX changes:
 
-1. **P0 documentation/spec gate:** revise spec 004, create the surface spec,
-   and record identity/provenance decisions.
-2. **P0 provenance and release gate:** manifests, notices, SBOM generation,
-   attribution/modified-file enforcement, and legacy-reference cleanup.
-3. **P1 surface boundary:** typed surface host, assembly-owned registration,
-   synthetic-surface validation, and core-only proof.
-4. **P1 bridge boundary:** core/extension/provider split with compatibility
-   tests.
-5. **P1 contract drift gate:** canonical schema and cross-language fixture
-   verification.
-6. **P2 upstream branches:** one upstream concern per branch, based on current
-   upstream.
-7. **P3 registry:** revise and implement spec 010 after upstream discussion.
-8. **P4 release:** public distribution only after attribution and release
-   gates.
+1. **Protocol-20 compatibility:** stable Herdr vendor refresh and live tests.
+2. **Web v0.4.2/v0.4.3 replay:** split further by dev, IME, focus, and
+   accessibility concern if conflict review warrants it.
+3. **OSS policy and identity:** license-holder/name decisions, contribution,
+   security, governance, and support docs.
+4. **Provenance and release gate:** source/art manifests, notices, SBOMs,
+   checksums, assembly manifest, and fail-closed tests.
+5. **Observability source audit:** no product behavior change.
+6. **Provider/companion boundary:** only the gaps proven by unit 5.
+7. **Minimal surface seam:** typed binding and World orchestration extraction.
+8. **Assembly proof:** generic/World entries and final bundle audits.
+9. **Upstream candidate branches:** one current-upstream concern per branch.
+10. **Public release:** only after all mandatory release gates pass.
 
-## Non-negotiable acceptance policy
+## Non-negotiable stop conditions
 
-No implementation should claim “public Herdr World distribution” while any of
+Do not claim upstream readiness or public Herdr World distribution while any of
 the following is true:
 
-- Office source or art redistribution is unlicensed or unverified;
-- required licenses, notices, provenance, or SBOMs are absent;
-- a build depends on an undeclared checkout or workstation path;
-- core and downstream contributions cannot be built/tested independently; or
-- an upstream PR contains World-specific assets, providers, branding, or
-  unrelated aggregate history.
+- the supported stable Herdr daemon cannot start or attach;
+- an upstream proposal duplicates an active upstream fix or violates its
+  contribution policy;
+- a generic branch contains World-specific code, branding, art, providers, or
+  aggregate downstream history;
+- original/downstream copyright, product identity, or non-endorsement wording
+  is unresolved;
+- a distributed source, art, font, or dependency lacks provenance and required
+  license/notice/modification evidence;
+- builds depend on undeclared checkouts, secrets, or workstation paths;
+- generic and World artifacts cannot be built and audited independently; or
+- source archive, checksums, SBOMs, contributor/security paths, and assembly
+  manifest are missing.

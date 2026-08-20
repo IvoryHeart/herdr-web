@@ -1,280 +1,339 @@
-# World packaging and upstream contribution boundaries
+# Herdr World open-source packaging and upstream contribution boundaries
 
 - **Spec ID:** `004-world-packaging-and-upstream-boundaries`
 - **Status:** Draft
 - **Created:** 2026-08-10
-- **Owner:** Herdr Office downstream project
+- **Revised:** 2026-08-20
+- **Owner:** Herdr World downstream project
 - **Reviewers:** IvoryHeart (repository owner)
 - **Approved by:** —
 - **Approved at:** —
 
-> This draft defines how the downstream World family is organized while
-> preserving small, reviewable upstream contribution units. It does not
-> authorize upstream PRs or a repository rename until approved.
+> This revision replaces the earlier private-package framing with an explicit
+> open-source distribution and upstream-contribution contract. It does not
+> authorize a release, repository rename, or upstream pull request until the
+> applicable decisions and gates below are approved.
 
 ## 1. Purpose
 
-The downstream project now contains Herdr Web integration, the `herdr-world`
-runtime,
-and planned Office, Graph, City, observability, and packaging work. These
-components need to evolve together locally without becoming a monolith that
-cannot be proposed upstream in understandable pieces.
+Herdr World is a downstream distribution built from Herdr Web, optional World
+browser surfaces such as Office, provider adapters, and optional Herdr plugins.
+The repository must remain easy to synchronize with both upstream projects,
+must let generic fixes travel upstream without World branding or product code,
+and must be legally and operationally complete enough for other people to
+build, inspect, modify, and redistribute.
 
-This specification defines the source boundaries, dependency direction,
-ownership metadata, test boundaries, and contribution units for the World
-family. The product umbrella is `herdr-world`; Office, Graph, and City are
-projections over shared Herdr state. The current repository and package paths
-may continue using `herdr-web` during migration, but all assembled components
-belong to the `herdr-world` product.
+This specification defines the product boundaries, source layout, dependency
+direction, contribution lanes, attribution obligations, and public-release
+gates. It deliberately treats Herdr, Herdr Web, Herdr plugins, browser
+surfaces, and provider adapters as different extension mechanisms rather than
+placing them behind a new generic registry.
 
-The specification is intentionally a boundary and release-readiness contract,
-not a request to move every current file immediately. Physical extraction is
-allowed only after the interfaces and acceptance evidence below exist.
+## 2. Architectural ownership
 
-## 2. Scope
+The following ownership model is normative:
+
+| Layer | Owner and source of truth | Herdr World relationship |
+| --- | --- | --- |
+| Runtime/session semantics, CLI/socket API, terminal session streams, plugin manifests/actions/hooks/panes | [`herdrdev/herdr`](https://github.com/herdrdev/herdr) | Consume the public API; propose neutral runtime gaps through the upstream process. |
+| Browser bridge, multi-bridge profiles, terminal transport, `/api/capabilities`, Spaces, and generic browser shell behavior | [`kcosr/herdr-web`](https://github.com/kcosr/herdr-web) | Preserve ancestry; reconstruct focused generic changes on current upstream. |
+| World assembly, Office/Graph/City browser projections, World branding/art, provider adapters, and release packaging | Herdr World | Downstream-owned and openly released from this repository. |
+| Optional reusable runtime workflows or companion processes | Independently installable Herdr plugins | Use `herdr-plugin.toml` and public CLI/socket/session APIs; do not redefine the plugin manifest. |
+
+Herdr World and Herdr Web are applications/distributions, not Herdr plugins.
+A World release MAY include or recommend separately installable Herdr plugins,
+but MUST NOT describe the whole web application or a browser projection as a
+plugin while Herdr plugin v1 has no native non-terminal UI contract.
+
+## 3. Scope
 
 This feature includes:
 
-- a documented mono-repo package map for contracts, Herdr Web transport,
-  provider adapters, projections, and distribution;
-- one-way dependency rules that keep contracts independent of providers,
-  Herdr Web, and visual projections;
-- explicit upstream contribution units and ownership for each boundary;
-- package-local validation plus a root acceptance gate for the assembled
-  downstream product;
-- source provenance rules for the Herdr compatibility layer and external
-  upstream references;
-- a downstream assembly model that pins or selects components without copying
-  their source into multiple packages; and
-- a release manifest that records product identity, component revisions,
-  generated inputs, and artifact contents for every assembled build;
-- a migration path that allows a package to remain downstream-only if an
-  upstream proposal is declined.
+- an upstream-preserving repository and branch strategy;
+- logical and physical boundaries for upstream-aligned code, downstream
+  surfaces, contracts, providers, optional plugins, and packaging;
+- a reuse-before-create decision rule for every new integration;
+- independent build/test evidence for generic Web and assembled World output;
+- a clean-checkout, reproducible release assembly with immutable component
+  provenance and artifact hashes;
+- complete source, art, dependency, license, notice, and modification records;
+- public contributor, security-reporting, support, and governance documents;
+- a documented process for focused proposals to each upstream; and
+- a downstream fallback when an upstream proposal is declined or deferred.
 
-The initial source map is:
+The target logical layout is:
 
 ```text
-contracts/observability/  language-neutral schema, fixtures, compatibility rules
-bridge/                   downstream Herdr client and browser transport
-providers/                OTEL/backend/project-specific adapters
-projections/office/       Office presentation and interaction
-projections/graph/        future Graph presentation
-projections/city/         future City presentation
-packaging/                pinned component assembly and release tooling
+bridge/                       upstream-aligned Herdr Web bridge
+web/                          upstream-aligned Herdr Web application/core
+vendor/herdr-compat/          narrowly vendored, traced compatibility source
+world/
+  contracts/                  canonical downstream cross-language contracts
+  providers/                  optional provider adapters
+  web/                        Office and future compiled-in World surfaces
+  plugins/                    optional, independently installable Herdr plugins
+  packaging/                  assembly, provenance, notices, SBOM and release
+third_party/                  redistributed licenses/notices not kept upstream
 ```
 
-Existing repository paths MAY be migrated toward this map incrementally. The
-boundary and dependency rules apply before physical extraction is complete.
+The exact package-manager workspace layout MAY be selected during
+implementation. Existing `web/src/world`, `contracts`, provider, and packaging
+paths MAY migrate incrementally, but the final dependency and release audits
+MUST prove the boundaries even if some paths have not moved yet. Upstream-
+aligned directories SHOULD retain upstream file paths where that materially
+reduces synchronization conflicts.
 
-The transition ownership map is:
+## 4. Non-goals
 
-| Boundary | Current implementation | Boundary owner | Intended upstream status |
-| --- | --- | --- | --- |
-| Herdr Web core and browser runtime | `web/src/`, `bridge/src/web_bridge.rs` | Herdr Web core maintainers | upstream candidate where generic |
-| Herdr compatibility | `vendor/herdr-compat/` | Herdr Web downstream compatibility owner | upstream-aligned compatibility slice |
-| Provider-neutral contracts | `contracts/observability/` | Herdr World contracts owner | separate contract proposal |
-| Provider transport and adapters | `bridge/src/observability*.rs` | Herdr World provider owner | downstream until a generic target is accepted |
-| World projections | `web/src/world/` and Office assets | Herdr World projection owner | downstream |
-| Assembly and release artifacts | `scripts/`, `packaging/` when extracted | Herdr World release owner | downstream |
-
-Each row is a temporary ownership assignment until the corresponding package
-is physically extracted. A change that crosses rows MUST identify each
-affected contribution unit in its change record.
-
-## 3. Non-goals
-
-- No upstream PR is required by this specification.
-- No immediate move of the complete Herdr source tree into this repository.
-- No public npm, Rust, plugin, or marketplace publication requirement.
-- No immediate physical repository rename or package extraction; the chosen
-  product umbrella is `herdr-world`.
-- No multi-server gateway, SSH credential manager, or remote discovery system.
-- No new OTEL provider implementation or Office observability board behavior;
-  the existing downstream implementation remains governed by the separate
-  observability provider/projection specification.
-- No requirement that every package be independently versioned or released
-  before the versioning policy is approved.
-
-## 4. Context and constraints
-
-Herdr Server and the upstream Herdr Web project have separate ownership. This
-repository must remain useful as a downstream product even when an upstream
-proposal is not accepted. The current bridge deliberately keeps a minimal,
-auditable Herdr compatibility layer rather than vendoring the complete Herdr
-source tree.
-
-The World runtime may consume shared Herdr topology, but a projection MUST NOT
-become the owner of provider credentials, bridge protocol details, or raw
-telemetry access. The existing observability contract is the boundary for
-optional data; the packaging design must preserve its independence.
-
-The current release is a private assembled `herdr-web` runtime. The packaging
-boundary should support a future `herdr-world` release without requiring all
-upstream projects to adopt the same repository layout or release cadence.
+- No central multi-server gateway, SSH credential manager, or duplicate bridge
+  coordinator. Herdr Web's existing `BridgeManager` remains authoritative.
+- No dynamic browser plugin loader, marketplace, or execution sandbox.
+- No replacement for Herdr's plugin registry, manifests, CLI, or socket API.
+- No claim that all World code is suitable for either upstream.
+- No requirement to publish to npm, crates.io, or a Herdr plugin marketplace in
+  the first release; source and release artifacts are in scope.
+- No legal conclusion that a dependency or asset is redistributable merely
+  because it is publicly accessible. The recorded license and notice determine
+  the release gate.
+- No Graph, City, new telemetry provider, or new browser extension behavior.
 
 ## 5. Requirements
 
-### Requirement: Define package ownership
+### Requirement: Preserve upstream ancestry and product identity
 
-Each package boundary SHALL have one documented owner, public input boundary,
-output boundary, test command, and upstream target or an explicit
-downstream-only designation.
+The repository SHALL preserve auditable Git ancestry to Herdr Web, a named
+`upstream` remote, and a dated synchronization baseline. The public product
+SHALL identify itself as Herdr World and SHALL identify Herdr and Herdr Web as
+independent upstream projects without implying sponsorship or endorsement.
 
-#### Scenario: A new provider is added
+The downstream repository MAY be renamed to `herdr-world` after the repository
+owner approves its legal name, package namespaces, artifact names, and legacy
+aliases. A rename MUST preserve history and documented upstream remotes.
 
-- **GIVEN** a provider needs OTEL or backend-specific access
-- **WHEN** it is added to the mono-repo
-- **THEN** its credentials, backend client, configuration, and tests remain in
-  the provider package and its World-facing output crosses the shared
-  observability contract.
+#### Scenario: A user inspects the source relationship
 
-### Requirement: Enforce dependency direction
+- **GIVEN** a clean public checkout
+- **WHEN** the user reads its provenance and repository documentation
+- **THEN** they can identify the Herdr Web baseline, current downstream delta,
+  upstream URLs, licenses, and Herdr World-owned components without relying on
+  an undocumented sibling checkout.
 
-Dependencies SHALL flow from stable contracts toward adapters and projections:
+### Requirement: Enforce reuse before creating an extension
+
+Every proposed integration SHALL be classified in this order:
+
+1. use a public Herdr CLI/socket/session API and, for executable workflows, a
+   Herdr plugin;
+2. use Herdr Web's existing bridge runtime and `/api/capabilities` for browser
+   transport and compatibility;
+3. use the trusted compiled-in surface assembly for browser presentation; or
+4. introduce a downstream provider/contract only after documenting the
+   semantic or historical-data gap in the first three mechanisms.
+
+A change record MUST state the chosen mechanism and why an earlier mechanism
+is insufficient. It MUST NOT add a second plugin registry, bridge-profile
+owner, capability endpoint, or terminal-session abstraction for a use case
+already covered by an upstream public contract.
+
+#### Scenario: A contributor proposes an activity integration
+
+- **GIVEN** Herdr already exposes the required agent state or event through its
+  public API
+- **WHEN** the proposal is classified
+- **THEN** it consumes that API directly or through a Herdr plugin and does not
+  add a provider-specific browser discovery registry.
+
+### Requirement: Keep package ownership and dependencies explicit
+
+Every logical package SHALL document its owner, public inputs, public outputs,
+network and secret boundary, test command, version policy, and upstream target
+or `downstream-only` status.
+
+Dependencies SHALL flow in the following direction:
 
 ```text
-contracts → bridge/provider adapters → projections → packaging
+Herdr public API / Herdr Web core
+              ↓
+downstream contracts → provider adapters
+              ↓              ↓
+        compiled World surfaces
+              ↓
+       World release assembly
 ```
 
-Contracts MUST NOT import Herdr Web, provider, backend, or projection code.
-Projections MUST NOT connect directly to Herdr Server, OTEL infrastructure, or
-provider backends.
+Contracts MUST NOT import bridge, provider, projection, or packaging code.
+World surfaces MUST NOT own bridge profiles, raw Herdr sockets, provider
+credentials, or release assembly. Optional plugins MUST remain installable and
+testable without importing the browser application.
 
-#### Scenario: Office renders optional telemetry
+#### Scenario: Office consumes historical metrics
 
-- **GIVEN** Office needs an observability value
-- **WHEN** it requests that value
-- **THEN** it consumes the validated contract through the bridge/provider
-  boundary and does not know whether the source is an adapter or Herdr Server.
+- **GIVEN** historical metrics are not available from the public Herdr API
+- **WHEN** Office renders them
+- **THEN** the data crosses a canonical downstream contract from an optional
+  provider adapter, while credentials and backend configuration stay outside
+  the browser surface.
 
-### Requirement: Keep contribution units separable
+### Requirement: Make generic and World assemblies mechanically separate
 
-The repository SHALL identify independent contribution units for:
+The repository SHALL provide a repeatable generic Herdr Web build and an
+assembled Herdr World build. The generic build MUST exclude World surfaces,
+World art, provider implementations, downstream contracts, and World branding.
+The World build SHALL select downstream components through an explicit
+assembly entry or manifest rather than registering them in generic core source.
 
-1. language-neutral contracts and fixtures;
-2. generic Herdr Web capability admission and transport;
-3. provider adapters;
-4. World projections; and
-5. downstream packaging and release assembly.
+The proof MUST inspect the final dependency graph or emitted bundle contents;
+source keyword scans alone are insufficient.
 
-Each unit MUST be testable without copying unrelated package source into an
-upstream proposal.
+#### Scenario: World sources are unavailable
 
-#### Scenario: An upstream accepts only the contract
+- **GIVEN** World packages and assets are disabled or absent
+- **WHEN** the generic build and smoke tests run
+- **THEN** the upstream-aligned shell and Spaces build and run without a World
+  import, provider adapter, or World asset in the output.
 
-- **GIVEN** an upstream accepts the contract and fixtures but declines the
-  bridge or projection changes
-- **WHEN** the downstream release is assembled
-- **THEN** the downstream provider and projection remain usable against the
-  accepted contract without duplicating or rewriting the contract.
+### Requirement: Keep upstream contribution units reconstructable
 
-### Requirement: Preserve provenance and compatibility
+An upstream contribution SHALL be created on a dedicated branch or worktree
+from the current target upstream head, not by opening a pull request from the
+downstream integration branch. It SHALL contain one generic concern, its tests,
+the minimum documentation, and required changelog entry. It MUST exclude World
+branding, Office art and behavior, provider-specific contracts, downstream
+release files, and unrelated downstream history.
 
-External source references, compatibility crates, generated artifacts, and
-downstream patches SHALL declare their provenance, refresh procedure, and
-compatibility baseline. The repository MUST NOT depend on an undeclared
-external checkout at build time.
+Before work begins:
 
-#### Scenario: Herdr changes its protocol
+- a larger Herdr Web feature, new product area, or architectural change MUST
+  first be discussed in a focused Herdr Web issue;
+- a Herdr product/API proposal MUST use GitHub Discussions unless it is a
+  personally reproduced bug suitable for the bug template; and
+- no Herdr implementation pull request may be opened unless the authenticated
+  account is a maintainer or appears in Herdr's current
+  `.github/APPROVED_CONTRIBUTORS` list.
 
-- **GIVEN** an upstream Herdr protocol or API changes
-- **WHEN** the compatibility layer is refreshed
-- **THEN** the baseline, compatibility tests, and any downstream adaptation
-  are reviewable independently of projection changes.
+The assembly manifest SHALL record each candidate as `not-proposed`,
+`discussion`, `proposed`, `accepted`, `declined`, `superseded`, or
+`downstream-only` with the upstream URL when one exists.
 
-### Requirement: Make the repository independent of legacy workspaces
+#### Scenario: A generic bridge fix is ready
 
-The assembled product, its tests, and its active operator documentation SHALL
-work from a clean `herdr-web` checkout without an undeclared sibling checkout,
-absolute workstation path, or legacy project name. Historical provenance MAY
-refer to an earlier workspace, but it MUST be marked as historical and MUST
-NOT be an operational instruction or build input.
+- **GIVEN** the fix is currently present inside Herdr World
+- **WHEN** it is prepared for Herdr Web
+- **THEN** it is reproduced on current `kcosr/herdr-web` main as one focused
+  change and can be reviewed without installing or understanding World.
 
-#### Scenario: A new agent starts from the repository root
+### Requirement: Preserve source and generated-code provenance
 
-- **GIVEN** only this repository and its declared package/build prerequisites
-  are available
-- **WHEN** the agent runs the documented startup, test, and packaging commands
-- **THEN** the commands do not require a legacy observability workspace or
-  another undeclared source tree.
+Every vendored or adapted source set SHALL record the source repository,
+immutable revision, source paths, selected files, license identifier, copyright
+notice, local modifications, refresh procedure, and content hashes. Generated
+files SHALL also identify their generator and canonical input.
 
-### Requirement: Separate stable identity from local configuration identity
+The build MUST NOT require an undeclared external checkout or fetch mutable
+source. Vendored Herdr compatibility code MUST remain the smallest reviewed
+wire/API slice required by the bridge and MUST have drift and protocol tests.
 
-The assembled product SHALL distinguish the product namespace, package and
-artifact identifiers, upstream compatibility baseline, provider/source
-instance identity, browser-local bridge profile identity, and boot/generation
-identity. A browser-local storage key MUST NOT be used as a provider or
-artifact identity.
+#### Scenario: The Herdr compatibility layer is refreshed
 
-Routes and persisted keys that change during a namespace migration SHALL have
-an idempotent compatibility migration. The migration MUST preserve existing
-hosts, Office settings, and completion state, and MUST be covered by a test.
+- **GIVEN** a new supported Herdr release changes the protocol
+- **WHEN** compatibility source is updated
+- **THEN** its exact tag and commit, copied files, license, protocol delta,
+  local adaptations, and verification are reviewable independently from
+  Office and provider changes.
 
-### Requirement: Define a core-only proof
+### Requirement: Make art and design provenance unambiguous
 
-The repository SHALL provide a repeatable core-only build and dependency audit
-that succeeds without World projections, Office assets, observability provider
-implementations, or provider-specific bridge modules. The proof MUST inspect
-the compiled dependency graph or final bundle contents in addition to source
-keyword scans.
+The provenance manifest SHALL distinguish byte-for-byte copied assets,
+modified assets, adapted source, generated assets, and non-copied design
+references. It MUST NOT attribute a file to Pixel Agents, Claw-Empire, PixiJS,
+or another project merely because the file is visually related.
 
-#### Scenario: The Office package is unavailable
+The current character sprites are byte-identical to tracked Claw-Empire files
+at the recorded Apache-2.0 revision and MUST retain that license, copyright
+attribution, and any upstream NOTICE. The TypeScript geometry/renderer files
+were adapted from separately hashed historical JavaScript files that were
+untracked in the reference checkout. Their release entry MUST therefore include
+immutable, reviewable evidence that identifies those exact source hashes,
+copyright holder, Apache-2.0 grant or other permission, and the prominent
+modified-file notices; the tracked sprite provenance alone does not prove the
+adapted source's status.
 
-- **GIVEN** the downstream Office projection and provider packages are absent
-  or disabled
-- **WHEN** the core-only build and test gate runs
-- **THEN** Herdr Web core builds, serves Spaces, and passes its core checks
-  without importing or bundling World code.
+Pixel Agents is a separately reviewed MIT project and possible design
+reference; its license MUST NOT be listed as the license for a distributed
+World file unless a file-level audit proves that relationship. Replacing the
+art does not remove obligations for any previously distributed adapted source
+or asset.
 
-### Requirement: Keep contract representations synchronized
+#### Scenario: A character asset is replaced
 
-Each cross-language contract SHALL name one canonical representation. The
-repository MUST validate positive and negative fixtures against that source,
-exercise Rust and TypeScript decoding against the same fixtures, compare
-declared versions and limits, and fail when checked-in generated
-representations differ from the canonical source.
+- **GIVEN** a new original or third-party sprite replaces a current sprite
+- **WHEN** a release is assembled
+- **THEN** the manifest records the new file's origin and rights, omits the old
+  file from the artifact, and retains notices only where still required by
+  distributed or adapted material.
 
-Provider/source identity and display labels SHALL be separate fields in the
-contract or its surrounding provider descriptor. The contract MUST NOT infer
-identity from browser storage or credentials.
+### Requirement: Ship complete open-source compliance material
 
-### Requirement: Keep optional packages non-blocking
+Every public source or binary release SHALL include, as applicable:
 
-The absence or failure of an optional provider or projection SHALL NOT prevent
-the core Herdr Web bridge and existing Spaces/Office operation from building
-or running.
+- the project license and approved copyright-holder statement;
+- upstream Herdr Web MIT and Herdr/vendored Apache-2.0 notices;
+- third-party license texts and notices for npm, Cargo, fonts, art, and other
+  redistributed material;
+- prominent modification notices for Apache-2.0-derived files;
+- a machine-readable source/art provenance manifest;
+- browser, bridge, and packaged-artifact SBOMs using a documented SPDX or
+  CycloneDX version;
+- the exact source revision, component revisions, build-tool versions,
+  checksums, and generated assembly manifest; and
+- an offline location inside each artifact where licenses and notices can be
+  inspected.
 
-#### Scenario: Provider dependencies are unavailable
+A release check SHALL fail closed on missing or unresolved fields. License
+scanners MAY assist but MUST NOT silently decide ambiguous ownership,
+trademark, or asset provenance.
 
-- **GIVEN** no provider package is configured or its backend is offline
-- **WHEN** the assembled World product starts
-- **THEN** core Herdr Web operation remains available and the optional package
-  reports its bounded unavailable/degraded state.
+#### Scenario: A dependency lacks resolved licensing metadata
 
-### Requirement: Define downstream assembly
+- **GIVEN** an npm, Cargo, font, or art item would enter a public artifact
+- **WHEN** the compliance gate cannot resolve its license or required notice
+- **THEN** packaging fails and identifies the exact component instead of
+  producing a partially attributed release.
 
-The packaging boundary SHALL select compatible component versions or commits,
-run the required package-local checks, and produce one traceable assembled
-release. The assembly MUST record the source revision of each component and
-MUST NOT silently include unreviewed source copies.
+### Requirement: Publish contributor and security boundaries
 
-#### Scenario: A projection is downstream-only
+Before public release, the repository SHALL contain contributor documentation
+that explains the spec workflow, development setup, test commands, source
+boundaries, sign-off/CLA decision, and the separate Herdr, Herdr Web, and World
+contribution lanes. It SHALL also contain a security policy with a private
+reporting path, supported-version policy, response expectations, and an
+explicit statement that plugins and provider adapters execute with their
+documented local privileges.
 
-- **GIVEN** Graph or City is not accepted upstream
-- **WHEN** a World release is assembled
-- **THEN** it can include the projection through the downstream assembly
-  manifest without changing the contract or Herdr Web upstream units.
+The repository SHALL record the selected code of conduct and governance model,
+including who can approve specs and releases. Templates MUST NOT encourage
+contributors to bypass either upstream's contribution policy.
 
-### Requirement: Make assembly traceable
+#### Scenario: A contributor finds a runtime API gap
 
-Every assembled build SHALL produce a machine-readable manifest with this
-minimum shape:
+- **GIVEN** the gap belongs to Herdr rather than World
+- **WHEN** the contributor reads the contribution guide
+- **THEN** they are directed to the allowed Herdr Discussion or bug-report
+  route and are not instructed to open an unauthorized implementation PR.
+
+### Requirement: Keep releases reproducible and traceable
+
+Every release assembly SHALL use immutable or content-addressed inputs and
+produce a machine-readable manifest with at least:
 
 ```text
 schema_version
 product_id
-release_id
+release_version
+source_repository
 source_revision
+dirty_state
+build_environment
 components[]:
   component_id
   role
@@ -282,88 +341,101 @@ components[]:
   source_revision
   upstream_target
   upstream_status
+  license_expression
   content_sha256
   generated_from
 artifacts[]:
   artifact_id
   path
+  media_type
   content_sha256
+  sbom_path
 ```
 
-The manifest MUST use immutable revisions or content-addressed inputs. Build
-scripts MUST NOT fetch arbitrary source at build time. A release check SHALL
-fail when a selected component lacks a revision, provenance status, or final
-artifact hash.
+Release commands SHALL work from a clean checkout without absolute workstation
+paths, undeclared sibling repositories, browser-local state, or provider
+credentials. The release process SHALL produce a source archive and checksums,
+and SHALL document verification and rollback procedures.
 
-#### Scenario: A contribution is declined upstream
+#### Scenario: A downstream component was declined upstream
 
-- **GIVEN** an upstream proposal is declined or deferred
-- **WHEN** the downstream assembly is rebuilt
-- **THEN** the component remains explicitly marked `downstream-only` in the
-  manifest and is not silently copied into an upstream contribution branch.
+- **GIVEN** a component remains useful to World after an upstream decline
+- **WHEN** a World release is built
+- **THEN** it is included only through the downstream assembly and recorded as
+  `declined` or `downstream-only`, with no implication that upstream ships it.
 
-## 6. Data and interface contract
+### Requirement: Keep optional components failure-isolated
 
-Every package boundary SHALL document:
+The absence, incompatibility, or failure of an optional provider, plugin, or
+World surface MUST NOT prevent the generic Herdr Web build or supported core
+operation. Optional component health SHALL be bounded and MUST NOT expose
+credentials, backend URLs, terminal content, prompts, or raw provider errors
+to unrelated components.
 
-```text
-package_id             stable local identifier
-owner                  responsible project or maintainer
-inputs                 contracts, APIs, or assets consumed
-outputs                APIs, schemas, assets, or binaries produced
-upstream_target        repository and intended contribution unit, if any
-version_policy         compatibility and release relationship
-test_command           package-local validation command
-security_boundary      credentials, network, and data ownership
-```
+#### Scenario: No observability provider is configured
 
-The assembly manifest SHALL reference immutable commits, release tags, or
-equivalent content-addressed revisions. Runtime payload contracts remain
-owned by their contract package; packaging metadata MUST NOT redefine them.
+- **GIVEN** a user starts Herdr World without an external telemetry backend
+- **WHEN** the shell and Office load
+- **THEN** core Herdr operation remains available and only the optional
+  observability feature reports a bounded unavailable or degraded state.
 
-## 7. Privacy and security
+## 6. Privacy and security
 
-- Provider credentials, SSH keys, backend URLs, and connection strings MUST
-  remain outside contract fixtures, browser bundles, and projection assets.
-- Package metadata MUST identify whether a component makes network requests or
-  handles sensitive data.
-- Build and packaging scripts MUST NOT fetch arbitrary source at build time.
-- Upstream compatibility code MUST be limited to the reviewed surface needed by
-  the bridge and MUST retain its source/license provenance.
-- A downstream-only package MUST NOT gain permission to mutate Herdr state
-  merely by being included in the assembled release.
+- Provider credentials, SSH keys, tokens, backend URLs, prompts, terminal
+  output, and environment variables MUST NOT enter public fixtures, browser
+  bundles, provenance manifests, or SBOM metadata.
+- Browser surfaces MUST NOT receive raw Herdr sockets or provider configuration
+  through the supported composition API.
+- Herdr plugins are trusted local executables, not sandboxed web extensions;
+  their installation and privilege model MUST be stated accurately.
+- Release automation MUST use least-privilege credentials, pin third-party
+  actions by immutable revision, and keep signing/publishing authority separate
+  from ordinary pull-request checks.
+- A public release MUST NOT be described as secure merely because it binds to
+  loopback by default; supported remote-access and origin policies remain
+  explicit operational decisions.
 
-## 8. Acceptance evidence
+## 7. Acceptance evidence
 
-Acceptance SHALL include:
+Approval-to-implementation evidence SHALL include:
 
-- a package ownership/dependency map checked into `docs/`;
-- a contribution matrix mapping each package to its intended upstream target
-  or downstream-only status;
-- a dependency-direction audit or equivalent static check;
-- compatibility and package-local test commands documented and runnable;
-- an assembly smoke test that records selected component revisions;
-- a provenance/vendor check for upstream compatibility code; and
-- a dry-run contribution review showing that contract, bridge, provider,
-  projection, and packaging changes can be described separately.
-- a clean-checkout startup/test/package run with no legacy workspace;
-- a core-only build and compiled dependency or bundle-content audit;
-- a contract fixture and generated-representation drift check;
-- a storage-key/route migration test when identifiers change; and
-- an assembled release manifest containing immutable component revisions and
-  artifact hashes.
+- a checked-in ownership/dependency/contribution matrix;
+- generic Web and World build commands with final bundle/dependency audits;
+- a clean-checkout test and package run;
+- canonical contract fixture and cross-language drift checks;
+- a vendoring/protocol provenance check;
+- a machine-readable source/art provenance manifest and validation tests;
+- complete offline license/notice output, including modified-file evidence;
+- browser, bridge, and assembled-artifact SBOMs;
+- an assembly manifest containing immutable revisions and artifact hashes;
+- `CONTRIBUTING.md`, `SECURITY.md`, governance/code-of-conduct decisions, and
+  an explicit upstream contribution guide;
+- a dry-run reconstruction of at least one generic change from current Herdr
+  Web upstream without World content; and
+- a release dry run that fails for deliberately missing license, notice,
+  provenance, or compatibility data.
 
-## 9. Deferred decisions
+## 8. Release blockers and deferred decisions
 
-- Exact physical directory extraction and package manager work.
-- Independent versioning versus one World release version.
-- Public registry/release publication and marketplace policy.
-- Physical repository split into Office, Graph, City, or provider repositories;
-  the `herdr-world` umbrella decision is not deferred.
-- The sequence and timing of actual upstream PRs.
-- Multi-server aggregation and remote connection management.
-- OTEL provider source, signal selection, cost calculation, and Office board
-  design; these require the separate draft observability provider/projection
-  specification.
-- The physical format and publication location of the assembly manifest; its
-  required fields and traceability rules above are not deferred.
+The following are release blockers, not optional polish:
+
+- the downstream legal copyright holder and project license are unresolved;
+- Herdr World name, logos, package identifiers, or descriptions could imply
+  upstream ownership or endorsement;
+- source or art provenance, required licenses, notices, or modification records
+  are incomplete;
+- supported Herdr/Herdr Web versions and protocol compatibility are untested;
+- generic and World outputs cannot be built and audited independently;
+- contributor/security/governance paths are absent; or
+- reproducible source, checksums, SBOMs, and an assembly manifest are absent.
+
+The following MAY remain deferred after this specification is implemented:
+
+- npm, crates.io, mobile-store, or Herdr marketplace publication;
+- independent package versioning versus one World release version;
+- physical repository splits for providers, plugins, Graph, or City;
+- artifact signing or provenance services beyond checksums for the first
+  source-only pre-release, if the release is clearly labeled and the decision
+  is documented; and
+- dynamic or untrusted browser extensions, which require a separate threat
+  model and approved specification.
