@@ -136,6 +136,12 @@ import {
 import type { NavigationSyncMode } from "./navigationPrefs";
 import { ActionMenu, ConfirmDialog, RenameDialog, useLongPress } from "./overlays";
 import type { MenuItem } from "./overlays";
+import {
+  focusableElements,
+  focusOverlayTrigger,
+  trapFocusWithin,
+  useFocusReturn,
+} from "./overlayFocus";
 import { useCoreNavigation } from "./CoreNavigation";
 import { useFederatedRuntime } from "./federatedRuntime";
 import { useHostRegistry } from "./hostRegistry";
@@ -156,6 +162,10 @@ import {
 import type { BridgeConnectionState } from "./runtimeConnection";
 import { qualifiedRuntimeKey, qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
+import {
+  DEFAULT_TERMINAL_SCREEN_READER_TEXT,
+  parseTerminalScreenReaderText,
+} from "./terminalAccessibleText";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import type { TerminalSessionDescriptor } from "./terminalSessions";
 import { coreSurfaceRegistry } from "./surfaceRegistry";
@@ -597,6 +607,7 @@ type DisplayPrefs = {
   notesPanelOpen: boolean;
   sidebarOpen: boolean;
   terminalFontSizePx: number;
+  terminalScreenReaderText: boolean;
   terminalInputTransport: TerminalInputTransport;
   terminalInputBatchDelayMs: number;
   terminalOutputCoalesceMs: number;
@@ -660,6 +671,7 @@ function readDisplayPrefs(): DisplayPrefs {
     notesPanelOpen: false,
     sidebarOpen: true,
     terminalFontSizePx: DEFAULT_TERMINAL_FONT_SIZE_PX,
+    terminalScreenReaderText: DEFAULT_TERMINAL_SCREEN_READER_TEXT,
     terminalInputTransport: DEFAULT_TERMINAL_INPUT_TRANSPORT,
     terminalInputBatchDelayMs: DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
     terminalOutputCoalesceMs: DEFAULT_TERMINAL_OUTPUT_COALESCE_MS,
@@ -855,6 +867,10 @@ function parseDisplayPrefsValue(
       typeof parsed.notesPanelOpen === "boolean" ? parsed.notesPanelOpen : fallback.notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
+    terminalScreenReaderText: parseTerminalScreenReaderText(
+      parsed.terminalScreenReaderText,
+      fallback.terminalScreenReaderText,
+    ),
     terminalInputTransport: parseTerminalInputTransport(parsed.terminalInputTransport),
     terminalInputBatchDelayMs: parseTerminalInputBatchDelayMs(parsed.terminalInputBatchDelayMs),
     terminalOutputCoalesceMs: parseTerminalOutputCoalesceMs(
@@ -1359,6 +1375,9 @@ export function App() {
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
+  const [terminalScreenReaderText, setTerminalScreenReaderText] = useState(
+    initialPrefs.terminalScreenReaderText,
+  );
   const [terminalInputTransport, setTerminalInputTransport] = useState(
     initialPrefs.terminalInputTransport,
   );
@@ -1488,6 +1507,7 @@ export function App() {
       setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
       setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
+      setTerminalScreenReaderText(prefs.terminalScreenReaderText);
       setTerminalInputTransport(prefs.terminalInputTransport);
       setTerminalInputBatchDelayMs(prefs.terminalInputBatchDelayMs);
       setTerminalOutputCoalesceMs(prefs.terminalOutputCoalesceMs);
@@ -2713,6 +2733,7 @@ export function App() {
       notesPanelOpen,
       sidebarOpen,
       terminalFontSizePx,
+      terminalScreenReaderText,
       terminalInputTransport,
       terminalInputBatchDelayMs,
       terminalOutputCoalesceMs,
@@ -2748,6 +2769,7 @@ export function App() {
     notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx,
+    terminalScreenReaderText,
     terminalInputTransport,
     terminalInputBatchDelayMs,
     terminalOutputCoalesceMs,
@@ -5002,6 +5024,7 @@ export function App() {
             )
           }
           agentActivityTransitions={agentActivityTransitions}
+          terminalScreenReaderText={terminalScreenReaderText}
           touchInput={isTouchInput}
           terminalFontSizePx={terminalFontSizePx}
           mobileControlsScalePercent={mobileControlsScalePercent}
@@ -5030,6 +5053,7 @@ export function App() {
       terminalInputTransport,
       terminalOutputCoalesceMs,
       terminalFontSizePx,
+      terminalScreenReaderText,
       worldConversations,
     ],
   );
@@ -5495,16 +5519,17 @@ export function App() {
                 aria-label="Split right"
                 title="Split right"
                 disabled={busy}
-                onClick={() =>
-                  selectedRuntime
-                    ? setLaunchTarget({
+                onClick={(event) => {
+                  focusOverlayTrigger(event.currentTarget);
+                  if (selectedRuntime) {
+                    setLaunchTarget({
                         mode: "split",
                         pane: selectedPane,
                         direction: "right",
                         bridgeId: selectedRuntime.id,
-                      })
-                    : undefined
-                }
+                    });
+                  }
+                }}
               >
                 <SplitSquareHorizontal size={18} />
               </button>
@@ -5514,16 +5539,17 @@ export function App() {
                 aria-label="Split down"
                 title="Split down"
                 disabled={busy}
-                onClick={() =>
-                  selectedRuntime
-                    ? setLaunchTarget({
+                onClick={(event) => {
+                  focusOverlayTrigger(event.currentTarget);
+                  if (selectedRuntime) {
+                    setLaunchTarget({
                         mode: "split",
                         pane: selectedPane,
                         direction: "down",
                         bridgeId: selectedRuntime.id,
-                      })
-                    : undefined
-                }
+                    });
+                  }
+                }}
               >
                 <SplitSquareVertical size={18} />
               </button>
@@ -5587,6 +5613,7 @@ export function App() {
             focusToken={terminalFocusToken}
             touchInput={isTouchInput}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScreenReaderText={terminalScreenReaderText}
             mobileControlsScalePercent={mobileControlsScalePercent}
             mobileTapTarget={mobileTerminalTapTarget}
             mobileLongPressBehavior={mobileLongPressBehavior}
@@ -5618,6 +5645,7 @@ export function App() {
             scrollSensitivity={isTouchInput ? 2 : 0.4}
             mobileControls={isTouchInput}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScreenReaderText={terminalScreenReaderText}
             mobileControlsScalePercent={mobileControlsScalePercent}
             mobileTapTarget={mobileTerminalTapTarget}
             mobileLongPressBehavior={mobileLongPressBehavior}
@@ -5629,6 +5657,10 @@ export function App() {
             terminalOutputCoalesceMs={terminalOutputCoalesceMs}
             refitToken={refitToken}
             focusToken={terminalFocusToken}
+            accessibilityLabel={
+              selectedPane ? `Selected pane terminal: ${paneTitle(selectedPane)}` : "Terminal"
+            }
+            selected={Boolean(selectedPane)}
           />
         ) : (
           <div className="terminal-stage" aria-hidden="true" />
@@ -5864,6 +5896,8 @@ export function App() {
           onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
+          terminalScreenReaderText={terminalScreenReaderText}
+          onTerminalScreenReaderText={setTerminalScreenReaderText}
           terminalInputTransport={terminalInputTransport}
           onTerminalInputTransport={setTerminalInputTransport}
           terminalInputBatchDelayMs={terminalInputBatchDelayMs}
@@ -7012,6 +7046,7 @@ function SplitGrid({
   focusToken,
   touchInput,
   terminalFontSizePx,
+  terminalScreenReaderText,
   mobileControlsScalePercent,
   mobileTapTarget,
   mobileLongPressBehavior,
@@ -7035,6 +7070,7 @@ function SplitGrid({
   focusToken: number;
   touchInput: boolean;
   terminalFontSizePx: number;
+  terminalScreenReaderText: boolean;
   mobileControlsScalePercent: number;
   mobileTapTarget: MobileTerminalTapTarget;
   mobileLongPressBehavior: MobileLongPressBehavior;
@@ -7053,8 +7089,9 @@ function SplitGrid({
 }) {
   return (
     <div className="pane-grid" aria-label="Split panes">
-      {cells.map(({ pane, style }) => {
+      {cells.map(({ pane, style }, index) => {
         const selected = pane.pane_id === selectedPaneId;
+        const accessibilityLabel = `Pane ${index + 1} of ${cells.length} terminal: ${paneTitle(pane)}`;
         const terminalSession = terminalSessionDescriptor(
           runtime,
           pane,
@@ -7083,6 +7120,7 @@ function SplitGrid({
               scrollSensitivity={touchInput ? 2 : 0.4}
               mobileControls={selected && touchInput}
               terminalFontSizePx={terminalFontSizePx}
+              terminalScreenReaderText={terminalScreenReaderText}
               mobileControlsScalePercent={mobileControlsScalePercent}
               mobileTapTarget={mobileTapTarget}
               mobileLongPressBehavior={mobileLongPressBehavior}
@@ -7094,6 +7132,8 @@ function SplitGrid({
               terminalOutputCoalesceMs={terminalOutputCoalesceMs}
               refitToken={selected ? refitToken : 0}
               focusToken={selected ? focusToken : 0}
+              accessibilityLabel={accessibilityLabel}
+              selected={selected}
             />
           </div>
         );
@@ -7158,7 +7198,20 @@ function TabBar({
                 if (!menuEnabled) {
                   return;
                 }
+                focusOverlayTrigger(event.currentTarget);
                 onMenu("tab", tab.tab_id, label, event.clientX, event.clientY, canClearTabName(tab));
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+                  return;
+                }
+                event.preventDefault();
+                if (!menuEnabled) {
+                  return;
+                }
+                focusOverlayTrigger(event.currentTarget);
+                const rect = event.currentTarget.getBoundingClientRect();
+                onMenu("tab", tab.tab_id, label, rect.left, rect.bottom, canClearTabName(tab));
               }}
             >
               <span className="dot" data-status={tab.agent_status} />
@@ -7173,7 +7226,10 @@ function TabBar({
         aria-label="New tab"
         title="New tab"
         disabled={!createEnabled}
-        onClick={() => onCreateTab(activeSpace.workspace_id)}
+        onClick={(event) => {
+          focusOverlayTrigger(event.currentTarget);
+          onCreateTab(activeSpace.workspace_id);
+        }}
       >
         <Plus size={14} />
       </button>
@@ -8517,7 +8573,14 @@ function Switcher({
                   : ""}
             </span>
             {bridgeBlocked ? (
-              <button type="button" className="btn" onClick={onBackendSettings}>
+              <button
+                type="button"
+                className="btn"
+                onClick={(event) => {
+                  focusOverlayTrigger(event.currentTarget);
+                  onBackendSettings();
+                }}
+              >
                 Settings
               </button>
             ) : null}
@@ -8538,7 +8601,10 @@ function Switcher({
                     aria-label="New space"
                     title="New space"
                     disabled={!createSpaceEnabled}
-                    onClick={onCreateSpace}
+                    onClick={(event) => {
+                      focusOverlayTrigger(event.currentTarget);
+                      onCreateSpace();
+                    }}
                   >
                     <Plus size={14} />
                   </button>
@@ -8552,6 +8618,7 @@ function Switcher({
                     aria-haspopup="dialog"
                     aria-expanded={spaceOptionsMenu ? "true" : "false"}
                     onClick={(event) => {
+                      focusOverlayTrigger(event.currentTarget);
                       const rect = event.currentTarget.getBoundingClientRect();
                       setOptionsMenu(null);
                       setSpaceOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
@@ -8707,6 +8774,7 @@ function Switcher({
                     aria-haspopup="dialog"
                     aria-expanded={optionsMenu ? "true" : "false"}
                     onClick={(event) => {
+                      focusOverlayTrigger(event.currentTarget);
                       const rect = event.currentTarget.getBoundingClientRect();
                       setSpaceOptionsMenu(null);
                       setOptionsMenu({ x: rect.right, y: rect.bottom + 4 });
@@ -8907,6 +8975,7 @@ function OptionsMenuShell({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useFocusReturn();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -8924,8 +8993,14 @@ function OptionsMenuShell({
       top = window.innerHeight - margin - rect.height;
     }
     setPos({ left, top: Math.max(margin, top) });
-    el.focus();
   }, [x, y]);
+
+  useLayoutEffect(() => {
+    if (!pos || !ref.current) {
+      return;
+    }
+    (focusableElements(ref.current)[0] ?? ref.current).focus();
+  }, [pos]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -8958,6 +9033,7 @@ function OptionsMenuShell({
         role="dialog"
         aria-label={ariaLabel}
         tabIndex={-1}
+        onKeyDown={trapFocusWithin}
         style={{
           left: pos?.left ?? x,
           top: pos?.top ?? y,
@@ -8987,6 +9063,7 @@ export function QuickPaneNoteDialog({
   const dialogRef = useRef<HTMLFormElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const bodyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  useFocusReturn();
 
   useEffect(() => {
     titleInputRef.current?.focus();
@@ -9022,34 +9099,6 @@ export function QuickPaneNoteDialog({
     }
     onSubmit(trimmedTitle, bodyExpanded ? body : "");
   };
-  const trapDialogFocus = (event: ReactKeyboardEvent<HTMLFormElement>) => {
-    if (event.key !== "Tab") {
-      return;
-    }
-    const dialog = dialogRef.current;
-    if (!dialog) {
-      return;
-    }
-    const focusable = Array.from(
-      dialog.querySelectorAll<HTMLElement>(
-        "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])",
-      ),
-    );
-    if (focusable.length === 0) {
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
   return (
     <div className="overlay-root">
       <button
@@ -9072,7 +9121,7 @@ export function QuickPaneNoteDialog({
             cancel();
             return;
           }
-          trapDialogFocus(event);
+          trapFocusWithin(event);
         }}
       >
         <div className="modal-title">Add note</div>

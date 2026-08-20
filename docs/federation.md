@@ -122,6 +122,9 @@ asset service or central gateway.
 - Use Settings → Bridge → Enable all and confirm every saved profile is admitted, then disable one
   profile and confirm the remaining host stays navigable.
 - Type, send control input, resize/refit, and create/rename/move/close on each owning host.
+- Exercise desktop IME composition and cancellation, dismiss a menu/dialog to
+  confirm focus returns to its actual trigger, and verify the optional
+  screen-reader mirror is scoped to the selected terminal viewport.
 - Disconnect one bridge and confirm the other host remains navigable and controllable.
 - Configure an exact protocol-`20` fixture and confirm it is admitted; configure protocol-`19`,
   protocol-`21`, or a malformed/missing protocol fixture and confirm it is visible but not

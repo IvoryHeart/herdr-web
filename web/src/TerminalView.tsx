@@ -16,6 +16,10 @@ import { ConfirmDialog } from "./overlays";
 import { addNativeResumeHandler } from "./native";
 import { shellQuote } from "./shell";
 import {
+  shouldRestoreTerminalFocus,
+  type TerminalAttachFocusSnapshot,
+} from "./terminalAttachFocus";
+import {
   isNonRetryableTerminalClose,
   isTerminalAttachConflictClose,
   MAX_TERMINAL_ATTACH_CONFLICT_RETRIES,
@@ -97,6 +101,12 @@ type Props = {
   refitToken?: number;
   /** Incrementing token from the parent that requests focus on the preferred terminal input. */
   focusToken?: number;
+  /** Whether to maintain a bounded plain-text mirror of the visible terminal viewport. */
+  terminalScreenReaderText?: boolean;
+  /** Pane-specific accessible name for the terminal and its screen mirror. */
+  accessibilityLabel?: string;
+  /** Whether this is the currently selected terminal in a split. */
+  selected?: boolean;
 };
 
 type UploadCandidate = {
@@ -163,6 +173,9 @@ export function TerminalView({
   transparentBackground = false,
   refitToken = 0,
   focusToken = 0,
+  terminalScreenReaderText = false,
+  accessibilityLabel = "Terminal",
+  selected = false,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
@@ -191,6 +204,7 @@ export function TerminalView({
   const [connectionState, setConnectionState] = useState<TerminalConnectionState>("idle");
   const [closeReason, setCloseReason] = useState<string | null>(null);
   const [rendererReady, setRendererReady] = useState<TerminalRendererReady | null>(null);
+  const [accessibleScreen, setAccessibleScreen] = useState("");
   const [hasAttachedForTerminal, setHasAttachedForTerminal] = useState(false);
   const [showConnectionOverlay, setShowConnectionOverlay] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -201,6 +215,7 @@ export function TerminalView({
   // Read at attach time without re-running the effect (which would re-attach the socket).
   const autoFocusRef = useRef(autoFocus);
   autoFocusRef.current = autoFocus;
+  const externalFocusSequenceRef = useRef(0);
   const scrollSensitivityRef = useRef(scrollSensitivity);
   scrollSensitivityRef.current = scrollSensitivity;
   const mobileControlsRef = useRef(mobileControls);
@@ -229,6 +244,18 @@ export function TerminalView({
   terminalInputBatchDelayMsRef.current = terminalInputBatchDelayMs;
   connectionKeyRef.current = connectionKey;
   terminalIdRef.current = pane?.terminal_id ?? null;
+
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || stageRef.current?.contains(target)) {
+        return;
+      }
+      externalFocusSequenceRef.current += 1;
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
+  }, []);
 
   const focusMobileCommandInput = useCallback(() => {
     if (!mobileControlsRef.current) {
@@ -492,6 +519,7 @@ export function TerminalView({
     overlayTerminalIdRef.current = terminalId;
     rendererReadyRef.current = null;
     setRendererReady(null);
+    setAccessibleScreen("");
     setHasAttachedForTerminal(false);
     setShowConnectionOverlay(false);
     setCloseReason(null);
@@ -663,6 +691,26 @@ export function TerminalView({
   ]);
 
   useEffect(() => {
+    setAccessibleScreen("");
+    const ready = rendererReady;
+    if (!terminalScreenReaderText || !ready) {
+      ready?.renderer.setAccessibleScreenListener(null);
+      return;
+    }
+    const { renderer, generation, terminalId } = ready;
+    renderer.setAccessibleScreenListener((text) => {
+      if (
+        rendererRef.current === renderer &&
+        rendererGenerationRef.current === generation &&
+        terminalIdRef.current === terminalId
+      ) {
+        setAccessibleScreen(text);
+      }
+    });
+    return () => renderer.setAccessibleScreenListener(null);
+  }, [rendererReady, terminalScreenReaderText]);
+
+  useEffect(() => {
     const terminalId = pane?.terminal_id ?? null;
     const ready = rendererReady;
     if (!terminalId) {
@@ -764,6 +812,10 @@ export function TerminalView({
       if (socket) {
         closeActiveSocket();
       }
+      const attachFocusSnapshot: TerminalAttachFocusSnapshot = {
+        target: document.activeElement,
+        externalFocusSequence: externalFocusSequenceRef.current,
+      };
       reconnectScheduledForSocket.clear();
       const nextSocket = new WebSocket(
         terminalSocketUrl(wsUrl, terminalId, initialSize, terminalOutputCoalesceMs),
@@ -800,8 +852,22 @@ export function TerminalView({
         if (size) {
           sendResize(size);
         }
-        if (autoFocusRef.current) {
-          window.setTimeout(() => ready.renderer.focus(), 0);
+        if (shouldRestoreTerminalFocus({
+          autoFocus: autoFocusRef.current,
+          currentTarget: document.activeElement,
+          currentExternalFocusSequence: externalFocusSequenceRef.current,
+          attachSnapshot: attachFocusSnapshot,
+        })) {
+          window.setTimeout(() => {
+            if (shouldRestoreTerminalFocus({
+              autoFocus: autoFocusRef.current,
+              currentTarget: document.activeElement,
+              currentExternalFocusSequence: externalFocusSequenceRef.current,
+              attachSnapshot: attachFocusSnapshot,
+            })) {
+              ready.renderer.focus();
+            }
+          }, 0);
         }
         flushBatchedTerminalInput();
         flushQueuedTerminalInput();
@@ -1364,7 +1430,8 @@ export function TerminalView({
       ref={stageRef}
       className="terminal-stage"
       data-terminal-translucent={transparentBackground ? "true" : undefined}
-      aria-label="Selected pane terminal"
+      aria-label={accessibilityLabel}
+      aria-current={selected ? "true" : undefined}
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
@@ -1375,6 +1442,17 @@ export function TerminalView({
       onPasteCapture={handlePaste}
     >
       <div ref={hostRef} className="terminal-host" />
+      {pane && terminalScreenReaderText ? (
+        <div
+          className="terminal-accessible-screen sr-only"
+          role="region"
+          tabIndex={-1}
+          aria-label={`${accessibilityLabel} screen contents`}
+          aria-live="off"
+        >
+          {accessibleScreen}
+        </div>
+      ) : null}
       <input
         ref={fileInputRef}
         className="terminal-file-input"

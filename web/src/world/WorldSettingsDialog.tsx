@@ -15,6 +15,7 @@ import {
 } from "./worldSettings";
 import type { WorldObservabilityConfiguration } from "./worldSettings";
 import type { OfficeLongRoomTitleMode, OfficeRoomAlignment } from "./officeGeometry";
+import { trapFocusWithin, useFocusReturn } from "../overlayFocus";
 
 type Props = {
   onClose: () => void;
@@ -41,6 +42,7 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  useFocusReturn();
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -130,7 +132,9 @@ export function WorldSettingsDialog({ onClose, onSaved }: Props) {
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+            return;
           }
+          trapFocusWithin(event);
         }}
         onSubmit={(event) => {
           event.preventDefault();

@@ -6,6 +6,16 @@
 
 ### Added
 
+- Added Spec 015 work unit 2's focused Herdr Web v0.4.2/v0.4.3 replay: a supervised loopback
+  `npm run dev` workflow with child-process tests, and an opt-in bounded terminal screen-reader
+  text mirror. The replay preserves downstream World and multi-bridge behavior; Web v0.4.2/v0.4.3
+  development/IME/focus/accessibility details are covered by this work unit's focused commits.
+  [PR #16](https://github.com/IvoryHeart/herdr-web/pull/16).
+- Added `npm run dev` with a supervised loopback bridge/Vite workflow, bounded
+  bridge readiness checks, clean child-process shutdown, and `test:dev`
+  coverage for startup and signal/error paths. [Upstream PR #57](https://github.com/kcosr/herdr-web/pull/57),
+  based on [PR #51](https://github.com/kcosr/herdr-web/pull/51) by Hopkins
+  ([@LosEcher](https://github.com/LosEcher)).
 - Added Spec 015 work unit 1 compatibility for Herdr `v0.8.2` and exact terminal protocol `20`,
   including the refreshed bridge wire/API slice, frozen protocol fixtures, bounded admission
   diagnostics, safe direct-graphics exclusions, and terminal-bell handling. Web v0.4.2/v0.4.3
@@ -52,6 +62,15 @@
   [PR #1](https://github.com/IvoryHeart/herdr-web/pull/1)
 
 ### Changed
+
+- Replayed desktop IME composition cancellation/fallback handling and dialog/menu focus restoration
+  across Spaces, Office, bridge settings, launchers, notes, and terminal overlays. Original upstream
+  attribution is recorded in `UPSTREAM.md`.
+- Static bridge entrypoints and public files explicitly revalidate while
+  successful content-hashed Vite assets use immutable caching; missing and
+  error responses are not marked cacheable. [Upstream PR #57](https://github.com/kcosr/herdr-web/pull/57),
+  based on [PR #51](https://github.com/kcosr/herdr-web/pull/51) by Hopkins
+  ([@LosEcher](https://github.com/LosEcher)).
 
 - Removed the persistent Office notice/status strip to return its vertical
   space to the canvas; provider details remain available through Office

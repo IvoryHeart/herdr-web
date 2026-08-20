@@ -14,7 +14,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
-    ACCESS_CONTROL_MAX_AGE, ACCESS_CONTROL_REQUEST_HEADERS, HOST, ORIGIN, VARY,
+    ACCESS_CONTROL_MAX_AGE, ACCESS_CONTROL_REQUEST_HEADERS, CACHE_CONTROL, HOST, ORIGIN, VARY,
 };
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
@@ -1188,7 +1188,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
                 .put(update_observability_configuration_handler)
                 .options(preflight_handler),
         );
-    let world_entry = options.static_dir.join("index.html");
+    let static_routes = static_routes(options.static_dir.clone());
     let app = Router::new()
         .merge(agent_activity_routes)
         .merge(agent_pins_routes)
@@ -1223,13 +1223,7 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
             get(observability_ws_handler),
         )
         .route("/ws/terminal", get(terminal_ws_handler))
-        .route_service("/world", ServeFile::new(world_entry.clone()))
-        .route_service("/world/", ServeFile::new(world_entry))
-        .fallback_service(
-            ServiceBuilder::new()
-                .layer(CompressionLayer::new())
-                .service(ServeDir::new(options.static_dir)),
-        )
+        .merge(static_routes)
         .layer(middleware::from_fn_with_state(
             request_policy.clone(),
             add_security_headers,
@@ -1240,6 +1234,44 @@ async fn run_server(options: BridgeOptions) -> io::Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     info!(url = %format!("http://{bind}"), "herdr-web-bridge listening");
     axum::serve(listener, app).await
+}
+
+fn static_routes<S>(static_dir: PathBuf) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    let world_entry = static_dir.join("index.html");
+    Router::new()
+        .route_service("/world", ServeFile::new(world_entry.clone()))
+        .route_service("/world/", ServeFile::new(world_entry))
+        .fallback_service(
+            ServiceBuilder::new()
+                .layer(CompressionLayer::new())
+                .service(ServeDir::new(static_dir)),
+        )
+        .layer(middleware::from_fn(add_static_cache_headers))
+}
+
+async fn add_static_cache_headers(request: AxumRequest, next: Next) -> Response {
+    let path = request.uri().path().to_string();
+    let mut response = next.run(request).await;
+    let status = response.status();
+    insert_static_cache_header(response.headers_mut(), &path, status);
+    response
+}
+
+fn insert_static_cache_header(headers: &mut HeaderMap, path: &str, status: StatusCode) {
+    if headers.contains_key(CACHE_CONTROL)
+        || (!status.is_success() && status != StatusCode::NOT_MODIFIED)
+    {
+        return;
+    }
+    let value = if path.starts_with("/assets/") {
+        HeaderValue::from_static("public, max-age=31536000, immutable")
+    } else {
+        HeaderValue::from_static("no-cache")
+    };
+    headers.insert(CACHE_CONTROL, value);
 }
 
 async fn add_security_headers(
@@ -4820,6 +4852,75 @@ fn startup_daemon_error(err: BridgeError) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::Request as HttpRequest;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn static_world_entry_routes_receive_revalidation_cache_policy() {
+        let static_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web");
+        let app = static_routes(static_dir);
+
+        for path in ["/", "/world", "/world/"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    HttpRequest::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{path}");
+            assert_eq!(
+                response.headers().get(CACHE_CONTROL).unwrap(),
+                "no-cache",
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_cache_headers_revalidate_entrypoints_and_public_files() {
+        for path in [
+            "/",
+            "/index.html",
+            "/manifest.json",
+            "/herdr-logo.svg",
+            "/world",
+            "/world/",
+        ] {
+            let mut headers = HeaderMap::new();
+            insert_static_cache_header(&mut headers, path, StatusCode::OK);
+            assert_eq!(headers.get(CACHE_CONTROL).unwrap(), "no-cache", "{path}");
+        }
+    }
+
+    #[test]
+    fn static_cache_headers_make_successful_vite_assets_immutable() {
+        let mut headers = HeaderMap::new();
+        insert_static_cache_header(&mut headers, "/assets/index-AbCd1234.js", StatusCode::OK);
+        assert_eq!(
+            headers.get(CACHE_CONTROL).unwrap(),
+            "public, max-age=31536000, immutable"
+        );
+    }
+
+    #[test]
+    fn static_cache_headers_do_not_cache_missing_assets() {
+        let mut headers = HeaderMap::new();
+        insert_static_cache_header(&mut headers, "/assets/missing.js", StatusCode::NOT_FOUND);
+        assert!(!headers.contains_key(CACHE_CONTROL));
+    }
+
+    #[test]
+    fn static_cache_headers_preserve_service_policy() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        insert_static_cache_header(&mut headers, "/index.html", StatusCode::OK);
+        assert_eq!(headers.get(CACHE_CONTROL).unwrap(), "no-store");
+    }
 
     #[test]
     fn coalescer_sends_first_output_immediately() {

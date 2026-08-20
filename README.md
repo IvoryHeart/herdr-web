@@ -129,6 +129,28 @@ npm install
 npm install --prefix web
 ```
 
+For the supervised development workflow, start the bridge and Vite together:
+
+```bash
+npm run dev
+```
+
+The command keeps both processes on loopback by default, waits for the bridge
+capabilities endpoint before starting Vite, proxies frontend `/api` and `/ws`
+traffic to the bridge, and stops both children when either one exits. It builds
+the bridge when its executable is missing. Use `HERDR_SOCKET_PATH` or pass
+bridge session arguments as needed:
+
+```bash
+HERDR_SOCKET_PATH="$HOME/.config/herdr-dev/herdr.sock" npm run dev
+npm run dev -- --session SESSION_NAME
+```
+
+Address overrides are namespaced: `HERDR_WEB_BRIDGE_HOST`,
+`HERDR_WEB_BRIDGE_PORT`, `HERDR_WEB_DEV_HOST`, and `HERDR_WEB_DEV_PORT`.
+`npm run dev:local` remains available for the downstream workflow that reuses
+an already-running bridge.
+
 ## Development Build And Test
 
 ```bash
@@ -140,6 +162,7 @@ npm run build
 Useful narrower commands:
 
 ```bash
+npm run test:dev
 npm run lint:web
 npm run test:web
 npm run build:web
@@ -167,7 +190,9 @@ Settings are grouped by area:
 - Features: client feature toggles such as Notes.
 - Display: browser-wide navigation synchronization, agent features in Tabs, multi-host Space
   selection, top/bottom app padding, and mobile terminal controls size.
-- Terminal: browser-to-bridge terminal input transport and input batching delay.
+- Terminal: browser-to-bridge terminal input transport and input batching delay,
+  terminal font size, and the default-off bounded screen-reader text mirror for
+  the visible terminal viewport.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 
 When viewing all of multiple hosts, use the Spaces list `…` menu to group spaces by host or keep a

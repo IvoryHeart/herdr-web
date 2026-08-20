@@ -59,6 +59,7 @@ import type { NavigationSyncMode } from "./navigationPrefs";
 import { TERMINAL_INPUT_BATCH_DELAY_OPTIONS_MS } from "./terminalInputTransport";
 import type { TerminalInputTransport } from "./terminalInputTransport";
 import { TERMINAL_OUTPUT_COALESCE_OPTIONS_MS } from "./terminalOutputCoalescing";
+import { trapFocusWithin, useFocusReturn } from "./overlayFocus";
 
 type Props = {
   showMobileTerminalSettings: boolean;
@@ -75,6 +76,8 @@ type Props = {
   onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
+  terminalScreenReaderText: boolean;
+  onTerminalScreenReaderText: (enabled: boolean) => void;
   terminalInputTransport: TerminalInputTransport;
   onTerminalInputTransport: (transport: TerminalInputTransport) => void;
   terminalInputBatchDelayMs: number;
@@ -130,6 +133,8 @@ export function BackendSettingsDialog({
   onMultiHostSpaceSelection,
   terminalFontSizePx,
   onTerminalFontSizePx,
+  terminalScreenReaderText,
+  onTerminalScreenReaderText,
   terminalInputTransport,
   onTerminalInputTransport,
   terminalInputBatchDelayMs,
@@ -168,6 +173,7 @@ export function BackendSettingsDialog({
   const [message, setMessage] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<BridgeBackendProfile | null>(null);
   const [activeArea, setActiveArea] = useState<SettingsArea>("bridge");
+  useFocusReturn();
 
   const selectedBackend = useMemo(
     () => bridge.store.backends.find((backend) => backend.id === form.id) ?? null,
@@ -316,7 +322,9 @@ export function BackendSettingsDialog({
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+            return;
           }
+          trapFocusWithin(event);
         }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -728,6 +736,34 @@ export function BackendSettingsDialog({
                     defaultValue={DEFAULT_TERMINAL_FONT_SIZE_PX}
                     onChange={(value) => onTerminalFontSizePx(parseTerminalFontSizePx(value))}
                   />
+                </div>
+                <div className="settings-label">Accessibility</div>
+                <div className="settings-row">
+                  <span title="Expose only the bounded visible terminal viewport as screen-reader text">
+                    Screen-reader text
+                  </span>
+                  <div
+                    className="segmented-control"
+                    role="group"
+                    aria-label="Terminal screen-reader text"
+                  >
+                    <button
+                      type="button"
+                      data-on={!terminalScreenReaderText}
+                      aria-pressed={!terminalScreenReaderText}
+                      onClick={() => onTerminalScreenReaderText(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      data-on={terminalScreenReaderText}
+                      aria-pressed={terminalScreenReaderText}
+                      onClick={() => onTerminalScreenReaderText(true)}
+                    >
+                      On
+                    </button>
+                  </div>
                 </div>
                 <div className="settings-label">Terminal transport</div>
                 <div className="settings-row">
