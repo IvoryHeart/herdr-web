@@ -309,6 +309,12 @@ synchronization. The host SHALL give the settings generation its own abort
 signal and apply the same required-disposer ordering as a surface generation.
 Closing the dialog, leaving the assembly, load/render failure, or retry SHALL
 abort and, if context creation completed, dispose its generation exactly once.
+The product-settings `createContext` factory MUST also provide the same strong
+exception safety as a surface factory: if it throws before returning, it MUST
+release every resource or subscription acquired during that invocation and
+MUST NOT acquire a non-abortable resource unless a local cleanup guard can
+release it after a later construction failure. The host SHALL abort the
+settings generation and SHALL NOT call `dispose` with a partial value.
 
 This is a single compile-time product integration point, not a runtime settings
 registry, arbitrary collection of sections, or public surface API. Adding more
@@ -330,6 +336,16 @@ register settings requires a spec extension.
 - **WHEN** the user opens global settings
 - **THEN** no Office entry or World chunk is present and ordinary bridge
   settings remain available.
+
+#### Scenario: Settings context creation throws after partial acquisition
+
+- **GIVEN** the Office settings context factory acquires a tracked
+  non-abortable configuration or synchronization resource and a later
+  construction step throws
+- **WHEN** the error leaves the settings `createContext`
+- **THEN** the factory releases the tracked resource before propagating, the
+  host aborts the settings generation without calling `dispose` on a partial
+  value, and a later retry observes no residue from the failed generation.
 
 ### Requirement: Move World orchestration behind the World registration
 
@@ -459,8 +475,9 @@ An implementation summary SHALL include:
 - generic and World settings-path tests, including opening Office settings from
   Spaces without a generic World import;
 - route/ID/registration validation tests;
-- a strong-exception-safety test in which context construction releases a
-  tracked non-abortable resource before throwing;
+- strong-exception-safety tests for both surface and product-settings context
+  factories in which construction releases a tracked non-abortable resource
+  before throwing;
 - characterization of existing Spaces and Office selection, handoff,
   observability, settings, terminal, responsive, and accessibility behavior;
 - tests for one incompatible/offline bridge among multiple enabled bridges;
