@@ -173,3 +173,61 @@ the `TerminalBell` side effect only to a foreground full-app client, not to a
 `TerminalAttach` client; exact bridge conversion to bounded BEL output is
 therefore proven by the frozen protocol fixtures and focused bridge tests, while
 the stock live limitation is retained for reviewer attention.
+
+## 2026-08-20 Spec 015 work unit 2 Web v0.4.2/v0.4.3 audit
+
+This audit records the concern-based replay of compatible Herdr Web behavior after
+Spec 015 work unit 1. The downstream baseline was `origin/main` at
+`565537b3a7452fb2ea8b72f7bb046e6c09eb3afa`. The fetched upstream revisions were:
+
+- `upstream/main`: `cff6335683acc20cbb76c24b67d03f9e75dd78e6`
+- `v0.4.3^{commit}`: `5ad48ed42507dd0b50c07183cabdec8b391c2512`
+- upstream `CONTRIBUTING.md`: blob `0b8d5147a94d2282846700957b638421e3570aa5`
+
+The upstream audit was rechecked before implementation. Issue #65,
+[herdr-web-v0.4.3-linux-x86_64 not work for herdr 0.8.2](https://github.com/kcosr/herdr-web/issues/65),
+was open with no comments. The open upstream PRs were #63, #61, #60, #59, and
+#37; none was a protocol-20 compatibility PR. The exact recheck commands were:
+
+```sh
+git fetch origin main
+git fetch upstream main --tags
+git rev-parse origin/main
+git rev-parse upstream/main
+git rev-parse v0.4.3^{commit}
+gh issue view 65 --repo kcosr/herdr-web --json number,state,title,comments,updatedAt,url
+gh pr list --repo kcosr/herdr-web --state open --limit 20 \
+  --json number,title,headRefName,baseRefName,url
+git rev-parse upstream/main:CONTRIBUTING.md
+```
+
+### Adoption matrix
+
+| Concern | Upstream source and attribution | Classification | Downstream result |
+| --- | --- | --- | --- |
+| Supervised development, readiness, shutdown, signals, and static-asset cache policy | PR #57 merge `4c2ef62aca1bd7320d026791602a0b36cedd247e`; implementation `09d386ab303f1babd4a06974f9de2c8c5d3159fd`; original contribution by Hopkins (`@LosEcher`), PR #51 | adopted | Replayed with loopback-safe defaults, namespaced child environment, readiness/error handling, multi-process cleanup, and deterministic cache tests. |
+| Contribution guidance | PR #57 merge `4c2ef62aca1bd7320d026791602a0b36cedd247e`; `4bac49fb76a23edfb9c57fd6b1f7fabc75a25ade`; authored by Kevin (`kcosrdev@gmail.com`) | conflicted | Assessed but not copied into downstream governance. Spec 004 still has unresolved World ownership and contribution-lane decisions. |
+| Terminal IME composition, cancellation, fallback preedit, and desktop focus | PR #58 merge `e13c83d429d1f51199ca0eee1810485acf47ad60`; `3f39d3be243ff6313e404db19852dbac8b18b21e`, `db88e34567a2c68fe8814777ddaac6fb2ef60e2e`, `052c638982449deec7f6fc08b2110ccf3c2328aa`, `3c7d0b93a3cd50044dbb55a5c66f3f1f09fbdf5c`; original contribution by Hopkins (`@LosEcher`), PR #51 | adopted | Replayed through the existing renderer, including preedit overlay, cancellation suppression, fallback handling, desktop focus, and mobile-input preservation. |
+| Dialog/menu activation and focus restoration | PR #62 merge `346beeee614cb54da32f29e3a22c1e44d8133014`; `8af7cd62a56894dcaf89f58b1016a1654d158dda`, `276ca305bfab9c7a1e772d8110c26b060e308361`, `0870cd3efd518e822111b72d6ffa30e892567694`; original contribution by shuv (`@shuv1337`), PR #37 | adopted | Replayed with shared focus-return/trap helpers and downstream integration for Spaces, Office, notes, settings, launchers, and pane menus. |
+| Optional terminal screen-reader text and settings | PR #64 merge `eb47f62d9df04847345f90b70ddb54a926d95c5f`; implementation `31d4070a2740766a53a788395aaa6cd93ab5c865`; attribution follow-up `253930760b0133aa43f6bd4206d45fc3edcbdf80`; original contribution by shuv (`@shuv1337`), PR #37 | adopted | Added a default-off, bounded visible-viewport mirror with persisted settings and per-runtime/World labels; terminal history is not exposed by the feature. |
+
+The replay used focused downstream commits rather than cherry-picking upstream
+merge commits. It deliberately excludes the unrelated mobile chord composer,
+wrapped-URL/cursor work, output compression, iOS, favicon, packaging, and other
+release changes. It also leaves the protocol-20 contract, World security
+boundaries, federation admission, and multi-bridge isolation unchanged.
+
+The active compatibility-document scan is reproducible from the repository root
+and returned no matches on 2026-08-20:
+
+```sh
+historical_re='^(docs/evidence/|CHANGELOG\.md:|UPSTREAM\.md:|docs/specs/013-upstream-synchronization-spec\.md:|docs/specs/013-upstream-synchronization-spec-summary\.md:)'
+git ls-files -z -- '*.md' \
+  | xargs -0 rg -n -e 'protocol[[:space:]-]*(16|17)' -e 'protocol (16|17)' \
+  | rg -v "$historical_re" || true
+```
+
+Spec 015 remains Approved pending the full work-unit acceptance run and review
+of the resulting PR. The v0.4.2/v0.4.3 dev/IME/focus/accessibility replay is
+recorded here as work unit 2; it does not rewrite Spec 013 or historical
+evidence.

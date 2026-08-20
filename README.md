@@ -190,7 +190,9 @@ Settings are grouped by area:
 - Features: client feature toggles such as Notes.
 - Display: browser-wide navigation synchronization, agent features in Tabs, multi-host Space
   selection, top/bottom app padding, and mobile terminal controls size.
-- Terminal: browser-to-bridge terminal input transport and input batching delay.
+- Terminal: browser-to-bridge terminal input transport and input batching delay,
+  terminal font size, and the default-off bounded screen-reader text mirror for
+  the visible terminal viewport.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 
 When viewing all of multiple hosts, use the Spaces list `…` menu to group spaces by host or keep a

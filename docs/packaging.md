@@ -93,6 +93,11 @@ Before release, run the unpacked wrapper against a Herdr `v0.8.2` or newer daemo
 protocol. Complete the launcher checks in [docs/release.md](release.md) with the packaged bridge, not
 only a development build.
 
+In the packaged browser smoke, verify terminal IME commit/cancel behavior and
+menu/dialog focus restoration. If Settings → Terminal → Screen-reader text is
+enabled, verify the bounded visible-viewport mirror is present; leave it off
+by default for ordinary users.
+
 ## Build Android APK
 
 Follow [docs/android.md](android.md) for SDK prerequisites, then build:

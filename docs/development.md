@@ -59,6 +59,22 @@ such as `5174`. The bridge URL remains the canonical full-app URL.
 Stop the foreground Vite process with `Ctrl-C`; a bridge started by
 `dev:local` is stopped with it. An already-running bridge is left untouched.
 
+For the supervised one-command workflow, use `npm run dev`. It keeps the
+bridge and Vite on loopback by default, waits for a healthy
+`/api/capabilities` response before starting Vite, proxies `/api` and `/ws`,
+and terminates both child processes when either exits. It builds a missing
+bridge binary and uses the stable socket path unless `HERDR_SOCKET_PATH` or a
+bridge argument overrides it. Address variables are namespaced as
+`HERDR_WEB_BRIDGE_HOST`, `HERDR_WEB_BRIDGE_PORT`, `HERDR_WEB_DEV_HOST`, and
+`HERDR_WEB_DEV_PORT`; `dev:local` remains the reuse-existing-bridge workflow.
+
+The optional Settings → Terminal → Screen-reader text control is off by
+default. When enabled, each terminal exposes only a bounded, debounced plain-
+text mirror of its visible active viewport; it does not publish scrollback,
+hidden cells, or terminal output to a bridge capability or server endpoint.
+Desktop IME preedit remains local to the browser and canceled composition is
+discarded before terminal input is sent.
+
 ## What must be running
 
 | Layer | Required | Purpose | Default endpoint |
