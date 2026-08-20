@@ -66,8 +66,8 @@ const DEFAULT_PORT: u16 = 8787;
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_STATIC_DIR: &str = "web/dist";
-const MIN_HERDR_VERSION: (u64, u64, u64) = (0, 8, 0);
-const MIN_HERDR_VERSION_LABEL: &str = "0.8.0";
+const MIN_HERDR_VERSION: (u64, u64, u64) = (0, 8, 2);
+const MIN_HERDR_VERSION_LABEL: &str = "0.8.2";
 const BRIDGE_API_VERSION: u32 = 1;
 const WEB_COMPAT_VERSION: u32 = 1;
 const MAX_CONFIGURED_LABEL_CHARS: usize = 80;
@@ -83,6 +83,7 @@ const DEFAULT_TERMINAL_OUTPUT_COALESCE_MS: u64 = 16;
 const MAX_TERMINAL_OUTPUT_COALESCE_MS: u64 = 256;
 const TERMINAL_OUTPUT_COALESCE_MAX_BYTES: usize = 32 * 1024;
 const TERMINAL_OUTPUT_COALESCE_MAX_CHUNKS: usize = 256;
+const MAX_TERMINAL_BELL_COUNT: u16 = 16;
 const DAEMON_STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 const ACTIVITY_WATCHER_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const ACTIVITY_WATCHER_MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -584,6 +585,56 @@ fn terminal_output_coalesce_window(coalesce_ms: Option<u64>) -> Duration {
             .unwrap_or(DEFAULT_TERMINAL_OUTPUT_COALESCE_MS)
             .min(MAX_TERMINAL_OUTPUT_COALESCE_MS),
     )
+}
+
+fn terminal_bell_bytes(count: u16) -> Option<Bytes> {
+    let bounded_count = usize::from(count.min(MAX_TERMINAL_BELL_COUNT));
+    (bounded_count > 0).then(|| Bytes::from(vec![0x07; bounded_count]))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum UnexpectedTerminalAttachMessage {
+    Graphics,
+    GraphicsFile,
+    GraphicsTransmissionRetired,
+}
+
+impl UnexpectedTerminalAttachMessage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Graphics => "Graphics",
+            Self::GraphicsFile => "GraphicsFile",
+            Self::GraphicsTransmissionRetired => "GraphicsTransmissionRetired",
+        }
+    }
+}
+
+fn unexpected_terminal_attach_message(
+    message: &ServerMessage,
+) -> Option<UnexpectedTerminalAttachMessage> {
+    match message {
+        ServerMessage::Graphics { .. } => Some(UnexpectedTerminalAttachMessage::Graphics),
+        ServerMessage::GraphicsFile { .. } => Some(UnexpectedTerminalAttachMessage::GraphicsFile),
+        ServerMessage::GraphicsTransmissionRetired { .. } => {
+            Some(UnexpectedTerminalAttachMessage::GraphicsTransmissionRetired)
+        }
+        _ => None,
+    }
+}
+
+fn warn_unexpected_terminal_attach_message(
+    message: &ServerMessage,
+    warned_messages: &mut HashSet<UnexpectedTerminalAttachMessage>,
+) {
+    let Some(message_type) = unexpected_terminal_attach_message(message) else {
+        return;
+    };
+    if warned_messages.insert(message_type) {
+        warn!(
+            message_type = message_type.as_str(),
+            "ignored unexpected terminal attach message"
+        );
+    }
 }
 
 /// Shared attach connections keyed by terminal id. `draining` remembers
@@ -2248,6 +2299,7 @@ fn launch_builtin_shell_split(
             ratio: None,
             cwd: None,
             focus: true,
+            right_click: Default::default(),
             env: HashMap::new(),
         }),
     )?;
@@ -2327,6 +2379,7 @@ fn launch_managed_agent_split(
             ratio: None,
             cwd: None,
             focus: true,
+            right_click: Default::default(),
             env: HashMap::new(),
         }),
     )?;
@@ -4595,6 +4648,7 @@ fn open_terminal_attach(
     });
 
     thread::spawn(move || {
+        let mut warned_unexpected_messages = HashSet::new();
         loop {
             let message: ServerMessage =
                 match protocol::read_message(&mut read_stream, MAX_GRAPHICS_FRAME_SIZE) {
@@ -4604,9 +4658,15 @@ fn open_terminal_attach(
                         break;
                     }
                 };
+            warn_unexpected_terminal_attach_message(&message, &mut warned_unexpected_messages);
             match message {
                 ServerMessage::Terminal(frame) => {
                     let _ = output_tx.send(TerminalOutput::Bytes(Bytes::from(frame.bytes)));
+                }
+                ServerMessage::TerminalBell { count } => {
+                    if let Some(bytes) = terminal_bell_bytes(count) {
+                        let _ = output_tx.send(TerminalOutput::Bytes(bytes));
+                    }
                 }
                 ServerMessage::ServerShutdown { reason } => {
                     let reason = reason.unwrap_or_else(|| "server shutdown".to_string());
@@ -4630,7 +4690,9 @@ fn open_terminal_attach(
                 | ServerMessage::KittyKeyboardReportAll { .. }
                 | ServerMessage::PrefixInputSource { .. }
                 | ServerMessage::Frame(_)
-                | ServerMessage::Graphics { .. } => {}
+                | ServerMessage::Graphics { .. }
+                | ServerMessage::GraphicsFile { .. }
+                | ServerMessage::GraphicsTransmissionRetired { .. } => {}
             }
         }
         // By this point the Detach (if any) has been flushed and the socket
@@ -4677,27 +4739,31 @@ fn startup_daemon_status(api: &ApiClient) -> io::Result<herdr_compat::api::Runti
 
 fn validated_daemon_protocol(status: herdr_compat::api::RuntimeStatus) -> Result<u32, BridgeError> {
     let version = status.version.as_deref().ok_or_else(|| {
-        BridgeError::Protocol("Herdr daemon status did not include a version".to_string())
+        BridgeError::Protocol(format!(
+            "Herdr daemon status did not include a version; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
+        ))
     })?;
     let version_triplet = parse_version_triplet(version).ok_or_else(|| {
         BridgeError::Protocol(format!(
-            "Herdr daemon reported an invalid version {version:?}; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
+            "Herdr daemon reported an invalid version; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
         ))
     })?;
     if version_triplet < MIN_HERDR_VERSION {
         return Err(BridgeError::Protocol(format!(
-            "Herdr daemon {version} is too old for herdr-web; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
+            "Herdr daemon version is too old for herdr-web; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
         )));
     }
 
     let protocol = status.protocol.ok_or_else(|| {
-        BridgeError::Protocol("Herdr daemon status did not include a protocol".to_string())
+        BridgeError::Protocol(format!(
+            "Herdr daemon status did not include a protocol; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
+        ))
     })?;
     if protocol == PROTOCOL_VERSION {
         Ok(protocol)
     } else {
         Err(BridgeError::Protocol(format!(
-            "Herdr daemon protocol {protocol} is incompatible with herdr-web; need protocol {PROTOCOL_VERSION}"
+            "Herdr daemon protocol {protocol} is incompatible with herdr-web; need Herdr {MIN_HERDR_VERSION_LABEL} or newer with protocol {PROTOCOL_VERSION}"
         )))
     }
 }
@@ -4771,6 +4837,116 @@ mod tests {
         assert_eq!(coalescer.lifetime_stats.source_frames, 1);
         assert_eq!(coalescer.lifetime_stats.sent_frames, 1);
         assert_eq!(coalescer.lifetime_stats.immediate_frames, 1);
+    }
+
+    #[test]
+    fn terminal_bell_bytes_are_zero_safe_and_bounded() {
+        assert_eq!(terminal_bell_bytes(0), None);
+        assert_eq!(
+            terminal_bell_bytes(3),
+            Some(Bytes::from_static(b"\x07\x07\x07"))
+        );
+        assert_eq!(terminal_bell_bytes(16).unwrap().len(), 16);
+        assert_eq!(terminal_bell_bytes(u16::MAX).unwrap().len(), 16);
+    }
+
+    #[test]
+    fn terminal_bell_preserves_order_through_enabled_coalescing() {
+        let now = Instant::now();
+        let window = terminal_output_coalesce_window(None);
+        let mut coalescer = TerminalOutputCoalescer::new(window);
+
+        let first = coalescer.push_bytes(Bytes::from_static(b"A"), now);
+        assert_eq!(
+            first,
+            TerminalOutputCoalescingDecision::SendNow(Bytes::from_static(b"A"))
+        );
+        assert_eq!(
+            coalescer.push_bytes(terminal_bell_bytes(2).unwrap(), now),
+            TerminalOutputCoalescingDecision::Pending
+        );
+        assert_eq!(
+            coalescer.push_bytes(Bytes::from_static(b"B"), now),
+            TerminalOutputCoalescingDecision::Pending
+        );
+        assert_eq!(
+            coalescer.handle_deadline(),
+            Some(TerminalOutputFlushReason::Timer)
+        );
+        let pending = coalescer
+            .flush_pending(TerminalOutputFlushReason::Timer, now + window)
+            .unwrap();
+        assert_eq!(
+            [Bytes::from_static(b"A"), pending]
+                .into_iter()
+                .flat_map(|bytes| bytes.to_vec())
+                .collect::<Vec<_>>(),
+            b"A\x07\x07B"
+        );
+    }
+
+    #[test]
+    fn terminal_bell_preserves_order_with_coalescing_disabled() {
+        let now = Instant::now();
+        let mut coalescer = TerminalOutputCoalescer::new(Duration::ZERO);
+        let mut output = Vec::new();
+        for bytes in [
+            Bytes::from_static(b"A"),
+            terminal_bell_bytes(2).unwrap(),
+            Bytes::from_static(b"B"),
+        ] {
+            let TerminalOutputCoalescingDecision::SendNow(bytes) = coalescer.push_bytes(bytes, now)
+            else {
+                panic!("disabled coalescing must send each output chunk immediately");
+            };
+            output.extend_from_slice(&bytes);
+        }
+        assert_eq!(output, b"A\x07\x07B");
+    }
+
+    #[test]
+    fn direct_graphics_messages_are_ignored_and_warned_once_per_connection() {
+        let graphics = ServerMessage::Graphics {
+            bytes: b"secret-control-payload".to_vec(),
+        };
+        let graphics_file = ServerMessage::GraphicsFile {
+            path: "/secret/private/image".into(),
+            expected_len: 12,
+            image_id: 7,
+            transfer_id: 8,
+            leading: b"secret-leading".to_vec(),
+            control: "secret-control".into(),
+        };
+        let retired = ServerMessage::GraphicsTransmissionRetired {
+            transfer_id: 8,
+            image_id: 7,
+        };
+        let mut warned = HashSet::new();
+
+        for message in [
+            &graphics,
+            &graphics,
+            &graphics_file,
+            &graphics_file,
+            &retired,
+            &retired,
+        ] {
+            warn_unexpected_terminal_attach_message(message, &mut warned);
+        }
+
+        assert_eq!(warned.len(), 3);
+        assert!(warned.contains(&UnexpectedTerminalAttachMessage::Graphics));
+        assert!(warned.contains(&UnexpectedTerminalAttachMessage::GraphicsFile));
+        assert!(warned.contains(&UnexpectedTerminalAttachMessage::GraphicsTransmissionRetired));
+        assert_eq!(
+            unexpected_terminal_attach_message(&graphics_file)
+                .unwrap()
+                .as_str(),
+            "GraphicsFile"
+        );
+        assert!(!UnexpectedTerminalAttachMessage::GraphicsFile
+            .as_str()
+            .contains("secret"));
     }
 
     #[test]
@@ -5262,6 +5438,123 @@ mod tests {
         let _ = std::fs::remove_file(&socket_path);
     }
 
+    /// Direct-graphics messages are transport-visible to a terminal attach but
+    /// must not trigger file reads, browser frames, or client responses. A
+    /// later terminal message proves that the attach remains usable.
+    #[cfg(unix)]
+    #[test]
+    fn terminal_attach_ignores_direct_graphics_and_keeps_stream_open() {
+        let dir = std::env::temp_dir();
+        let dir = if dir.as_os_str().len() <= 40 {
+            dir
+        } else {
+            PathBuf::from("/tmp")
+        };
+        let socket_path = dir.join(format!(
+            "herdr-web-graphics-test-{}.sock",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&socket_path);
+        let listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+
+        let daemon = thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let hello: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(hello, ClientMessage::Hello { .. }));
+            protocol::write_message(
+                &mut sock,
+                &ServerMessage::Welcome {
+                    version: PROTOCOL_VERSION,
+                    encoding: RenderEncoding::TerminalAnsi,
+                    error: None,
+                },
+            )
+            .unwrap();
+            let attach: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(attach, ClientMessage::AttachTerminal { .. }));
+
+            let graphics_file = ServerMessage::GraphicsFile {
+                path: "/private/should-never-be-opened".into(),
+                expected_len: 5,
+                image_id: 1,
+                transfer_id: 2,
+                leading: b"private-leading".to_vec(),
+                control: "private-control".into(),
+            };
+            for message in [
+                graphics_file.clone(),
+                graphics_file,
+                ServerMessage::GraphicsTransmissionRetired {
+                    transfer_id: 2,
+                    image_id: 1,
+                },
+                ServerMessage::GraphicsTransmissionRetired {
+                    transfer_id: 2,
+                    image_id: 1,
+                },
+                ServerMessage::Graphics {
+                    bytes: b"private-graphics".to_vec(),
+                },
+            ] {
+                protocol::write_message(&mut sock, &message).unwrap();
+            }
+            protocol::write_message(&mut sock, &ServerMessage::TerminalBell { count: 3 }).unwrap();
+            protocol::write_message(
+                &mut sock,
+                &ServerMessage::Terminal(protocol::TerminalFrame {
+                    seq: 1,
+                    width: 80,
+                    height: 24,
+                    full: false,
+                    bytes: b"after-graphics".to_vec(),
+                }),
+            )
+            .unwrap();
+
+            let detach: ClientMessage = protocol::read_message(&mut sock, MAX_FRAME_SIZE).unwrap();
+            assert!(matches!(detach, ClientMessage::Detach));
+        });
+
+        let (output_tx, _) = tokio::sync::broadcast::channel(8);
+        let mut output_rx = output_tx.subscribe();
+        let attach = open_terminal_attach(
+            socket_path.clone(),
+            "term-graphics-test".to_string(),
+            80,
+            24,
+            false,
+            PROTOCOL_VERSION,
+            output_tx,
+        )
+        .unwrap();
+
+        let receive_output = |output_rx: &mut tokio::sync::broadcast::Receiver<TerminalOutput>| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                tokio::time::timeout(Duration::from_secs(2), output_rx.recv())
+                    .await
+                    .unwrap()
+                    .unwrap()
+            })
+        };
+        let TerminalOutput::Bytes(bell) = receive_output(&mut output_rx) else {
+            panic!("direct graphics should not close the terminal stream");
+        };
+        assert_eq!(&bell[..], b"\x07\x07\x07");
+        let TerminalOutput::Bytes(after_graphics) = receive_output(&mut output_rx) else {
+            panic!("terminal output after direct graphics was not forwarded");
+        };
+        assert_eq!(&after_graphics[..], b"after-graphics");
+
+        attach.write_tx.send(ClientMessage::Detach).unwrap();
+        assert!(attach.connection_closed.wait_closed(Duration::from_secs(2)));
+        daemon.join().unwrap();
+        let _ = std::fs::remove_file(&socket_path);
+    }
+
     #[test]
     fn rejects_oversized_terminal_input_frame_atomically() {
         let (tx, rx) = test_terminal_writer();
@@ -5529,7 +5822,7 @@ mod tests {
 
     fn test_session_snapshot() -> SessionSnapshot {
         SessionSnapshot {
-            version: "0.8.0".to_string(),
+            version: "0.8.2".to_string(),
             protocol: PROTOCOL_VERSION,
             focused_workspace_id: Some("workspace-1".to_string()),
             focused_tab_id: Some("tab-1".to_string()),
@@ -6199,7 +6492,7 @@ mod tests {
     #[test]
     fn daemon_status_accepts_minimum_version_and_exact_protocol() {
         assert_eq!(
-            validated_daemon_protocol(runtime_status("0.8.0", PROTOCOL_VERSION)).unwrap(),
+            validated_daemon_protocol(runtime_status("0.8.2", PROTOCOL_VERSION)).unwrap(),
             PROTOCOL_VERSION
         );
         assert_eq!(
@@ -6227,11 +6520,11 @@ mod tests {
             .contains("invalid version"));
 
         for version in [
-            "0.8.0-preview",
-            "0.8.0.1",
-            "0.8.0+",
-            "0.8.0+bad_meta",
-            "0.08.0",
+            "0.8.2-preview",
+            "0.8.2.1",
+            "0.8.2+",
+            "0.8.2+bad_meta",
+            "0.08.2",
         ] {
             let error = validated_daemon_protocol(runtime_status(version, PROTOCOL_VERSION))
                 .unwrap_err()
@@ -6245,7 +6538,7 @@ mod tests {
 
     #[test]
     fn daemon_status_accepts_version_prefix_and_build_metadata() {
-        for version in ["v0.8.0", "0.8.0+linux-x86-64"] {
+        for version in ["v0.8.2", "0.8.2+linux-x86-64"] {
             assert_eq!(
                 validated_daemon_protocol(runtime_status(version, PROTOCOL_VERSION)).unwrap(),
                 PROTOCOL_VERSION
@@ -6254,8 +6547,8 @@ mod tests {
     }
 
     #[test]
-    fn daemon_status_rejects_version_before_0_8_0() {
-        let error = validated_daemon_protocol(runtime_status("0.7.5", PROTOCOL_VERSION))
+    fn daemon_status_rejects_version_before_0_8_2() {
+        let error = validated_daemon_protocol(runtime_status("0.8.1", PROTOCOL_VERSION))
             .unwrap_err()
             .to_string();
         assert!(error.contains("too old"));
@@ -6277,18 +6570,39 @@ mod tests {
 
     #[test]
     fn daemon_status_rejects_any_other_protocol() {
-        let older = validated_daemon_protocol(runtime_status("0.8.0", PROTOCOL_VERSION - 1))
+        let older = validated_daemon_protocol(runtime_status("0.8.2", 19))
             .unwrap_err()
             .to_string();
         assert!(older.contains("incompatible"));
         assert!(older.contains(&PROTOCOL_VERSION.to_string()));
 
-        assert!(
-            validated_daemon_protocol(runtime_status("0.8.0", PROTOCOL_VERSION + 1))
-                .unwrap_err()
-                .to_string()
-                .contains("incompatible")
-        );
+        assert!(validated_daemon_protocol(runtime_status("0.8.2", 21))
+            .unwrap_err()
+            .to_string()
+            .contains("incompatible"));
+    }
+
+    #[test]
+    fn daemon_admission_diagnostics_are_bounded_and_name_the_supported_baseline() {
+        let invalid_version = "v".to_string() + &"9".repeat(10_000);
+        let error = validated_daemon_protocol(runtime_status(&invalid_version, 20))
+            .unwrap_err()
+            .to_string();
+        assert!(error.len() < 256);
+        assert!(error.contains("Herdr 0.8.2 or newer"));
+        assert!(error.contains("protocol 20"));
+        assert!(!error.contains(&invalid_version));
+
+        let missing_protocol = herdr_compat::api::RuntimeStatus {
+            version: Some("0.8.2".into()),
+            protocol: None,
+            capabilities: None,
+        };
+        let error = validated_daemon_protocol(missing_protocol)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Herdr 0.8.2 or newer"));
+        assert!(error.contains("protocol 20"));
     }
 
     #[test]

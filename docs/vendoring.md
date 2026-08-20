@@ -32,12 +32,14 @@ The browser app is not vendored into Herdr. It lives at `web/`, and `herdr-web-b
 ## Current Reference
 
 - Upstream checkout: a clean Herdr source checkout outside this repository
-- Upstream release baseline: `v0.8.0`
-- Terminal wire baseline: protocol `19`
+- Upstream release baseline: `v0.8.2`
+- Release commit: `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`
+- Terminal wire baseline: protocol `20`
+- License: Apache-2.0; see [`vendor/herdr-compat/VENDOR-MANIFEST.toml`](../vendor/herdr-compat/VENDOR-MANIFEST.toml)
 
-The vendored API/schema, terminal wire, and input-model compatibility copies are reviewed against
-Herdr `v0.8.0` and protocol `19`. The bridge keeps only the narrow compatibility surface it needs;
-the full Herdr source tree remains an external audit reference.
+The vendored API/schema and terminal-wire compatibility copies are reviewed against the exact
+Herdr `v0.8.2` release commit and protocol `20`. The bridge keeps only the narrow compatibility
+surface it needs; the full Herdr source tree remains an external audit reference.
 
 Use the upstream checkout as an external reference for audits and refreshes. It is not required to
 build `herdr-web`.
@@ -66,7 +68,7 @@ bridge narrows the drift check to only the terminal attach message regions.
 
 ## Refresh Process
 
-Use a clean Herdr checkout at the reviewed `v0.8.0` release tag as the source reference. Do not
+Use a clean Herdr checkout at the reviewed `v0.8.2` release tag as the source reference. Do not
 refresh from an experimental tree that may contain unrelated local drift. Copy the reviewed
 upstream source files into the minimal compatibility crate; do not make the bridge compile against
 the external checkout or recreate a full upstream vendor snapshot.
@@ -76,28 +78,31 @@ HERDR_SRC=/path/to/herdr
 HERDR_WEB=/path/to/herdr-web
 ```
 
-1. Verify the source checkout is clean:
+1. Verify the source checkout is clean and pinned to the reviewed release:
 
 ```bash
 git -C "$HERDR_SRC" status --short
-git -C "$HERDR_SRC" rev-parse --short HEAD
+git -C "$HERDR_SRC" rev-parse HEAD
+git -C "$HERDR_SRC" describe --tags --exact-match HEAD
 ```
 
-2. Reconcile only the compatibility surface:
+2. Reconcile only the compatibility surface with the repeatable refresh command:
+
+```bash
+HERDR_SRC="$HERDR_SRC" scripts/refresh-herdr-compat.sh
+```
+
+The command copies only the exact upstream schema root/modules and `src/protocol/wire.rs` listed
+below:
 
 ```text
-src/api/client.rs          -> vendor/herdr-compat/src/api/client.rs
-src/api/status.rs          -> vendor/herdr-compat/src/api/status.rs
 src/api/schema.rs          -> vendor/herdr-compat/src/api/schema.rs
 src/api/schema/*.rs        -> vendor/herdr-compat/src/api/schema/*.rs
 src/protocol/wire.rs       -> vendor/herdr-compat/src/protocol/wire.rs
-src/input/model.rs         -> vendor/herdr-compat/src/input.rs (minimal protocol shim)
-src/raw_input.rs           -> vendor/herdr-compat/src/raw_input.rs (minimal protocol shim)
-src/ipc.rs                 -> vendor/herdr-compat/src/ipc.rs
-src/logging.rs             -> vendor/herdr-compat/src/logging.rs
-src/popup_size.rs          -> vendor/herdr-compat/src/popup_size.rs
-src/server/socket_paths.rs -> vendor/herdr-compat/src/server/socket_paths.rs
 ```
+
+The copied source paths, destination paths, SHA-256 hashes, release provenance, license, and
+local adaptations are recorded in [`VENDOR-MANIFEST.toml`](../vendor/herdr-compat/VENDOR-MANIFEST.toml).
 
 3. Preserve intentional local adaptations:
 
@@ -122,12 +127,26 @@ scripts/check-vendor.sh
 HERDR_SRC="$HERDR_SRC" scripts/check-vendor.sh
 ```
 
-The optional `HERDR_SRC` mode exact-compares the reviewed API/schema files. The protocol-19 terminal
-attach overlay is checked for its required version and message marker separately because the
-vendored wire module intentionally retains the stable raw-attach subset rather than mirroring all
-of Herdr `0.8.0`'s new structured-input types. Locally adapted files are intentionally excluded
-from exact comparison and must be reviewed manually during refresh. `PopupSize` is compared with
-only the documented visibility adaptation allowed.
+The focused provenance regression creates temporary compatibility copies, corrupts an adapted
+entry's recorded source hash, removes an adapted manifest entry, and confirms that `HERDR_SRC`
+verification fails closed:
+
+```bash
+HERDR_SRC="$HERDR_SRC" scripts/check-vendor-regression.sh
+```
+
+The optional `HERDR_SRC` mode parses every `[[files]]` manifest entry, requires the complete
+reviewed 23-entry source-to-destination set, and verifies each source hash against the clean
+upstream checkout as well as each destination hash. It also exact-compares every copied source file
+and the protocol-20 markers. The default mode verifies the manifest's destination hashes, required
+protocol-20 wire shapes, and crate layout. Locally adapted files are intentionally excluded from
+exact byte comparison, but their upstream source hashes and manifest presence are still verified;
+review their local adaptations manually during refresh. `PopupSize` is compared with only the
+documented visibility adaptation allowed. Frozen protocol frames live in `vendor/herdr-compat/tests/`
+and are tested by `protocol20_fixtures.rs`.
+
+The regression also removes the adapted `src/api/client.rs` manifest entry and confirms that the
+checker rejects the resulting 22-entry manifest.
 
 5. Re-run validation:
 
@@ -148,9 +167,10 @@ the refit button after changing browser sizes.
 
 ## Compatibility Policy
 
-The bridge pings Herdr's status API at startup and requires Herdr `v0.8.0` or newer with daemon
-protocol exactly `19`. Older daemons and any unreviewed newer protocol are rejected before serving
-the web app. The version floor covers the private JSON API shape, including the managed
+The bridge pings Herdr's status API at startup and requires Herdr `v0.8.2` or newer with daemon
+protocol exactly `20`. Protocol 19, protocol 21, missing protocol, invalid versions, and other
+unreviewed combinations are rejected before terminal attach with bounded diagnostics. The version
+floor covers the private JSON API shape, including the managed
 `agent.start` contract; the exact protocol check protects the copied bincode terminal wire format.
 This is not a complete stability guarantee because the bridge mirrors private APIs.
 
@@ -159,6 +179,7 @@ When updating Herdr:
 - inspect `src/protocol/wire.rs`
 - inspect API schema changes under `src/api/schema/`
 - inspect terminal attach handling in `src/server/headless.rs`
+- check out the reviewed release commit and rerun `HERDR_SRC=/path/to/herdr scripts/refresh-herdr-compat.sh`
 - rerun `HERDR_SRC=/path/to/herdr scripts/check-vendor.sh`
 - rerun bridge tests and a browser smoke test
 - update this document if the bridge compatibility surface changes

@@ -93,8 +93,8 @@ function runtime(
       ? {
           bridge_api_version: 1,
           bridge_version: "0.1.0",
-          herdr_version: "0.8.0",
-          terminal_protocol: 19,
+          herdr_version: "0.8.2",
+          terminal_protocol: 20,
           features,
           commands: [],
         }
