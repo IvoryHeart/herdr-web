@@ -129,6 +129,28 @@ npm install
 npm install --prefix web
 ```
 
+For the supervised development workflow, start the bridge and Vite together:
+
+```bash
+npm run dev
+```
+
+The command keeps both processes on loopback by default, waits for the bridge
+capabilities endpoint before starting Vite, proxies frontend `/api` and `/ws`
+traffic to the bridge, and stops both children when either one exits. It builds
+the bridge when its executable is missing. Use `HERDR_SOCKET_PATH` or pass
+bridge session arguments as needed:
+
+```bash
+HERDR_SOCKET_PATH="$HOME/.config/herdr-dev/herdr.sock" npm run dev
+npm run dev -- --session SESSION_NAME
+```
+
+Address overrides are namespaced: `HERDR_WEB_BRIDGE_HOST`,
+`HERDR_WEB_BRIDGE_PORT`, `HERDR_WEB_DEV_HOST`, and `HERDR_WEB_DEV_PORT`.
+`npm run dev:local` remains available for the downstream workflow that reuses
+an already-running bridge.
+
 ## Development Build And Test
 
 ```bash
@@ -140,6 +162,7 @@ npm run build
 Useful narrower commands:
 
 ```bash
+npm run test:dev
 npm run lint:web
 npm run test:web
 npm run build:web
