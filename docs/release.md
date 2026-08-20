@@ -118,7 +118,8 @@ Open `http://127.0.0.1:8787` and verify:
 - Desktop IME composition commits once and canceled preedit is not replayed; dialog/menu focus
   returns to the invoking control.
 - Settings → Terminal → Screen-reader text is off by default; when enabled, its mirror contains
-  only bounded visible terminal text and does not expose scrollback or hidden cells.
+  only a bounded visible terminal viewport, including visible scrolled-back rows, and does not
+  expose unbounded terminal history or hidden cells.
 - New tabs can launch Shell and every enabled managed built-in agent.
 - Split right/down can launch Shell and every enabled managed built-in agent.
 - A custom preset launches its exact configured `argv`, including a wrapper or SSH-shaped command,

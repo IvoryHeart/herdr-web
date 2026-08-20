@@ -70,8 +70,10 @@ bridge argument overrides it. Address variables are namespaced as
 
 The optional Settings → Terminal → Screen-reader text control is off by
 default. When enabled, each terminal exposes only a bounded, debounced plain-
-text mirror of its visible active viewport; it does not publish scrollback,
-hidden cells, or terminal output to a bridge capability or server endpoint.
+text mirror of its visible active viewport, including rows currently visible
+while the terminal is scrolled into scrollback; it does not publish unbounded
+terminal history, hidden cells, or terminal output to a bridge capability or
+server endpoint.
 Desktop IME preedit remains local to the browser and canceled composition is
 discarded before terminal input is sent.
 

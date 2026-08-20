@@ -209,7 +209,7 @@ git rev-parse upstream/main:CONTRIBUTING.md
 | Contribution guidance | PR #57 merge `4c2ef62aca1bd7320d026791602a0b36cedd247e`; `4bac49fb76a23edfb9c57fd6b1f7fabc75a25ade`; authored by Kevin (`kcosrdev@gmail.com`) | conflicted | Assessed but not copied into downstream governance. Spec 004 still has unresolved World ownership and contribution-lane decisions. |
 | Terminal IME composition, cancellation, fallback preedit, and desktop focus | PR #58 merge `e13c83d429d1f51199ca0eee1810485acf47ad60`; `3f39d3be243ff6313e404db19852dbac8b18b21e`, `db88e34567a2c68fe8814777ddaac6fb2ef60e2e`, `052c638982449deec7f6fc08b2110ccf3c2328aa`, `3c7d0b93a3cd50044dbb55a5c66f3f1f09fbdf5c`; original contribution by Hopkins (`@LosEcher`), PR #51 | adopted | Replayed through the existing renderer, including preedit overlay, cancellation suppression, fallback handling, desktop focus, and mobile-input preservation. |
 | Dialog/menu activation and focus restoration | PR #62 merge `346beeee614cb54da32f29e3a22c1e44d8133014`; `8af7cd62a56894dcaf89f58b1016a1654d158dda`, `276ca305bfab9c7a1e772d8110c26b060e308361`, `0870cd3efd518e822111b72d6ffa30e892567694`; original contribution by shuv (`@shuv1337`), PR #37 | adopted | Replayed with shared focus-return/trap helpers and downstream integration for Spaces, Office, notes, settings, launchers, and pane menus. |
-| Optional terminal screen-reader text and settings | PR #64 merge `eb47f62d9df04847345f90b70ddb54a926d95c5f`; implementation `31d4070a2740766a53a788395aaa6cd93ab5c865`; attribution follow-up `253930760b0133aa43f6bd4206d45fc3edcbdf80`; original contribution by shuv (`@shuv1337`), PR #37 | adopted | Added a default-off, bounded visible-viewport mirror with persisted settings and per-runtime/World labels; terminal history is not exposed by the feature. |
+| Optional terminal screen-reader text and settings | PR #64 merge `eb47f62d9df04847345f90b70ddb54a926d95c5f`; implementation `31d4070a2740766a53a788395aaa6cd93ab5c865`; attribution follow-up `253930760b0133aa43f6bd4206d45fc3edcbdf80`; original contribution by shuv (`@shuv1337`), PR #37 | adopted | Added a default-off, bounded visible-viewport mirror with persisted settings and per-runtime/World labels; visible scrolled-back rows are intentionally mirrored, while unbounded terminal history is not exposed. |
 
 The replay used focused downstream commits rather than cherry-picking upstream
 merge commits. It deliberately excludes the unrelated mobile chord composer,
@@ -218,16 +218,20 @@ release changes. It also leaves the protocol-20 contract, World security
 boundaries, federation admission, and multi-bridge isolation unchanged.
 
 The active compatibility-document scan is reproducible from the repository root
-and returned no matches on 2026-08-20:
+and returned no matches on 2026-08-20. Git pathspec exclusions keep the
+historical records out of the active-document result:
 
 ```sh
-historical_re='^(docs/evidence/|CHANGELOG\.md:|UPSTREAM\.md:|docs/specs/013-upstream-synchronization-spec\.md:|docs/specs/013-upstream-synchronization-spec-summary\.md:)'
-git ls-files -z -- '*.md' \
-  | xargs -0 rg -n -e 'protocol[[:space:]-]*(16|17)' -e 'protocol (16|17)' \
-  | rg -v "$historical_re" || true
+git grep -n -E 'protocol[[:space:]-]*(16|17)|protocol (16|17)' -- '*.md' \
+  ':(exclude)docs/evidence/**' \
+  ':(exclude)CHANGELOG.md' \
+  ':(exclude)UPSTREAM.md' \
+  ':(exclude)docs/specs/013-upstream-synchronization-spec.md' \
+  ':(exclude)docs/specs/013-upstream-synchronization-spec-summary.md' || true
 ```
 
-Spec 015 remains Approved pending the full work-unit acceptance run and review
-of the resulting PR. The v0.4.2/v0.4.3 dev/IME/focus/accessibility replay is
-recorded here as work unit 2; it does not rewrite Spec 013 or historical
-evidence.
+Spec 015 work units 1 and 2 are implemented and recorded in the immutable
+parent's [implementation summary](docs/specs/015-upstream-v043-protocol20-realignment-spec-summary.md).
+The approved parent remains unchanged pending the repository's final review and
+status transition. The v0.4.2/v0.4.3 replay does not rewrite Spec 013 or
+historical evidence.
