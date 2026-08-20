@@ -90,12 +90,9 @@ the changed and unchanged attach-time focus states.
   ```
 
 - GitHub Actions run
-  [`32421052400`](https://github.com/IvoryHeart/herdr-web/actions/runs/32421052400)
+  [`32422208681`](https://github.com/IvoryHeart/herdr-web/actions/runs/32422208681)
   passed all five CI jobs on final review-fix head
-  `ee9b061b86584ac353118993a7d9bd715b62da94`. The subsequent
-  `94638e6` change adds only the explicitly requested `/` route assertion;
-  its focused bridge test passed and the final-head CI rerun is recorded in
-  the PR.
+  `5f63030191524d8d8f24692b7789d1318bc45fd4`.
 
 ## Constraints and remaining limitations
 

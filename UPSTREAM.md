@@ -232,6 +232,6 @@ git grep -n -E 'protocol[[:space:]-]*(16|17)|protocol (16|17)' -- '*.md' \
 
 Spec 015 work units 1 and 2 are implemented and recorded in the immutable
 parent's [implementation summary](docs/specs/015-upstream-v043-protocol20-realignment-spec-summary.md).
-The approved parent remains unchanged pending the repository's final review and
-status transition. The v0.4.2/v0.4.3 replay does not rewrite Spec 013 or
-historical evidence.
+The approved parent remains unchanged. Final review and merge are the remaining
+repository workflow steps; they do not require editing the approved parent.
+The v0.4.2/v0.4.3 replay does not rewrite Spec 013 or historical evidence.
