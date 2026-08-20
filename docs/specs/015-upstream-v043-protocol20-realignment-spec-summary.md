@@ -90,9 +90,9 @@ the changed and unchanged attach-time focus states.
   ```
 
 - GitHub Actions run
-  [`32418256747`](https://github.com/IvoryHeart/herdr-web/actions/runs/32418256747)
-  passed all five CI jobs on the pre-review implementation head; the final
-  review-fix head is rerun before delivery.
+  [`32421052400`](https://github.com/IvoryHeart/herdr-web/actions/runs/32421052400)
+  passed all five CI jobs on final review-fix head
+  `7101892aa4787aaaacbf1d32de7d655a64045ae3`.
 
 ## Constraints and remaining limitations
 
