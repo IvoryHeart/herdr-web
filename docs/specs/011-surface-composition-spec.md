@@ -1,509 +1,417 @@
-# Typed surface composition and host boundary
+# Minimal compiled-in Web surface composition
 
 - **Spec ID:** `011-surface-composition`
-- **Status:** In review
+- **Status:** Draft
 - **Created:** 2026-08-12
+- **Revised:** 2026-08-20
 - **Owner:** Herdr World downstream project
 - **Reviewers:** IvoryHeart (repository owner)
 - **Approved by:** —
 - **Approved at:** —
 
-### Review revision 2026-08-12
+### Review reset 2026-08-20
 
-This revision resolves the pre-approval review issues around scope semantics,
-optional capability admission, heterogeneous context binding, terminal
-ownership, same-realm trust limits, slot lifecycle, route normalization,
-bounded DTOs, recovery, and mechanically verifiable core/World builds.
+The previous in-review draft attempted to define a general surface platform:
+context-version negotiation, a new capability catalogue, per-target policies,
+three slots, route grammar, minimum-host rules, and a detailed lifecycle state
+machine. The current upstream audit found no second browser surface requiring
+most of those mechanisms and confirmed that Herdr Web already owns multi-bridge
+profiles, capability probes, runtime caches, and terminal transport.
 
-> This draft defines a trusted, compile-time surface boundary for Herdr Web
-> and downstream Herdr World projections. It does not authorize runtime
-> extraction, a public plugin SDK, or dynamic code loading.
+This revision returns the specification to Draft and keeps only the boundary
+needed to remove World imports and orchestration from the generic application.
+New generality must be justified by a second concrete surface rather than by a
+hypothetical plugin system.
+
+> This draft defines trusted, compile-time composition for Herdr Web and Herdr
+> World. It does not define Herdr plugins, runtime-installed browser code, or a
+> second bridge/runtime layer.
 
 ## 1. Purpose
 
-Herdr Web currently has a surface registry with useful route, capability, and
-lazy-loading metadata. It is not yet a composition boundary: the core registry
-registers the Office surface, `App.tsx` constructs the Office context, and the
-surface context is effectively `unknown` at the registry boundary.
+The current registry records surface labels, routes, feature requirements, and
+lazy imports, but it is not a package boundary. The core registry registers
+Office, its context is `unknown`, and `App.tsx` imports and orchestrates World
+state, settings, observability, selection, handoff, and conversation terminals.
 
-This specification defines the smallest stable host contract needed to let the
-core shell compose Spaces and downstream projections without importing each
-projection's implementation. Office remains a trusted, compiled-in World
-surface. A later dynamic plugin design, if needed, requires a separate threat
-model and specification.
+This specification introduces the smallest typed assembly seam that lets a
+generic Herdr Web build contain Spaces only and a Herdr World build add Office.
+It adapts the existing Herdr Web `BridgeManager`, federated runtime, command,
+and terminal services; it does not replace their identity, storage, polling,
+capability, or lifecycle ownership.
 
 ## 2. Scope
 
 This feature includes:
 
-- a typed host context for surface reads, commands, navigation, layout, and
-  lifecycle;
-- explicit surface slots and route ownership;
-- selected/all scope support with per-host admission and a minimum usable-host
-  policy;
-- explicit required and optional capabilities, including per-target policy and
-  optional-input health/recovery behavior;
-- trusted assembly-time registration separate from the upstream/core registry;
-- capability and scope admission before a surface is mounted;
-- bounded surface-local loading, error, unavailable, and degraded states;
-- host-owned terminal outlets and semantic terminal operations for both Spaces
-  and Office conversation terminals;
-- a core-only build and bundle proof with no World or provider imports; and
-- contract, isolation, and lifecycle tests for the composed shell.
+- a typed binding between a surface definition, context factory, and lazy
+  component;
+- separate generic Web and World assembly entry points;
+- one optional assembly-owned product-settings contribution that preserves the
+  existing Office settings entry without importing World from generic code;
+- exact route and surface-ID validation for compiled-in definitions;
+- a read-only host adapter over existing bridge and federated runtime state;
+- allow-listed semantic navigation, command, and terminal operations;
+- migration of World-specific orchestration out of `App.tsx` and generic
+  registry source;
+- route-local loading, unavailable, and error containment;
+- required bridge-feature admission using the existing capability response;
+- generic and World build/bundle audits; and
+- characterization tests that preserve current Spaces and Office behavior.
+
+The initial assemblies are:
+
+```text
+Herdr Web assembly:   shell + Spaces
+Herdr World assembly: shell + Spaces + Office
+```
 
 ## 3. Non-goals
 
-- No dynamic third-party JavaScript loading or public plugin SDK.
-- No permissions model that grants a surface raw Herdr sockets, bridge
-  connections, Prometheus URLs, credentials, or arbitrary network access.
-- No direct surface access to OTEL, Prometheus, Loki, databases, or Herdr
-  protocol internals.
-- No requirement to move the current files before the boundary tests pass.
-- No product rename, route rename, storage-key migration, or release-version
-  decision. Those are owned by the packaging specification and a migration
-  extension when required.
-- No Graph or City implementation. They are future projections used only as
-  boundary examples.
+- No dynamic third-party JavaScript loading, browser marketplace, public plugin
+  SDK, iframe/worker sandbox, hot installation, or module revocation.
+- No representation of Office as a Herdr plugin. Herdr plugin v1 has no native
+  non-terminal UI contract.
+- No replacement for `BridgeManager`, bridge profiles, enabled-host selection,
+  `/api/capabilities`, federated runtime polling, runtime caches, generation
+  keys, or terminal WebSockets.
+- No generic extension registry or provider registry.
+- No general context-version negotiation, new capability namespace/catalogue,
+  per-target policy language, minimum-host arithmetic, pattern routes,
+  persistent sidebar contributions, or multi-entry settings catalogue.
+- No Graph or City implementation.
+- No product rename, public release, observability schema change, or provider
+  migration.
 
 ## 4. Terms and trust model
 
 | Term | Meaning |
 | --- | --- |
-| Core surface | A surface maintained with the generic Herdr Web shell, such as Spaces. |
-| Downstream surface | A trusted, compiled-in projection selected by the Herdr World assembly, such as Office. |
-| Host | The Herdr Web shell that owns navigation, runtime admission, lifecycle, and shared layout. |
-| Assembly | The compile-time product selection that combines core definitions with trusted downstream definitions. |
-| Capability | A named, bounded operation or read exposed by the host after runtime admission. |
-| Degraded | A surface is mounted but one or more optional inputs are unavailable. |
+| Surface | A trusted browser view compiled into a selected product assembly. |
+| Generic assembly | Upstream-aligned shell with only generic Herdr Web surfaces. |
+| World assembly | Generic assembly plus downstream World surfaces and assets. |
+| Host adapter | A least-purpose view over existing application services supplied to one surface. |
+| Bridge capability | A bounded feature reported by the existing bridge `/api/capabilities` response. |
 
-All surfaces are compiled-in, same-realm trusted code at this stage. This is
-API and dependency isolation, not a browser security sandbox: a React surface
-can still call `fetch`, `localStorage`, `window`, or other browser globals if
-its code chooses to do so. Static import rules, lint rules, bundle audits, and
-deployment CSP are guardrails, not a security boundary. Truly untrusted code
-requires an iframe, worker, or isolated realm and a separate plugin
-specification with its own threat model. The host owns authorization,
-transport, origin policy, and sensitive configuration at the supported API
-boundary.
+Compiled surfaces execute in the same JavaScript realm and are trusted product
+code. Type boundaries, import audits, Content Security Policy, and host adapters
+improve maintainability and reduce accidental authority; they are not a sandbox.
+Untrusted browser code requires a separate security design and specification.
 
-## 5. Surface definition and registration contract
+## 5. Requirements
 
-The registry SHALL use a typed registration that binds a definition, its
-context factory, and its loaded controller together. The exact TypeScript
-spelling MAY differ, but the generic binding is normative:
+### Requirement: Bind each definition to its typed context and component
+
+The assembly SHALL register one value that binds the definition, context
+factory, and lazy component. The exact TypeScript spelling MAY differ, but the
+following semantics are normative:
 
 ```ts
-type SurfaceScope = "selected" | "all";
-type SurfaceSlot = "sidebar" | "stage" | "settings";
-type SurfaceContextVersion = { major: 1; minor: number };
-type CapabilityName = string & {};
-
-type CapabilityRequirement = {
-  name: CapabilityName;
-  target: "global" | "host" | "workspace" | "pane";
-};
-
 type SurfaceDefinition = {
   id: string;
   label: string;
   route: "/" | `/${string}`;
   semanticIcon: string;
-  contextVersion: SurfaceContextVersion;
-  supportedScopes: readonly SurfaceScope[];
-  minimumUsableHosts: number;
-  scopeFallbacks: readonly {
-    from: SurfaceScope;
-    to: SurfaceScope;
-    when: "no-usable-hosts" | "partial-host-failure";
-  }[];
-  slots: Readonly<{
-    stage: { mount: "active-route" };
-    sidebar?: { mount: "active-route" | "persistent" };
-    settings?: { mount: "on-demand" };
-  }>;
-  capabilities: {
-    required: readonly CapabilityRequirement[];
-    optional: readonly CapabilityRequirement[];
-    perTarget?: Readonly<{
-      global?: { required: readonly CapabilityName[]; optional: readonly CapabilityName[] };
-      host?: { required: readonly CapabilityName[]; optional: readonly CapabilityName[] };
-      workspace?: { required: readonly CapabilityName[]; optional: readonly CapabilityName[] };
-      pane?: { required: readonly CapabilityName[]; optional: readonly CapabilityName[] };
-    }>;
-  };
-  optionalInputs: readonly {
-    id: string;
-    capabilities: readonly CapabilityName[];
-    failure: "degraded" | "hidden";
-    retry: "automatic" | "manual" | "capability-generation";
-    recovery: "return-to-ready" | "remain-degraded-until-refresh";
-  }[];
+  requiredBridgeFeatures: readonly string[];
 };
 
 type SurfaceRegistration<Context> = {
   definition: SurfaceDefinition;
-  createContext: (hostServices: SurfaceHostServicesFor<SurfaceDefinition>) => Context;
+  createContext: (host: SurfaceHostV1) => Context;
   load: () => Promise<{
-    createController: (context: Context) => SurfaceController<Context>;
+    default: React.ComponentType<{ context: Context }>;
   }>;
+  dispose: (context: Context) => void;
+};
+```
+
+The registration generic MUST remain bound internally; an Office component
+MUST NOT receive a Spaces context through an `unknown`, `any`, or unpaired cast.
+The host MAY erase the generic only after it stores the bound registration as
+one opaque value.
+
+The host SHALL create one abort controller for each admitted surface
+generation and expose its signal through `SurfaceHostV1.lifecycle`. It SHALL
+complete `load` before invoking `createContext`, then invoke `createContext`
+exactly once for that generation. A load failure therefore creates no context.
+Every registration SHALL provide `dispose`; a context with no non-abortable
+resources MAY use a no-op disposer. Subscriptions and asynchronous work MUST
+observe the generation abort signal.
+
+On navigation away, admission loss, render failure, explicit retry, or assembly
+teardown, the host SHALL abort the generation and, if a context was created,
+invoke its disposer exactly once. Retry SHALL start only after that cleanup and
+SHALL use a fresh abort signal, loaded component generation, and context. If
+`createContext` throws before returning a context, the host SHALL abort the
+generation and SHALL NOT call the disposer with a partial value. The context
+factory MUST provide strong exception safety: before it propagates an error, it
+MUST release every resource or subscription acquired during that invocation.
+It MUST NOT acquire a non-abortable resource unless a local cleanup guard is
+already able to release it if a later construction step fails. The host abort
+signal remains a backstop for abort-aware work; it does not transfer ownership
+of a partially constructed context to the host.
+
+#### Scenario: A registration is mismatched
+
+- **GIVEN** an assembly attempts to pair an Office factory with another
+  surface's loaded component
+- **WHEN** type checking or registration validation runs
+- **THEN** the assembly fails before the component can mount.
+
+#### Scenario: A mounted surface fails and retries
+
+- **GIVEN** an admitted surface created subscriptions and then fails while
+  rendering
+- **WHEN** the host contains the failure and the user retries
+- **THEN** the old generation is aborted and disposed exactly once before a
+  fresh generation is loaded, and no old subscription remains active.
+
+#### Scenario: Context creation throws after partial acquisition
+
+- **GIVEN** a synthetic context factory acquires a tracked non-abortable
+  resource and a later construction step throws
+- **WHEN** the error leaves `createContext`
+- **THEN** the factory releases the tracked resource before propagating, the
+  host aborts the generation without calling `dispose` on a partial value, and
+  a later retry observes no resource from the failed generation.
+
+### Requirement: Keep the registry descriptive and the host authoritative
+
+Surface metadata SHALL contain only identity, navigation label, exact route,
+semantic icon, bridge-feature requirements, and the bound factories. It MUST
+NOT own bridge profiles, runtime state, provider descriptors, credentials,
+terminal sessions, polling, or product release metadata.
+
+Surface IDs SHALL match `[a-z][a-z0-9-]*`. Routes SHALL be exact absolute paths.
+The assembly SHALL reject duplicate IDs and duplicate normalized routes. The
+host MAY preserve the current single trailing-slash normalization; broader
+route grammar is deferred.
+
+#### Scenario: Two surfaces claim `/world`
+
+- **GIVEN** two compiled registrations normalize to the same route
+- **WHEN** the product assembly is created
+- **THEN** it fails with a bounded diagnostic before rendering.
+
+### Requirement: Adapt existing host services without duplicating them
+
+`SurfaceHostV1` SHALL be a thin adapter over the current Herdr Web application
+services. It SHALL expose only the operations required by Spaces and Office:
+
+```text
+identity
+  product ID, surface ID, assembly revision
+navigation
+  current route, navigate, return to Spaces
+runtime
+  read-only enabled/selected runtime views and bounded snapshot subscriptions
+commands
+  existing allow-listed semantic commands against qualified runtime targets
+terminal
+  existing admitted session descriptors and host-rendered terminal outlet
+lifecycle
+  abort signal and explicit subscription cleanup
+```
+
+The adapter MUST reuse the existing `BridgeManager` as the only owner of bridge
+profile persistence, enablement, selection, capability probing, and runtime URL
+construction. It MUST reuse the federated runtime/cache generation as the only
+browser snapshot lifecycle. It MUST NOT create a surface-local polling loop,
+bridge store, unqualified host ID, or second terminal connection manager.
+
+Read views and targets SHALL retain current host qualification so identical
+workspace, tab, pane, or agent IDs from different bridges cannot collide.
+
+#### Scenario: Two bridges contain the same pane ID
+
+- **GIVEN** both enabled runtimes report `pane-1`
+- **WHEN** Office requests a semantic terminal operation
+- **THEN** the host adapter routes it by the existing qualified bridge/runtime
+  identity and no surface-local lookup can select the other host.
+
+### Requirement: Keep commands and terminals host-owned
+
+A surface SHALL request current allow-listed semantic operations with validated,
+qualified targets. It MUST NOT receive raw bridge URLs, raw WebSockets, Herdr
+socket paths, credentials, provider configuration, arbitrary command strings,
+or a general `fetch` client through `SurfaceHostV1`.
+
+Terminal presentation SHALL reuse the generic terminal renderer and current
+session descriptor/admission logic. The host SHALL provide the component or
+outlet needed to render an admitted terminal. Spaces and Office MUST NOT
+implement separate attach, input, resize, reconnect, or generation behavior.
+
+The surface owns only which qualified target it wants open, surface-local
+window/layout state, and when it requests close. Host lifecycle rules remain
+authoritative for the underlying terminal session.
+
+#### Scenario: Office opens an agent conversation
+
+- **GIVEN** an Office agent maps to an admitted qualified pane
+- **WHEN** the surface requests a conversation terminal
+- **THEN** the existing host terminal path attaches and renders it, and Office
+  never constructs a terminal WebSocket URL.
+
+### Requirement: Compose products outside generic core source
+
+The generic registry/factory SHALL register Spaces only. A downstream assembly
+module SHALL import the generic registrations and add Office. Generic
+`App.tsx`, registry source, and the generic entry MUST NOT statically or
+dynamically import `world`, Office assets, observability adapters, or World
+assembly modules.
+
+Product selection SHALL occur through explicit build entries or equivalent
+compile-time configuration whose dependency graph is visible to the build
+audit. It MUST NOT depend on runtime filesystem scanning or remote module URLs.
+
+The assembly MAY also supply the single optional product-settings contribution
+defined below. It is part of the same compile-time dependency graph.
+
+#### Scenario: The generic app is built
+
+- **GIVEN** the generic assembly entry is selected
+- **WHEN** Vite resolves and emits the production graph
+- **THEN** it contains Spaces and the shell but no World module, Office asset,
+  World contract, or provider implementation.
+
+### Requirement: Preserve Office settings through one assembly seam
+
+The application assembly SHALL have one optional product-settings contribution
+with these semantics:
+
+```ts
+type ProductSettingsContribution<Context> = {
+  id: string;
+  label: string;
+  createContext: (host: SurfaceHostV1) => Context;
+  load: () => Promise<{
+    default: React.ComponentType<{
+      context: Context;
+      onClose: () => void;
+    }>;
+  }>;
+  dispose: (context: Context) => void;
 };
 
-type SurfaceController<Context> = {
-  stage: SurfaceComponent<Context>;
-  sidebar?: SurfaceComponent<Context>;
-  settings?: SurfaceComponent<Context>;
-  dispose: () => void;
+type ProductAssembly = {
+  surfaces: readonly OpaqueSurfaceRegistration[];
+  productSettings?: OpaqueProductSettingsContribution;
 };
-
-type SurfaceComponent<Context> = (props: {
-  context: Context;
-  slot: SurfaceSlot;
-}) => ReactNode;
 ```
 
-`SurfaceHostServicesFor<Definition>` is an admission-scoped least-authority
-view derived from `SurfaceHostServicesV1`: it always includes identity,
-navigation, layout, lifecycle, and settings, and includes terminal, snapshot,
-or command adapters only when the registration declares the corresponding
-capability. The host may erase this mapped type internally after validation,
-but the context factory must never receive the unrestricted root service object
-as its public registration contract.
+The generic assembly SHALL omit `productSettings`. The World assembly SHALL
+supply one contribution labelled Office. The generic settings shell and
+`BackendSettingsDialog` SHALL render its label and trigger when it is present
+but MUST NOT import a World module. Activating the trigger SHALL load the
+World-owned settings module before creating its context, then create the
+context exactly once. That module owns Office configuration, validation, and
+synchronization. The host SHALL give the settings generation its own abort
+signal and apply the same required-disposer ordering as a surface generation.
+Closing the dialog, leaving the assembly, load/render failure, or retry SHALL
+abort and, if context creation completed, dispose its generation exactly once.
+The product-settings `createContext` factory MUST also provide the same strong
+exception safety as a surface factory: if it throws before returning, it MUST
+release every resource or subscription acquired during that invocation and
+MUST NOT acquire a non-abortable resource unless a local cleanup guard can
+release it after a later construction failure. The host SHALL abort the
+settings generation and SHALL NOT call `dispose` with a partial value.
 
-The `load` function is called once per admitted surface controller, not once
-per slot. The controller owns one context/store and returns explicit slot views;
-the host never reuses one component function as an implicit multi-slot mount.
-The host mounts only the views declared by the slot policies. Slot views share
-the controller's context and lifecycle, so Office's stage, sidebar, and
-settings contributions cannot accidentally create unrelated Office states.
+This is a single compile-time product integration point, not a runtime settings
+registry, arbitrary collection of sections, or public surface API. Adding more
+than one product contribution or allowing individual surfaces/plugins to
+register settings requires a spec extension.
 
-The registration generic MUST remain bound through `createContext` and
-`createController`: a registration for Office cannot be paired with a Spaces
-context by the assembly. An internal validated registry MAY erase the generic
-type after registration, but it MUST retain the bound factory/controller pair
-as one value and MUST NOT expose an untyped context cast to callers.
+#### Scenario: Office settings open from the global settings path
 
-The definition MUST explicitly declare required capabilities, optional
-capabilities, supported scopes, fallbacks, per-target requirements, and
-optional-input recovery. `minimumUsableHosts` is normally `1`; a surface that
-requires more hosts MUST say so. `supportedScopes: ["selected", "all"]` means
-the surface can operate in either scope, not that two hosts are required.
+- **GIVEN** the World assembly is active and the user opens global settings
+  from Spaces or Office
+- **WHEN** the user activates the Office entry
+- **THEN** the World settings dialog is lazy-loaded through the assembly,
+  existing settings and synchronization behavior remain available, and the
+  generic settings code has no World import.
 
-Every `optionalInputs[].capabilities` entry MUST be declared in the
-registration's optional capability set. An optional input has one host-owned
-health record with bounded `available`, `unavailable`, `degraded`, and
-`recovering` states, a last capability generation, and the declared retry and
-recovery policy. The surface receives the state; it never receives provider
-connection details.
+#### Scenario: Generic Web opens settings
 
-Route and surface IDs are unique within an assembly. Capabilities are validated
-against the assembled catalogue described in Section 8, not a hard-coded core
-union. A definition cannot request raw bridge clients, provider configuration,
-or arbitrary browser storage through the host API.
+- **GIVEN** the generic assembly is active
+- **WHEN** the user opens global settings
+- **THEN** no Office entry or World chunk is present and ordinary bridge
+  settings remain available.
 
-### 5.1 Context compatibility
+#### Scenario: Settings context creation throws after partial acquisition
 
-`contextVersion` is part of the registration contract. A host with context
-version `H` MAY load a registration requiring version `R` only when:
+- **GIVEN** the Office settings context factory acquires a tracked
+  non-abortable configuration or synchronization resource and a later
+  construction step throws
+- **WHEN** the error leaves the settings `createContext`
+- **THEN** the factory releases the tracked resource before propagating, the
+  host aborts the settings generation without calling `dispose` on a partial
+  value, and a later retry observes no residue from the failed generation.
 
-- `H.major === R.major`; and
-- `H.minor >= R.minor` under the declared additive-minor compatibility rule.
+### Requirement: Move World orchestration behind the World registration
 
-A major mismatch is an assembly validation error. A minor mismatch below the
-registration minimum produces `unavailable`, not a partially initialized
-surface. Any breaking context change requires a new major version and a new
-registration adapter.
+World-specific projection, observability, completion, settings, selection,
+handoff, conversation, and persistence orchestration SHALL move from generic
+`App.tsx` into the World registration, its typed context/controller, or
+World-owned modules. The generic host MAY retain reusable services generalized
+from existing behavior, but those services MUST be named and tested in generic
+Herdr terms and MUST have at least Spaces or shell use independent of Office.
 
-## 6. Host context and terminal boundary
+The migration SHALL preserve current Office behavior before adding new views.
+Large file movement without a tested ownership change does not satisfy this
+requirement.
 
-The stable host context SHALL be divided into read-only views and admitted
-commands:
+#### Scenario: Office is removed from an assembly
 
-```text
-SurfaceHostServicesV1
-  identity: product, surface, scope, context version, assembly revision
-  navigation: current route, navigate, replace, go back
-  layout: assigned slot, compact mode, sidebar visibility, viewport class
-  runtime: bounded host summaries, capability snapshots, connection state
-  herdr: bounded snapshot DTOs and allow-listed semantic commands
-  terminal: opaque targets, open/focus/close, host-owned TerminalOutlet
-  lifecycle: abort signal, capability-generation, mount/unmount notification
-  settings: discover sections and request opening an owned settings section
-```
+- **GIVEN** the World registration is not selected
+- **WHEN** the generic application type-checks and builds
+- **THEN** no unresolved World context, settings, conversation, projection, or
+  persistence dependency remains in `App.tsx` or its emitted graph.
 
-Rules:
+### Requirement: Use existing bridge capabilities for admission
 
-1. `runtime` reads are immutable snapshots or subscription APIs with explicit
-   unsubscribe behavior. A surface does not own the global polling loop.
-2. `herdr` commands are semantic, allow-listed operations such as selecting a
-   workspace or requesting a supported launch flow. They carry validated input
-   and return bounded results. They are not a general command channel.
-3. `settings` exposes metadata for inactive registered sections without
-   mounting their UI. The selected settings section is loaded on demand and
-   rendered inside the host-owned settings dialog. A surface owns its fields
-   and validation, but cannot replace the generic settings shell.
-4. The host owns navigation history, route synchronization, host selection,
-   bridge lifecycle, and terminal-session lifetime.
-5. A surface owns only presentation state, projection-local interaction state,
-   and cleanup of resources it created through the context.
+A definition MAY list the small set of existing bridge features required for
+its basic operation. The host SHALL evaluate those names against each current
+`BridgeRuntime.capabilities` result using existing compatibility logic. It MUST
+NOT introduce a second capability endpoint, catalogue owner, provider health
+registry, or context-version negotiation system.
 
-### 6.1 Bounded snapshot DTOs
+At least one admitted enabled runtime is sufficient for the initial Spaces and
+Office surfaces. Unavailable runtimes remain represented through existing
+bounded host health; one offline configured runtime MUST NOT block other
+admitted runtimes. Optional observability health remains World-owned and does
+not become a generic bridge capability unless a future bridge behavior actually
+depends on it.
 
-The host SHALL expose a versioned, bounded `SurfaceSnapshotV1` DTO rather than
-raw Herdr protocol objects:
+#### Scenario: One of several runtimes is incompatible
 
-```text
-SurfaceSnapshotV1
-  hosts[]: { hostId, displayName, availability, capabilityNames }
-  workspaces[]: { hostId, workspaceId, displayName, agentCount }
-  panes[]: { hostId, workspaceId, paneId, displayName?, state }
-  agents[]: { hostId, workspaceId?, agentId, displayName, status, updatedAt }
-  counts: bounded aggregate counts
-  generatedAt
-```
+- **GIVEN** Office requires snapshot support and one enabled bridge lacks it
+- **WHEN** surface admission runs
+- **THEN** Office remains usable for compatible runtimes and reports the
+  existing bounded unavailable-host state without creating a new surface
+  lifecycle protocol.
 
-Every collection and display string has a documented maximum. IDs are opaque
-host-scoped identifiers and display names are bounded strings. A pane
-`displayName` MAY be exposed to Spaces after host sanitization, but it is not a
-command, path, prompt, or output field. The DTO MUST NOT contain terminal
-output, prompts, command lines, environment variables, filesystem paths,
-credentials, backend URLs, note bodies, raw telemetry labels, or arbitrary
-provider responses. Notes, if later exposed, are summary/count DTOs only and
-require a separate capability.
+### Requirement: Contain loading and render failures locally
 
-Surface code does not receive a WebSocket, fetch client, socket path, runtime
-URL, browser storage handle, DOM global, or generic `unknown`/`any` escape hatch
-through this context. The same-realm security limitation in Section 4 still
-applies to code that bypasses these APIs directly.
+The host SHALL lazy-load only the active surface. A definition that cannot be
+admitted SHALL show a host-owned unavailable state without invoking its context
+factory. Load or render failures SHALL be contained by the active surface error
+boundary, keep navigation to Spaces usable, and MUST NOT stop global runtime
+observation or close unrelated terminal sessions.
 
-### 6.2 Host-owned terminal outlet
+One explicit retry SHALL follow the abort/dispose ordering defined above before
+creating a fresh surface generation. No broader
+registered/loading/ready/degraded state machine is required by this slice.
 
-Surfaces MUST use semantic terminal operations and a host-owned outlet:
+#### Scenario: Office fails during lazy load
 
-```text
-TerminalTarget
-  existing-pane: hostId, workspaceId, paneId
-  agent-seat: hostId, workspaceId, agentId
-  launch: hostId, workspaceId?, launchIntentId
+- **GIVEN** the World chunk throws while loading
+- **WHEN** the error boundary handles the failure
+- **THEN** the shell and Spaces navigation remain usable, runtime observation
+  continues, and retry does not duplicate Office subscriptions.
 
-terminal.open(target, options) → opaque TerminalSessionRef
-terminal.focus(ref)
-terminal.close(ref)
-terminal.outlet(ref, { mode: "inline" | "full" }) → host-owned TerminalOutlet
-```
+### Requirement: Prove both assemblies and their boundaries
 
-The target contains no WebSocket URL, bridge URL, socket path, credentials, or
-raw command string. Launch intents are validated and created by the host's
-allow-listed command layer. The host resolves transport, attaches sessions,
-renders the terminal outlet, and retains a session across surface rerenders or
-route changes until the surface explicitly closes it or host-level lifecycle
-policy retires it. A route change MUST NOT close unrelated sessions.
-
-Spaces uses the outlet for its terminal panes. Office uses the same outlet for
-conversation terminals and full-space handoff. `App.tsx` may adapt existing
-runtime state into `SurfaceHostServicesV1` during migration, but it MUST NOT
-remain the long-term owner of projection-specific terminal orchestration.
-
-## 7. Slots, routes, and ownership
-
-The host owns the persistent shell and declares the available outlets:
-
-```text
-app shell
-  sidebar slot   ← optional surface navigation/detail contribution
-  stage slot     ← active surface primary content
-  settings slot  ← host-owned settings dialog/section
-```
-
-A surface may render in one or more declared slots, but it does not create a
-second app shell, global sidebar, route history, or bridge lifecycle. The
-active route resolves to one surface before loading its component.
-
-Slot lifecycle is explicit:
-
-- `stage` mounts only for the active route;
-- `sidebar` mounts for the active route unless its registration explicitly
-  declares `persistent` and the host admits that persistent contribution; and
-- `settings` is represented in the host settings catalogue while inactive and
-  mounts only when the user opens that section.
-
-Route admission SHALL reject duplicate or shadowing routes at assembly time.
-Routes are exact canonical paths, not patterns. A route is `/` or one to four
-lower-case ASCII slug segments, each matching `[a-z0-9]+(?:-[a-z0-9]+)*`, with
-an overall maximum of 64 characters. Query strings and fragments do not affect
-resolution. The host normalizes one or more trailing slashes (except root),
-rejects control characters, backslashes, malformed percent escapes, encoded
-slashes, dot segments, and non-canonical paths, then performs an exact match.
-An encoded route is never decoded into a second route. “Shadowing” means two
-definitions resolve to the same canonical path or a future pattern would match
-another definition; patterns are not allowed by this specification.
-
-Unknown routes use the host's existing fallback. A surface unavailable because
-its route, scope, host minimum, context version, or required capability is not
-admitted MUST produce a host-owned unavailable state and MUST NOT partially
-mount.
-
-Spaces SHALL be represented by the same real surface outlet as downstream
-projections. The host MAY keep core navigation controls outside the outlet,
-but `App.tsx` MUST NOT contain a projection-specific branch that constructs
-World implementation state.
-
-## 8. Layered capabilities, assembly, and registration
-
-The core package SHALL export a core-only capability catalogue and registry/
-factory containing only core definitions. Downstream packages MAY declare
-namespaced capabilities and providers alongside their surface registrations.
-The assembly SHALL compose and validate the complete catalogue explicitly:
-
-```text
-core registry                 downstream assembly
-  Spaces definition      +      Office definition
-  core routes            +      World routes/settings
-  core capabilities      +      World capability declarations/providers
-                                  |
-                                  v
-                         assembled Herdr World registry
-```
-
-Capability ownership is layered:
-
-- Herdr Web owns the core catalogue, including capability names, target types,
-  bounds, and generic semantic command rules.
-- A downstream assembly owns namespaced World capability declarations such as
-  `world.office.*` and selects their adapters/providers.
-- Capability providers/adapters are registered with the surface or extension
-  that consumes them; they do not become core capabilities merely by existing.
-- Validation checks required and optional requirements against the assembled
-  catalogue and the per-target runtime admission snapshot, not only a
-  hard-coded core union.
-
-The assembly API SHALL:
-
-- accept definitions from declared trusted packages only;
-- accept and validate core and namespaced capability declarations/providers;
-- validate IDs, routes, slots, scopes, context versions, capability policies,
-  and host minimums before serving;
-- produce a manifest of selected component revisions for packaging;
-- keep downstream definitions out of the core registry source and core-only
-  bundle; and
-- fail closed on duplicate IDs, duplicate routes, unknown capabilities,
-  invalid slot declarations, or an unbound context/controller pair.
-
-No registry API in this specification promises hot installation, remote
-discovery, arbitrary module URLs, code revocation, or sandboxing.
-
-## 9. Scope, per-target admission, and lifecycle states
-
-`supportedScopes` describes the views a surface can render, not a minimum
-number of hosts. In `selected` scope the host admits the selected host and its
-targets. In `all` scope the host evaluates each configured host independently
-and supplies the surface with usable-host and unavailable-host results. A
-surface with both scopes remains usable with one host. The host MUST not block
-the surface solely because other configured hosts are offline.
-
-Admission evaluates, in order:
-
-1. canonical route and active slot policy;
-2. context major/minor compatibility;
-3. supported scope and declared fallback;
-4. global required capabilities;
-5. per-target required capabilities for each host/workspace/pane; and
-6. `minimumUsableHosts` (normally one).
-
-Optional capability failures do not fail admission. They create an optional
-input health record and may put a ready surface into `degraded` according to
-the input's declared policy. Required capability failure for every target
-produces `unavailable`; partial target failure produces a usable surface with
-bounded unavailable-target details when the minimum remains satisfied.
-
-The host evaluates admission before lazy loading:
-
-```text
-registered ──admission failure──────────────→ unavailable
-     │                                             │
-     └─admitted → loading → ready ────────────────┘
-                         │  │  ▲                  retry/re-admission
-                         │  └──┴─ optional failure/recovery
-                         └──────→ degraded
-loading ──load/mount failure────────────────→ error
-error ──explicit retry or new generation───→ loading
-ready/degraded ──required capability loss──→ unavailable
-```
-
-- `registered`: definition is known to the assembly but not active for the
-  current route/scope.
-- `admitted`: route, scope, context, host minimum, and required capabilities
-  pass; no component is necessarily loaded yet.
-- `loading`: the bound controller is loading or mounting.
-- `ready`: the controller is mounted and all required inputs are available.
-- `unavailable`: admission failed, or a later required capability/generation
-  change removed the minimum usable target.
-- `error`: controller loading or mounting failed; the slot boundary contains
-  the failure and retains navigation to core surfaces.
-- `degraded`: the surface remains usable while one or more optional inputs or
-  configured targets are unavailable.
-
-Each runtime capability snapshot has a monotonically changing
-`capabilityGeneration`. When it changes, the host re-evaluates admission and
-optional inputs. A recovery re-admits and recreates the context/controller when
-required; it does not reuse stale context. Manual retry does the same and
-resets the error boundary only for that surface generation. A surface error is
-not cleared on every render.
-
-Every non-ready state SHALL be local to the surface slots. It MUST NOT tear
-down core runtime polling, close unrelated terminals, or remove other mounted
-surfaces. Optional input recovery returns to `ready` only when the input's
-policy says `return-to-ready`; otherwise the surface remains visibly degraded
-until a refresh.
-
-## 10. Capability categories and target policy
-
-Capabilities SHALL be classified as read, command, or lifecycle capabilities.
-Examples include:
-
-```text
-read.snapshot
-read.host-roster
-command.select-workspace
-command.launch-shell
-lifecycle.surface-events
-world.office.observability
-```
-
-The assembled catalogue validates names, target types, versions, bounds, and
-owners. A capability is not authentication and does not grant mutation
-authority. A command is still subject to the host's operation-level admission
-and target validation.
-
-The per-target policy is evaluated independently for each host, workspace, or
-pane. The result contains only bounded counts and opaque target IDs, for
-example `usableHosts`, `unavailableHosts`, and `missingCapabilityNames` with
-fixed collection limits. It MUST NOT expose provider URLs, credentials, raw
-backend errors, or arbitrary descriptor data.
-
-Capability absence is a deterministic admission result with an accessible
-explanation and a route back to an admitted core surface.
-
-## 11. Core-only and dependency-direction proof
-
-The implementation SHALL add repeatable checks that prove:
-
-- core registry source does not import `web/src/world`, provider adapters, or
-  Office assets;
-- a core-only build can render Spaces with no World modules present;
-- the assembled World build contains the World modules only through the
-  downstream assembly;
-- projections import host contracts and validated projections, never bridge
-  transport/provider modules directly; and
-- the final bundle/dependency graph agrees with the source-level audit.
-
-Keyword scans MAY remain as a fast check, but they are insufficient as the
-only proof. The acceptance check MUST inspect module dependencies or final
-bundle contents.
-
-The current repository has one Vite entry/build, so the implementation MUST
-make the two product assemblies mechanically explicit before claiming a
-core-only proof. It SHALL add these commands (or stable equivalent commands
-documented in `package.json`):
+The implementation SHALL add stable commands equivalent to:
 
 ```bash
 npm run build:web:core
@@ -512,111 +420,79 @@ npm run test:surface-composition
 npm run audit:surface-bundles
 ```
 
-`build:web:core` builds the core registry and Spaces without importing World,
-Office, observability provider, or World asset modules. `build:web:world`
-builds the downstream assembly. Both builds SHALL emit Vite manifest metadata
-to distinct output directories. `audit:surface-bundles` SHALL parse those
-manifests and the emitted module/chunk graph, fail on prohibited core imports
-or assets, and verify that World modules appear only in the World assembly.
-The audit output records the Vite version, entry, chunk names, module IDs,
-asset paths, and content hashes. The implementation summary SHALL include the
-exact command output and not substitute a source keyword scan.
+Both builds SHALL emit separate manifests or equivalent module graphs. The
+audit SHALL inspect resolved module IDs, chunks, assets, and hashes; it SHALL
+fail when generic output contains World source/assets/provider code or when
+World appears only because a generic module imported it. Source scans MAY be a
+fast preliminary check but are not acceptance evidence on their own.
 
-## 12. Acceptance scenarios
+#### Scenario: A generic helper imports Office accidentally
 
-### Scenario: Core-only Herdr Web build
+- **GIVEN** a shell module imports a World helper that is not visibly rendered
+- **WHEN** the bundle audit runs
+- **THEN** it fails because the resolved generic dependency graph contains a
+  prohibited World module.
 
-- **GIVEN** World/Office sources and provider adapters are disabled or absent
-- **WHEN** the core build and browser smoke test run
-- **THEN** the shell starts, Spaces is reachable, and the output contains no
-  World imports, Office assets, or provider adapter modules.
+### Requirement: Add generality only from demonstrated use
 
-### Scenario: Downstream Office assembly
+A second real compiled surface MAY propose new slots, route behavior, optional
+inputs, or host services through an extension to this specification. The
+proposal SHALL show that the requirement cannot be met by the minimal contract
+and SHALL add characterization from both consumers.
 
-- **GIVEN** the Herdr World assembly selects Office
-- **WHEN** the assembled registry starts
-- **THEN** Office is admitted through the typed host context and its component
-  revision is recorded in the assembly manifest.
+The initial implementation MUST NOT add context-version negotiation,
+capability catalogues, settings registries, arbitrary slot controllers, or
+per-target policy DSLs solely for hypothetical Graph, City, or third-party
+plugins.
 
-### Scenario: Missing optional provider
+#### Scenario: Graph needs a persistent sidebar contribution
 
-- **GIVEN** Office is admitted but its optional observability provider is
-  unavailable
-- **WHEN** the Office surface mounts
-- **THEN** Office remains usable with a local degraded state and Spaces,
-  navigation, and terminal sessions remain unaffected.
+- **GIVEN** Graph is a concrete reviewed surface and the stage-only contract is
+  insufficient
+- **WHEN** its design is proposed
+- **THEN** a spec extension defines and tests the smallest shared slot behavior
+  using both Graph and an existing surface before core accepts it.
 
-### Scenario: Surface load failure
+## 6. Privacy and security
 
-- **GIVEN** an admitted surface fails while loading or mounting
-- **WHEN** the error boundary handles it
-- **THEN** only that surface slot reports the failure, core navigation remains
-  usable, and no unrelated terminal or bridge session is closed.
+- Surface runtime views MUST exclude terminal output, prompts, environment
+  variables, filesystem paths, credentials, backend URLs, and raw provider
+  responses unless a separately approved feature explicitly requires bounded
+  data.
+- IDs remain opaque and bridge-qualified; display labels are bounded and are
+  never treated as commands or paths.
+- The host adapter does not make same-realm surface code untrusted. CSP and
+  dependency review remain required release controls.
+- Surface errors and diagnostic messages MUST be bounded and MUST NOT echo raw
+  provider, transport, or terminal data.
 
-### Scenario: Invalid assembly
-
-- **GIVEN** two selected definitions share an ID or route, or request an
-  unknown capability
-- **WHEN** the assembly is validated
-- **THEN** startup/build fails with a bounded diagnostic before the invalid
-  surface can mount.
-
-### Scenario: One host satisfies a multi-scope surface
-
-- **GIVEN** a surface declares `supportedScopes: ["selected", "all"]` and
-  `minimumUsableHosts: 1`
-- **WHEN** the runtime has one usable host, or several configured hosts with
-  some unavailable
-- **THEN** the surface mounts with the usable host(s), reports bounded
-  unavailable-host state, and does not require two hosts or fail globally.
-
-### Scenario: Heterogeneous synthetic surface
-
-- **GIVEN** a synthetic test surface has a context different from both Spaces
-  and Office, supports only `selected`, requires one synthetic core capability,
-  and declares a different optional capability
-- **WHEN** the assembled registry validates and mounts it beside Spaces and
-  Office
-- **THEN** its context factory is paired only with its own controller, its
-  capability policy is evaluated independently, and its optional failure
-  produces local degraded state without changing either real surface.
-
-### Scenario: Office and Spaces use the same terminal boundary
-
-- **GIVEN** Spaces opens an existing pane and Office opens an agent conversation
-  through semantic targets
-- **WHEN** either surface changes route, rerenders, or requests focus
-- **THEN** the host-owned outlet retains the correct session, transport remains
-  outside the surface context, and unrelated terminal sessions remain open.
-
-### Scenario: Capability recovery
-
-- **GIVEN** an optional provider capability is unavailable at generation `G`
-- **WHEN** the host reports generation `G+1` with that capability available
-- **THEN** the host re-evaluates the input, transitions through `recovering`,
-  and returns the surface to `ready` or its declared recovered state without
-  duplicating the controller or closing terminals.
-
-## 13. Required evidence
+## 7. Acceptance evidence
 
 An implementation summary SHALL include:
 
-- the approved host-context and registry type definitions;
-- core and downstream assembly manifests;
-- unit tests for route, capability, slot, and duplicate validation;
-- lifecycle tests for loading, unavailable, degraded, and error states;
-- a core-only build and final-bundle/dependency audit;
-- a synthetic surface with a distinct context and capability policy;
-- a World assembly test proving Office is not in the core registry; and
-- evidence that existing terminal, Spaces, accessibility, and responsive
-  behavior remains intact.
+- final typed registration and `SurfaceHostV1` definitions;
+- generic and World assembly source and build entries;
+- generic and World settings-path tests, including opening Office settings from
+  Spaces without a generic World import;
+- route/ID/registration validation tests;
+- strong-exception-safety tests for both surface and product-settings context
+  factories in which construction releases a tracked non-abortable resource
+  before throwing;
+- characterization of existing Spaces and Office selection, handoff,
+  observability, settings, terminal, responsive, and accessibility behavior;
+- tests for one incompatible/offline bridge among multiple enabled bridges;
+- lazy-load failure, cleanup, and retry tests;
+- proof that `App.tsx` and generic registry have no World imports;
+- separate production manifests and final bundle/dependency audit output; and
+- the exact commands and tool versions used to produce the evidence.
 
-## 14. Deferred decisions
+## 8. Deferred decisions
 
-- Physical package directory names and package-manager workspace layout.
-- Whether a generic extension registry should be proposed upstream after this
-  trusted composition seam is proven.
-- Whether a future isolated plugin system is needed and which threat model it
-  must satisfy.
-- Public release versioning, artifact signing, notices, SBOM, and update
-  policy, which remain governed by the packaging/release specifications.
+- A multi-entry settings catalogue, per-surface settings registration, or
+  persistent sidebar slot beyond the single assembly seam above.
+- Context major/minor negotiation across independently versioned packages.
+- A formal capability catalogue beyond existing bridge capability fields.
+- Dynamic, isolated, or remotely installed browser extensions.
+- Graph, City, mobile-specific surfaces, and non-React consumers.
+- Packaging, licensing, release identity, and upstream proposal mechanics,
+  which are governed by Specs 004, 010, and later compatibility/release specs.

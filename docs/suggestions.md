@@ -71,20 +71,25 @@ of hidden requirements.
 
 ## Open suggestions
 
-### SUG-001 — Generic Herdr Web extension registry
+### SUG-001 — Upstream extension alignment and capability reuse
 
 - **Status:** promoted
 - **Scope:** `herdr-web`, `bridge`, `herdr-server`
-- **Value:** Allow future OTEL, Git, CI, and other extensions to advertise
-  capabilities and data without adding one-off bridge routes for every feature.
-- **Idea:** Define a generic extension discovery, snapshot, event, health, and
-  capability path that can initially be implemented downstream and later
-  proposed to Herdr or Herdr Web.
-- **Dependencies:** SUG-002; approved observability contract specification.
+- **Value:** Let future integrations reuse the correct Herdr plugin/API, Herdr
+  Web capability, compiled surface, or provider boundary without creating a
+  competing registry or duplicate source of truth.
+- **Idea:** Classify each extension before implementation, reuse Herdr's
+  canonical plugin/session APIs and Herdr Web's existing `/api/capabilities`,
+  and allow a downstream provider contract only for a documented remaining
+  semantic or historical-data gap.
+- **Dependencies:** SUG-002 and the approved
+  [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md).
 - **Owner:** Open
 - **Added:** 2026-08-06
-- **Related:** [`010-generic-extension-registry-spec.md`](specs/010-generic-extension-registry-spec.md)
-- **Dependencies:** [`002-herdr-observability-extension-contract-spec.md`](specs/002-herdr-observability-extension-contract-spec.md)
+- **Reassessed:** 2026-08-20. The earlier generic `/api/extensions` proposal was
+  withdrawn after the current upstream audit found overlapping authoritative
+  plugin discovery and browser capability mechanisms.
+- **Related:** [`010-upstream-extension-alignment-spec.md`](specs/010-upstream-extension-alignment-spec.md)
 
 ### SUG-002 — OTEL-backed Office observability boards
 
@@ -123,23 +128,28 @@ of hidden requirements.
   without requiring users to manually understand bridge origins, tunnels, and
   authentication boundaries.
 - **Idea:** Herdr Web already supports multiple independently qualified bridge
-  profiles and operator-managed SSH forwarding. Improve the onboarding and
-  packaging around that capability, and evaluate an authenticated connection
-  model or Herdr-provided auth when one exists. The browser should never manage
-  or persist SSH private keys; SSH, VPN, or an authenticated reverse proxy can
-  remain an operator responsibility unless an upstream contract provides a
-  safer supported alternative.
+  profiles and operator-managed SSH forwarding. Improve onboarding and
+  packaging around that capability without creating another profile store or
+  coordinator. For terminal-native remote mirroring, evaluate Herdr's public
+  session APIs and the `herdr-mirror` plugin before adding browser transport.
+  The browser should never manage or persist SSH private keys; SSH, VPN, or an
+  authenticated reverse proxy can remain an operator responsibility unless an
+  upstream contract provides a safer supported alternative.
 - **Dependencies:** Herdr authentication capabilities, host identity and
   discovery, secure transport choice, origin/CSP policy, failure isolation,
   per-host permissions, and a dedicated architecture spec.
 - **Owner:** Open
 - **Added:** 2026-08-06
 - **Related:** [Federation guidance](federation.md)
+- **Related upstream evidence:**
+  [`nikok6/herdr-mirror`](https://github.com/nikok6/herdr-mirror) and
+  [Herdr discussion #515](https://github.com/herdrdev/herdr/discussions/515)
 - **Current slice:** Direct browser federation remains the supported boundary.
   Settings now offers an explicit Enable all / Disable all action for saved
   bridge profiles, while probes and failures remain isolated per host. A
-  central authenticated coordinator remains deferred pending upstream auth,
-  discovery, and transport decisions.
+  central authenticated coordinator remains deferred and MUST have a concrete
+  auth/discovery gap beyond existing Web federation and public Herdr session
+  APIs before it is proposed.
 
 ### SUG-005 — Office provider and host health panel
 
@@ -215,13 +225,17 @@ of hidden requirements.
 ### SUG-010 — Contributor and extension development kit
 
 - **Status:** open
-- **Scope:** `devex`, `herdr-web`, `observability`
+- **Scope:** `devex`, `herdr-web`, `herdr-server`, `observability`
 - **Value:** Allow future contributors to add providers or Office surfaces
   without learning every internal implementation detail.
-- **Idea:** Provide fixtures, contract examples, local mock providers, test
-  harnesses, extension authoring guidance, and a small set of supported hooks.
-- **Dependencies:** Stable extension contract and evidence that repeated
-  extension work justifies a developer kit.
+- **Idea:** Point executable workflow authors to the upstream Herdr plugin
+  manifest, examples, CLI, socket API, and terminal session streams. Provide
+  World-local fixtures and harnesses only for compiled browser surfaces and
+  provider contracts, with a decision guide that prevents either from being
+  presented as a new plugin system.
+- **Dependencies:** Approved Specs 004, 010, and 011; evidence that at least two
+  independent World surfaces or provider integrations need the same authoring
+  hook before publishing a World-specific kit.
 - **Owner:** Open
 - **Added:** 2026-08-06
 
