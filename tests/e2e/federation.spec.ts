@@ -290,7 +290,7 @@ test("recovery re-handshakes capabilities before restoring controls", async ({
   await expect(page.getByRole("button", { name: "New space" })).toBeDisabled();
 
   await request.post("http://127.0.0.1:4173/__fixture/state", {
-    data: { hostId: "host-b", snapshotMode: "ready", terminalProtocol: 18 },
+    data: { hostId: "host-b", snapshotMode: "ready", terminalProtocol: 19 },
   });
   await page.getByRole("button", { name: "Refresh" }).click();
 

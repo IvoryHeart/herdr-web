@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPAT="$ROOT/vendor/herdr-compat"
-EXPECTED_HERDR_COMMIT="346411fa21afd297f5ed3b3fa56f9e3fbf7654b7"
+EXPECTED_HERDR_COMMIT="9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c"
+EXPECTED_HERDR_RELEASE="v0.8.2"
 
 if ! command -v rg >/dev/null; then
   echo "ripgrep (rg) is required for vendor checks" >&2
@@ -12,6 +13,7 @@ fi
 
 required=(
   "$COMPAT/Cargo.toml"
+  "$COMPAT/VENDOR-MANIFEST.toml"
   "$COMPAT/src/lib.rs"
   "$COMPAT/src/api/client.rs"
   "$COMPAT/src/api/status.rs"
@@ -59,10 +61,29 @@ if rg -n '#\[path[[:space:]]*=' "$ROOT/bridge" "$COMPAT" >/dev/null; then
 fi
 
 if rg -n '\bcustom_status\b' "$COMPAT" >/dev/null; then
-  echo "obsolete custom_status fields are not allowed in the Herdr 0.8.0 compatibility copy" >&2
+  echo "obsolete custom_status fields are not allowed in the Herdr 0.8.2 compatibility copy" >&2
   rg -n '\bcustom_status\b' "$COMPAT" >&2
   exit 1
 fi
+
+verify_manifest_hashes() {
+  while IFS='|' read -r destination expected_hash; do
+    [[ -n "$destination" ]] || continue
+    if [[ ! -f "$COMPAT/$destination" ]]; then
+      echo "manifest destination is missing: $destination" >&2
+      exit 1
+    fi
+    actual_hash="$(sha256sum "$COMPAT/$destination" | awk '{print $1}')"
+    if [[ "$actual_hash" != "$expected_hash" ]]; then
+      echo "manifest hash mismatch for $destination" >&2
+      echo "expected: $expected_hash" >&2
+      echo "found:    $actual_hash" >&2
+      exit 1
+    fi
+  done < <(awk -F'"' '/^destination = / { destination = $2 } /^destination_sha256 = / { print destination "|" $2 }' "$COMPAT/VENDOR-MANIFEST.toml")
+}
+
+verify_manifest_hashes
 
 unexpected_path_deps="$(
   rg -n '(^|[[:space:]{,])path[[:space:]]*=' "$ROOT/bridge/Cargo.toml" "$COMPAT/Cargo.toml" \
@@ -84,13 +105,13 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
 
   upstream_commit="$(git -C "$HERDR_SRC" rev-parse HEAD 2>/dev/null || true)"
   if [[ "$upstream_commit" != "$EXPECTED_HERDR_COMMIT" ]]; then
-    echo "HERDR_SRC must be a Herdr v0.8.0 checkout at $EXPECTED_HERDR_COMMIT" >&2
+    echo "HERDR_SRC must be a Herdr v0.8.2 checkout at $EXPECTED_HERDR_COMMIT" >&2
     echo "found: ${upstream_commit:-not a git checkout}" >&2
     exit 1
   fi
 
   if [[ -n "$(git -C "$HERDR_SRC" status --short)" ]]; then
-    echo "HERDR_SRC must be a clean Herdr v0.8.0 checkout" >&2
+    echo "HERDR_SRC must be a clean Herdr v0.8.2 checkout" >&2
     git -C "$HERDR_SRC" status --short >&2
     exit 1
   fi
@@ -106,12 +127,18 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
   }
 
   check_terminal_attach_protocol() {
-    if ! rg -q '^pub const PROTOCOL_VERSION: u32 = 19;' "$COMPAT/src/protocol/wire.rs"; then
-      echo "terminal attach compatibility copy must advertise Herdr protocol 19" >&2
+    if ! rg -q '^pub const PROTOCOL_VERSION: u32 = 20;' "$COMPAT/src/protocol/wire.rs"; then
+      echo "terminal attach compatibility copy must advertise Herdr protocol 20" >&2
       exit 1
     fi
-    if ! rg -q 'KittyKeyboardReportAll' "$COMPAT/src/protocol/wire.rs"; then
-      echo "terminal attach compatibility copy is missing the protocol-19 server message" >&2
+    for marker in AppDirectGraphics GraphicsTransmissionResult InputPixels GraphicsTransmissionStarted TerminalBell GraphicsFile GraphicsTransmissionRetired 'sgr_pixels: bool'; do
+      if ! rg -q "$marker" "$COMPAT/src/protocol/wire.rs"; then
+        echo "terminal attach compatibility copy is missing protocol-20 marker: $marker" >&2
+        exit 1
+      fi
+    done
+    if ! rg -q 'TerminalAttach' "$COMPAT/src/protocol/wire.rs"; then
+      echo "terminal attach compatibility copy is missing TerminalAttach" >&2
       exit 1
     fi
   }
@@ -150,11 +177,12 @@ if [[ -n "${HERDR_SRC:-}" ]]; then
     esac
     compare_exact "src/api/schema/$file_name" "src/api/schema/$file_name"
   done < <(find "$HERDR_SRC/src/api/schema" -maxdepth 1 -type f -name '*.rs' -print0)
+  compare_exact "src/protocol/wire.rs" "src/protocol/wire.rs"
   compare_popup_size
   check_terminal_attach_protocol
 
-  echo "Herdr v0.8.0 compatibility vendor layout and HERDR_SRC drift checks passed"
+  echo "Herdr $EXPECTED_HERDR_RELEASE compatibility vendor layout and HERDR_SRC drift checks passed"
 else
-  echo "Herdr v0.8.0 compatibility vendor layout looks clean"
-  echo "Set HERDR_SRC=/path/to/clean/herdr-v0.8.0 to compare exact upstream schema/wire copies"
+  echo "Herdr $EXPECTED_HERDR_RELEASE compatibility vendor layout and manifest hashes look clean"
+  echo "Set HERDR_SRC=/path/to/clean/herdr-v0.8.2 to compare exact upstream schema/wire copies"
 fi
