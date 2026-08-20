@@ -162,6 +162,10 @@ import {
 import type { BridgeConnectionState } from "./runtimeConnection";
 import { qualifiedRuntimeKey, qualifyRuntimeTarget } from "./runtimeIdentity";
 import { TerminalView } from "./TerminalView";
+import {
+  DEFAULT_TERMINAL_SCREEN_READER_TEXT,
+  parseTerminalScreenReaderText,
+} from "./terminalAccessibleText";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import type { TerminalSessionDescriptor } from "./terminalSessions";
 import { coreSurfaceRegistry } from "./surfaceRegistry";
@@ -603,6 +607,7 @@ type DisplayPrefs = {
   notesPanelOpen: boolean;
   sidebarOpen: boolean;
   terminalFontSizePx: number;
+  terminalScreenReaderText: boolean;
   terminalInputTransport: TerminalInputTransport;
   terminalInputBatchDelayMs: number;
   terminalOutputCoalesceMs: number;
@@ -666,6 +671,7 @@ function readDisplayPrefs(): DisplayPrefs {
     notesPanelOpen: false,
     sidebarOpen: true,
     terminalFontSizePx: DEFAULT_TERMINAL_FONT_SIZE_PX,
+    terminalScreenReaderText: DEFAULT_TERMINAL_SCREEN_READER_TEXT,
     terminalInputTransport: DEFAULT_TERMINAL_INPUT_TRANSPORT,
     terminalInputBatchDelayMs: DEFAULT_TERMINAL_INPUT_BATCH_DELAY_MS,
     terminalOutputCoalesceMs: DEFAULT_TERMINAL_OUTPUT_COALESCE_MS,
@@ -861,6 +867,10 @@ function parseDisplayPrefsValue(
       typeof parsed.notesPanelOpen === "boolean" ? parsed.notesPanelOpen : fallback.notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
+    terminalScreenReaderText: parseTerminalScreenReaderText(
+      parsed.terminalScreenReaderText,
+      fallback.terminalScreenReaderText,
+    ),
     terminalInputTransport: parseTerminalInputTransport(parsed.terminalInputTransport),
     terminalInputBatchDelayMs: parseTerminalInputBatchDelayMs(parsed.terminalInputBatchDelayMs),
     terminalOutputCoalesceMs: parseTerminalOutputCoalesceMs(
@@ -1365,6 +1375,9 @@ export function App() {
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
+  const [terminalScreenReaderText, setTerminalScreenReaderText] = useState(
+    initialPrefs.terminalScreenReaderText,
+  );
   const [terminalInputTransport, setTerminalInputTransport] = useState(
     initialPrefs.terminalInputTransport,
   );
@@ -1494,6 +1507,7 @@ export function App() {
       setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
       setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
+      setTerminalScreenReaderText(prefs.terminalScreenReaderText);
       setTerminalInputTransport(prefs.terminalInputTransport);
       setTerminalInputBatchDelayMs(prefs.terminalInputBatchDelayMs);
       setTerminalOutputCoalesceMs(prefs.terminalOutputCoalesceMs);
@@ -2719,6 +2733,7 @@ export function App() {
       notesPanelOpen,
       sidebarOpen,
       terminalFontSizePx,
+      terminalScreenReaderText,
       terminalInputTransport,
       terminalInputBatchDelayMs,
       terminalOutputCoalesceMs,
@@ -2754,6 +2769,7 @@ export function App() {
     notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx,
+    terminalScreenReaderText,
     terminalInputTransport,
     terminalInputBatchDelayMs,
     terminalOutputCoalesceMs,
@@ -5008,6 +5024,7 @@ export function App() {
             )
           }
           agentActivityTransitions={agentActivityTransitions}
+          terminalScreenReaderText={terminalScreenReaderText}
           touchInput={isTouchInput}
           terminalFontSizePx={terminalFontSizePx}
           mobileControlsScalePercent={mobileControlsScalePercent}
@@ -5036,6 +5053,7 @@ export function App() {
       terminalInputTransport,
       terminalOutputCoalesceMs,
       terminalFontSizePx,
+      terminalScreenReaderText,
       worldConversations,
     ],
   );
@@ -5595,6 +5613,7 @@ export function App() {
             focusToken={terminalFocusToken}
             touchInput={isTouchInput}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScreenReaderText={terminalScreenReaderText}
             mobileControlsScalePercent={mobileControlsScalePercent}
             mobileTapTarget={mobileTerminalTapTarget}
             mobileLongPressBehavior={mobileLongPressBehavior}
@@ -5626,6 +5645,7 @@ export function App() {
             scrollSensitivity={isTouchInput ? 2 : 0.4}
             mobileControls={isTouchInput}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScreenReaderText={terminalScreenReaderText}
             mobileControlsScalePercent={mobileControlsScalePercent}
             mobileTapTarget={mobileTerminalTapTarget}
             mobileLongPressBehavior={mobileLongPressBehavior}
@@ -5637,6 +5657,10 @@ export function App() {
             terminalOutputCoalesceMs={terminalOutputCoalesceMs}
             refitToken={refitToken}
             focusToken={terminalFocusToken}
+            accessibilityLabel={
+              selectedPane ? `Selected pane terminal: ${paneTitle(selectedPane)}` : "Terminal"
+            }
+            selected={Boolean(selectedPane)}
           />
         ) : (
           <div className="terminal-stage" aria-hidden="true" />
@@ -5872,6 +5896,8 @@ export function App() {
           onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
+          terminalScreenReaderText={terminalScreenReaderText}
+          onTerminalScreenReaderText={setTerminalScreenReaderText}
           terminalInputTransport={terminalInputTransport}
           onTerminalInputTransport={setTerminalInputTransport}
           terminalInputBatchDelayMs={terminalInputBatchDelayMs}
@@ -7020,6 +7046,7 @@ function SplitGrid({
   focusToken,
   touchInput,
   terminalFontSizePx,
+  terminalScreenReaderText,
   mobileControlsScalePercent,
   mobileTapTarget,
   mobileLongPressBehavior,
@@ -7043,6 +7070,7 @@ function SplitGrid({
   focusToken: number;
   touchInput: boolean;
   terminalFontSizePx: number;
+  terminalScreenReaderText: boolean;
   mobileControlsScalePercent: number;
   mobileTapTarget: MobileTerminalTapTarget;
   mobileLongPressBehavior: MobileLongPressBehavior;
@@ -7061,8 +7089,9 @@ function SplitGrid({
 }) {
   return (
     <div className="pane-grid" aria-label="Split panes">
-      {cells.map(({ pane, style }) => {
+      {cells.map(({ pane, style }, index) => {
         const selected = pane.pane_id === selectedPaneId;
+        const accessibilityLabel = `Pane ${index + 1} of ${cells.length} terminal: ${paneTitle(pane)}`;
         const terminalSession = terminalSessionDescriptor(
           runtime,
           pane,
@@ -7091,6 +7120,7 @@ function SplitGrid({
               scrollSensitivity={touchInput ? 2 : 0.4}
               mobileControls={selected && touchInput}
               terminalFontSizePx={terminalFontSizePx}
+              terminalScreenReaderText={terminalScreenReaderText}
               mobileControlsScalePercent={mobileControlsScalePercent}
               mobileTapTarget={mobileTapTarget}
               mobileLongPressBehavior={mobileLongPressBehavior}
@@ -7102,6 +7132,8 @@ function SplitGrid({
               terminalOutputCoalesceMs={terminalOutputCoalesceMs}
               refitToken={selected ? refitToken : 0}
               focusToken={selected ? focusToken : 0}
+              accessibilityLabel={accessibilityLabel}
+              selected={selected}
             />
           </div>
         );

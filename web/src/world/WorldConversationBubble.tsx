@@ -26,6 +26,7 @@ export function WorldConversationBubble({
   onOpenInSpaces,
   touchInput,
   terminalFontSizePx,
+  terminalScreenReaderText,
   mobileControlsScalePercent,
   mobileTapTarget,
   mobileLongPressBehavior,
@@ -47,6 +48,7 @@ export function WorldConversationBubble({
   onOpenInSpaces: () => void;
   touchInput: boolean;
   terminalFontSizePx: number;
+  terminalScreenReaderText: boolean;
   mobileControlsScalePercent: number;
   mobileTapTarget: MobileTerminalTapTarget;
   mobileLongPressBehavior: MobileLongPressBehavior;
@@ -154,6 +156,9 @@ export function WorldConversationBubble({
           scrollSensitivity={touchInput ? 2 : 0.4}
           mobileControls={touchInput}
           terminalFontSizePx={terminalFontSizePx}
+          terminalScreenReaderText={terminalScreenReaderText}
+          accessibilityLabel={`${targetLabel} terminal`}
+          selected
           mobileControlsScalePercent={mobileControlsScalePercent}
           mobileTapTarget={mobileTapTarget}
           mobileLongPressBehavior={mobileLongPressBehavior}
