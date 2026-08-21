@@ -135,6 +135,14 @@ test("desktop assembly audit excludes secrets, local state, workstation paths, a
     } finally {
       rmSync(pathArtifact, { recursive: true, force: true });
     }
+
+    const siblingArtifact = makeDesktopFixture("sibling-artifact");
+    try {
+      writeFileSync(join(siblingArtifact, "README.md"), "resolved from ../herdr-world-foundation\n");
+      fails(["--audit-artifact", siblingArtifact]);
+    } finally {
+      rmSync(siblingArtifact, { recursive: true, force: true });
+    }
   } finally {
     rmSync(artifact, { recursive: true, force: true });
   }

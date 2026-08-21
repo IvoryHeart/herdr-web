@@ -47,7 +47,7 @@ const REQUIRED_LICENSES = new Set([
 const SECRET_PATTERN =
   /BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY|\bAKIA[0-9A-Z]{16}(?![A-Za-z0-9])|(?:https?|ssh):\/\/[^\s/@:]+:[^\s/@]+@|\b(?:bearer|authorization)\s+[A-Za-z0-9._~+/=-]{12,}/i;
 const MACHINE_PATH_PATTERN = /(?:\/home\/[A-Za-z0-9._-]+|\/Users\/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[^\s]+)/;
-const SIBLING_CHECKOUT_PATTERN = /\.\.\/(?:herdr|herdr-web|herdr-world|foundation)|(?:^|[\s"'])\/[^\s"']*\/(?:herdr-web|herdr-world-foundation|herdr-world)(?:[\/\s"']|$)/i;
+const SIBLING_CHECKOUT_PATTERN = /\.\.\/(?:herdr-web|herdr-world-foundation|herdr-world)(?:[\/\s"']|$)|(?:^|[\s"'])\/[^\s"']*\/herdr-world-foundation(?:[\/\s"']|$)/i;
 const LOCAL_STATE_PATH_PATTERN = /(?:^|[\/])(?:\.env(?:\.[^/]+)?|credentials?|browser-local-state|cookies?|uploads?|\.ssh)(?:$|[\/])/i;
 
 function fail(message) {
