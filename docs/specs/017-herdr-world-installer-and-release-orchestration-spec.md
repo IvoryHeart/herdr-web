@@ -1,13 +1,13 @@
 # Herdr World installer and version-locked release orchestration
 
 - **Spec ID:** `017-herdr-world-installer-and-release-orchestration`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-21
 - **Revised:** 2026-08-21
 - **Owner:** Yaswanth Narvaneni / Herdr World
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Yaswanth Narvaneni
+- **Approved at:** 2026-08-21
 
 > This specification turns the separated repositories into one understandable
 > end-user installation while retaining exact component ownership and versions.

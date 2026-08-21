@@ -1,13 +1,13 @@
 # Herdr World two-repository extraction and live migration
 
 - **Spec ID:** `016-two-repository-extraction-and-live-migration`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-21
 - **Revised:** 2026-08-21
 - **Owner:** Yaswanth Narvaneni / Herdr World
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Yaswanth Narvaneni
+- **Approved at:** 2026-08-21
 
 > This specification performs the immediate physical separation selected in
 > Spec 004. It also defines a live-preview and cutover discipline so repository,

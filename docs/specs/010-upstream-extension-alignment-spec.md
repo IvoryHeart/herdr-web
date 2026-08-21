@@ -1,13 +1,13 @@
 # Herdr plugin, Foundation capability, provider, and World surface alignment
 
 - **Spec ID:** `010-upstream-extension-alignment`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-11
 - **Revised:** 2026-08-21
 - **Owner:** Herdr World Foundation / Herdr World
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Yaswanth Narvaneni
+- **Approved at:** 2026-08-21
 
 > This specification reuses Herdr's plugin/public API model and Foundation's
 > Herdr Web-derived browser runtime. It explicitly rejects a second generic

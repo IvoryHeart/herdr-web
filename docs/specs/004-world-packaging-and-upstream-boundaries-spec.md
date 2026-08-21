@@ -1,13 +1,13 @@
 # Herdr World identity, open-source policy, and upstream boundaries
 
 - **Spec ID:** `004-world-packaging-and-upstream-boundaries`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-10
 - **Revised:** 2026-08-21
 - **Owner:** Yaswanth Narvaneni
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Yaswanth Narvaneni
+- **Approved at:** 2026-08-21
 
 > This revision records the owner's naming, copyright, licensing, separation,
 > and velocity decisions. Repository extraction and live migration are defined

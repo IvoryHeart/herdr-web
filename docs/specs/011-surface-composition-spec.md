@@ -1,13 +1,13 @@
 # Versioned Foundation-to-World surface composition
 
 - **Spec ID:** `011-surface-composition`
-- **Status:** In review
+- **Status:** Approved
 - **Created:** 2026-08-12
 - **Revised:** 2026-08-21
 - **Owner:** Herdr World Foundation / Herdr World
 - **Reviewers:** IvoryHeart (repository owner)
-- **Approved by:** —
-- **Approved at:** —
+- **Approved by:** Yaswanth Narvaneni
+- **Approved at:** 2026-08-21
 
 ### Review reset 2026-08-21
 
