@@ -44,6 +44,16 @@ const REQUIRED_LICENSES = new Set([
   "OFL-1.1",
 ]);
 
+const EXPECTED_LICENSE_HASHES = new Map([
+  ["LICENSE-APACHE-2.0", "fa7bd82aad48aad62f52024fc668f4ad4c20008af177c33c5f8333916a1c446a"],
+  ["LICENSE", "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50"],
+  ["LICENSES/MIT-Herdr-Web.txt", "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50"],
+  ["LICENSES/Apache-2.0-Herdr.txt", "54ef03798b1a7b29808fbfe12bfad11ad9f0ecd96d111bdd21b8ed7629b59758"],
+  ["LICENSES/Apache-2.0-Claw-Empire.txt", "480ecbe5c33eee6b3bf1e98ca6bda6d03376ee4839de38bbbefa16b87d047c17"],
+  ["LICENSES/OFL-1.1.txt", "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f"],
+  ["web/public/world/LICENSE-PixiJS.txt", "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473"],
+]);
+
 const SECRET_PATTERN =
   /BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY|\bAKIA[0-9A-Z]{16}(?![A-Za-z0-9])|(?:https?|ssh):\/\/[^\s/@:]+:[^\s/@]+@|\b(?:bearer|authorization)\s+[A-Za-z0-9._~+/=-]{12,}/i;
 const MACHINE_PATH_PATTERN = /(?:\/home\/[A-Za-z0-9._-]+|\/Users\/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[^\s]+)/;
@@ -134,6 +144,53 @@ function assertFile(root, relativePath) {
   return filename;
 }
 
+function assertSafeArtifactPath(relativePath, label) {
+  if (!relativePath || relativePath.startsWith("/") || relativePath.includes("\\") || relativePath.split("/").includes("..")) {
+    fail(`${label} contains an unsafe path: ${relativePath}`);
+  }
+}
+
+function globRegExp(pattern) {
+  assertSafeArtifactPath(pattern, "assembly path pattern");
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === "*" && pattern[index + 1] === "*") {
+      source += ".*";
+      index += 1;
+    } else if (character === "*") {
+      source += "[^/]*";
+    } else if (character === "?") {
+      source += "[^/]";
+    } else {
+      source += character.replace(/[\\^$+?.()|[\]{}]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${source}$`);
+}
+
+function validateAssemblyContract(assembly, kind, files) {
+  const artifactName = kind === "source" ? "source-archive" : kind === "desktop" ? "desktop-tarball" : null;
+  if (!artifactName) fail(`unknown artifact kind: ${kind}`);
+  const artifact = assembly.artifacts?.[artifactName];
+  if (!artifact || !Array.isArray(artifact.required_paths) || !Array.isArray(artifact.excluded_paths)) {
+    fail(`${artifactName} assembly contract is incomplete`);
+  }
+  const required = artifact.required_paths.map((pattern) => globRegExp(pattern));
+  const excluded = artifact.excluded_paths.map((pattern) => globRegExp(pattern));
+  for (const [index, matcher] of required.entries()) {
+    if (!files.some((file) => matcher.test(file))) {
+      fail(`${artifactName} assembly is missing required path ${artifact.required_paths[index]}`);
+    }
+  }
+  for (const [index, matcher] of excluded.entries()) {
+    const present = files.filter((file) => matcher.test(file));
+    if (present.length) {
+      fail(`${artifactName} assembly contains excluded paths ${artifact.excluded_paths[index]}: ${present.join(", ")}`);
+    }
+  }
+}
+
 function listFiles(root) {
   const files = [];
   function visit(directory) {
@@ -181,6 +238,25 @@ function validateComponents(root) {
     ...(components.upstream_relationships ?? []).map((component) => [component.id, component]),
     ...components.components.map((component) => [component.id, component]),
   ]);
+  const licenseHashes = components.license_hashes;
+  if (!Array.isArray(licenseHashes)) fail("license hash inventory is missing");
+  const recordedLicenseHashes = new Map();
+  for (const entry of licenseHashes) {
+    assertSafeArtifactPath(entry.path, "license hash path");
+    if (recordedLicenseHashes.has(entry.path)) fail(`duplicate license hash entry: ${entry.path}`);
+    assertSha(entry.sha256, `${entry.path} license_sha256`);
+    recordedLicenseHashes.set(entry.path, entry.sha256);
+  }
+  for (const [relativePath, expectedHash] of EXPECTED_LICENSE_HASHES) {
+    if (recordedLicenseHashes.get(relativePath) !== expectedHash) {
+      fail(`license hash inventory is missing the pinned hash for ${relativePath}`);
+    }
+    const actualHash = sha256(assertFile(root, relativePath));
+    if (actualHash !== expectedHash) {
+      fail(`license bytes changed for ${relativePath}: expected ${expectedHash}, found ${actualHash}`);
+    }
+  }
+  if (recordedLicenseHashes.size !== EXPECTED_LICENSE_HASHES.size) fail("license hash inventory contains unexpected material");
   for (const id of ["herdr-web-derived-generic", "herdr-runtime", "herdr-compatibility-slice", "claw-empire-sprites", "pixijs", "geist-font", "pixel-agents-reference", "historical-office-owner-attested"]) {
     if (!byId.has(id)) fail(`component inventory is missing ${id}`);
   }
@@ -222,6 +298,9 @@ function validateComponents(root) {
   if (!readFileSync(pathFor(root, "NOTICE"), "utf8").includes("GreenSheep01201")) {
     fail("Claw-Empire notice is missing from NOTICE");
   }
+  if (!readFileSync(pathFor(root, "NOTICE"), "utf8").includes("Copyright 2024 The Geist Project Authors")) {
+    fail("Geist copyright notice is missing from NOTICE");
+  }
   const attestation = readFileSync(pathFor(root, "provenance/office-owner-attestation.md"), "utf8");
   for (const evidence of ["7be916e3c4713582c72665cd787ef0300658ea26", "c69defe64687882158af30ae2f8375dde165dba4", "6ab54a94369e8695c3bac2cf94ac76bab62613563382e4a712944ff0ff70e028", "56edfdd364ace64663e4a98c931d15d2ef5bfcb725acee8d8791e88f974fd210", "f4975a6e840506a003f39153dfa6e32830d311624402980a1884ecb5351a1e3f"]) {
     if (!attestation.includes(evidence)) fail(`Office owner evidence is missing ${evidence}`);
@@ -229,6 +308,7 @@ function validateComponents(root) {
   if (assembly.schema_version !== 1 || !assembly.artifacts?.["source-archive"] || !assembly.artifacts?.["desktop-tarball"]) {
     fail("assembly manifest is incomplete");
   }
+  validateAssemblyContract(assembly, "source", trackedFiles(root));
   if (compatibility.herdr?.terminal_protocol !== 20 || compatibility.herdr?.commit !== "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c") {
     fail("protocol-20 Herdr compatibility record is missing or changed");
   }
@@ -403,14 +483,26 @@ function validateArtifactManifest(stage) {
   }
   for (const excluded of manifest.excluded_from_members ?? []) actual.delete(excluded);
   if (actual.size) fail(`artifact has unmanifested members: ${[...actual].join(", ")}`);
-  const checksumLines = readFileSync(join(stage, manifest.checksum_file), "utf8").trim().split("\n").filter(Boolean);
+  assertSafeArtifactPath(manifest.checksum_file, "artifact checksum file");
+  const checksumFile = assertFile(stage, manifest.checksum_file);
+  const expectedChecksumPaths = new Set(filesUnder(stage).filter((file) => file !== manifest.checksum_file));
+  const seenChecksumPaths = new Set();
+  const checksumLines = readFileSync(checksumFile, "utf8").trim().split(/\r?\n/).filter(Boolean);
   for (const line of checksumLines) {
     const match = line.match(/^([0-9a-f]{64})  (.+)$/);
     if (!match) fail(`invalid checksum line: ${line}`);
     const filename = match[2];
     if (filename === manifest.checksum_file) fail("checksum file must not checksum itself");
-    if (!existsSync(join(stage, filename)) || sha256(join(stage, filename)) !== match[1]) fail(`checksum mismatch for ${filename}`);
+    assertSafeArtifactPath(filename, "artifact checksum entry");
+    if (seenChecksumPaths.has(filename)) fail(`duplicate checksum entry for ${filename}`);
+    if (!expectedChecksumPaths.has(filename)) fail(`checksum entry is not an artifact member: ${filename}`);
+    seenChecksumPaths.add(filename);
+    if (sha256(join(stage, filename)) !== match[1]) fail(`checksum mismatch for ${filename}`);
   }
+  const missingChecksums = [...expectedChecksumPaths].filter((filename) => !seenChecksumPaths.has(filename));
+  if (missingChecksums.length) fail(`artifact checksum coverage is incomplete: ${missingChecksums.join(", ")}`);
+  const assembly = readJson(stage, "provenance/assembly-manifest.json");
+  validateAssemblyContract(assembly, manifest.artifact_kind, filesUnder(stage));
 }
 
 function validateRepository(root, { clean = false } = {}) {

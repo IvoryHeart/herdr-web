@@ -99,10 +99,13 @@ For source development:
 
 Android development also needs a JDK and Android SDK. See [docs/android.md](docs/android.md).
 
-## Quick Start From Release
+## Validation Quick Start From A Desktop Build
 
-Download the matching desktop tarball from the GitHub release, unpack it, and run the bundled
-wrapper:
+The initial Spec 004 release is source-only. The desktop flow below is for
+local validation evidence; desktop and Android binaries are not authorized
+initial release assets.
+
+Build or obtain a validation desktop tarball, unpack it, and run the bundled wrapper:
 
 ```bash
 tar -xzf herdr-web-vX.Y.Z-linux-x86_64.tar.gz
@@ -120,8 +123,9 @@ The desktop tarball includes the web assets and `herdr-web-bridge`; it does not 
 Start or attach Herdr `v0.8.2` or newer with terminal protocol `20` separately before running the
 bridge.
 
-For Android, install the APK from the same release and add the bridge URL in the Bridge area of
-Settings. LAN bridges must admit the bridge hostname and Android's app origin explicitly:
+For local Android validation, install a locally built APK and add the bridge URL in the Bridge area
+of Settings. Android binaries are not initial release assets. LAN bridges must admit the bridge
+hostname and Android's app origin explicitly:
 
 ```bash
 bin/herdr-web --host 0.0.0.0 --port 4000 \

@@ -10,6 +10,15 @@
     "independent_statement": "Herdr World is an independent downstream project compatible with Herdr and derived in part from Herdr Web. It is not affiliated with, sponsored by, endorsed by, or maintained by the Herdr or Herdr Web projects.",
     "dco": "DCO-1.1; no CLA; contributor copyright is retained"
   },
+  "license_hashes": [
+    {"path": "LICENSE-APACHE-2.0", "sha256": "fa7bd82aad48aad62f52024fc668f4ad4c20008af177c33c5f8333916a1c446a", "component": "herdr-world-original"},
+    {"path": "LICENSE", "sha256": "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50", "component": "herdr-web-derived-generic"},
+    {"path": "LICENSES/MIT-Herdr-Web.txt", "sha256": "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50", "component": "herdr-web-upstream"},
+    {"path": "LICENSES/Apache-2.0-Herdr.txt", "sha256": "54ef03798b1a7b29808fbfe12bfad11ad9f0ecd96d111bdd21b8ed7629b59758", "component": "herdr-runtime"},
+    {"path": "LICENSES/Apache-2.0-Claw-Empire.txt", "sha256": "480ecbe5c33eee6b3bf1e98ca6bda6d03376ee4839de38bbbefa16b87d047c17", "component": "claw-empire-sprites"},
+    {"path": "LICENSES/OFL-1.1.txt", "sha256": "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f", "component": "geist-font"},
+    {"path": "web/public/world/LICENSE-PixiJS.txt", "sha256": "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473", "component": "pixijs"}
+  ],
   "upstream_relationships": [
     {
       "id": "herdr-web-upstream",
@@ -132,7 +141,7 @@
       "immutable_revision": "npm-@fontsource-variable/geist-5.2.9",
       "version": "5.2.9",
       "license": "OFL-1.1",
-      "copyright_notice": "Font upstream copyright is retained by the package and its license metadata.",
+      "copyright_notice": "Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)",
       "notice": "LICENSES/OFL-1.1.txt",
       "lockfile": "web/package-lock.json",
       "integrity": "sha512-TP+QSBG3wxKGPE33CbMy/L0Nu3qvJ6Fy81Yc4LnQ95xH+i+cfEp8fyU8/kfV14YwszxIFPhnoMTbjL71waVpyQ==",

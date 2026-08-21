@@ -90,6 +90,15 @@ test("missing notice, incorrect hash, and incomplete provenance fail closed", ()
     rmSync(missingNotice, { recursive: true, force: true });
   }
 
+  const missingGeistNotice = copyRepository("missing-geist-notice");
+  try {
+    const filename = join(missingGeistNotice, "NOTICE");
+    writeFileSync(filename, readFileSync(filename, "utf8").replace("Copyright 2024 The Geist Project Authors", ""));
+    fails(["--check"], missingGeistNotice);
+  } finally {
+    rmSync(missingGeistNotice, { recursive: true, force: true });
+  }
+
   const incorrectHash = copyRepository("incorrect-hash");
   try {
     const filename = join(incorrectHash, "provenance/components.json");
@@ -110,6 +119,25 @@ test("missing notice, incorrect hash, and incomplete provenance fail closed", ()
     fails(["--check"], incomplete);
   } finally {
     rmSync(incomplete, { recursive: true, force: true });
+  }
+
+  const truncatedLicense = copyRepository("truncated-license");
+  try {
+    writeFileSync(join(truncatedLicense, "LICENSES/Apache-2.0-Claw-Empire.txt"), "Apache License\n");
+    fails(["--check"], truncatedLicense);
+  } finally {
+    rmSync(truncatedLicense, { recursive: true, force: true });
+  }
+
+  const incompleteAssembly = copyRepository("incomplete-assembly");
+  try {
+    const filename = join(incompleteAssembly, "provenance/assembly-manifest.json");
+    const assembly = JSON.parse(readFileSync(filename, "utf8"));
+    assembly.artifacts["source-archive"].required_paths.push("definitely-missing-required-file");
+    writeFileSync(filename, `${JSON.stringify(assembly, null, 2)}\n`);
+    fails(["--check"], incompleteAssembly);
+  } finally {
+    rmSync(incompleteAssembly, { recursive: true, force: true });
   }
 });
 
@@ -143,6 +171,17 @@ test("desktop assembly audit excludes secrets, local state, workstation paths, a
     } finally {
       rmSync(siblingArtifact, { recursive: true, force: true });
     }
+
+    const incompleteChecksumArtifact = makeDesktopFixture("incomplete-checksum-artifact");
+    try {
+      const checksumPath = join(incompleteChecksumArtifact, "provenance/SHA256SUMS");
+      const checksumLines = readFileSync(checksumPath, "utf8").trim().split("\n");
+      checksumLines.pop();
+      writeFileSync(checksumPath, `${checksumLines.join("\n")}\n`);
+      fails(["--audit-artifact", incompleteChecksumArtifact]);
+    } finally {
+      rmSync(incompleteChecksumArtifact, { recursive: true, force: true });
+    }
   } finally {
     rmSync(artifact, { recursive: true, force: true });
   }
@@ -151,12 +190,18 @@ test("desktop assembly audit excludes secrets, local state, workstation paths, a
 test("source assembly audit uses the source manifest boundary", () => {
   const artifact = makeDesktopFixture("source-artifact");
   try {
+    for (const file of ["package-lock.json", "web/package-lock.json", "bridge/Cargo.lock", "vendor/herdr-compat/Cargo.lock", "vendor/herdr-compat/VENDOR-MANIFEST.toml", "web/public/world/LICENSE-PixiJS.txt"]) {
+      const destination = join(artifact, file);
+      const parent = destination.includes("/") ? destination.slice(0, destination.lastIndexOf("/")) : artifact;
+      mkdirSync(parent, { recursive: true });
+      cpSync(join(root, file), destination);
+    }
     mkdirSync(join(artifact, "src"), { recursive: true });
     writeFileSync(join(artifact, "src/example.ts"), "export const source = true;\n");
     const manifestPath = join(artifact, "provenance/artifact-manifest.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     manifest.artifact_kind = "source";
-    manifest.members.push({ path: "src/example.ts", sha256: sha256(join(artifact, "src/example.ts")) });
+    manifest.members = filesUnder(artifact).map((path) => ({ path, sha256: sha256(join(artifact, path)) }));
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     const checksumLines = [...filesUnder(artifact), "provenance/artifact-manifest.json"].map((path) => `${sha256(join(artifact, path))}  ${path}`).sort();
     writeFileSync(join(artifact, "provenance/SHA256SUMS"), `${checksumLines.join("\n")}\n`);
@@ -164,4 +209,17 @@ test("source assembly audit uses the source manifest boundary", () => {
   } finally {
     rmSync(artifact, { recursive: true, force: true });
   }
+});
+
+test("packagers reject unsafe release versions before touching staging paths", () => {
+  for (const script of ["scripts/package-source.sh", "scripts/package-tarball.sh"]) {
+    assert.throws(
+      () => execFileSync("bash", [join(root, script), "../release-escape"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+      /release version must match/,
+    );
+  }
+  assert.throws(
+    () => execFileSync("bash", [join(root, "scripts/package-tarball.sh"), "v0.0.0", "../release-escape"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+    /platform must be a safe single path component/,
+  );
 });

@@ -10,13 +10,25 @@ if [[ $# -ne 1 ]]; then
 fi
 
 VERSION="$1"
+VERSION_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+if [[ ! "$VERSION" =~ $VERSION_PATTERN ]]; then
+  echo "release version must match vX.Y.Z with an optional prerelease/build suffix" >&2
+  exit 2
+fi
+
 PKG_ROOT="$ROOT/dist-packages"
 NAME="herdr-world-${VERSION}-source"
-STAGE="$PKG_ROOT/$NAME"
-ARCHIVE="$PKG_ROOT/$NAME.tar.gz"
+mkdir -p "$PKG_ROOT"
+PKG_ROOT_REAL="$(cd "$PKG_ROOT" && pwd -P)"
+STAGE="$PKG_ROOT_REAL/$NAME"
+ARCHIVE="$PKG_ROOT_REAL/$NAME.tar.gz"
+if [[ "$(dirname "$STAGE")" != "$PKG_ROOT_REAL" || "$(dirname "$ARCHIVE")" != "$PKG_ROOT_REAL" ]]; then
+  echo "release packaging path escaped dist-packages" >&2
+  exit 2
+fi
 
 node "$ROOT/scripts/release-compliance.mjs" --check --root "$ROOT" --check-clean
-rm -rf "$STAGE" "$ARCHIVE" "$ARCHIVE.sha256"
+rm -rf -- "$STAGE" "$ARCHIVE" "$ARCHIVE.sha256"
 mkdir -p "$STAGE"
 
 git -C "$ROOT" archive --format=tar HEAD | tar -xf - -C "$STAGE"

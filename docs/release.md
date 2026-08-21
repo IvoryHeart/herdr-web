@@ -39,73 +39,48 @@ npm run release:compliance -- --check-clean
 
 Do not cut a release without bridge test/build coverage.
 
-## Package Artifacts
+## Initial Release Artifact
 
-Build or provide platform artifacts immediately after cutting the GitHub release, using the final
-release commit or tag created by the release script. If you made any pre-release artifacts before
-the release script stamped `CHANGELOG.md`, rebuild them from the released `main`/tag with the final
-`vX.Y.Z` value before upload. Use the documented packaging commands and any supplemental local build
-instructions for the release operator's environment. Do not commit generated tarballs, APKs, or
-build-service outputs.
+Spec 004 defines a source-first initial release. Build and upload only the source
+archive from the final release commit or tag. Do not upload or publish desktop,
+Android, APK, or other binary artifacts until the separate approved extraction,
+installer, and release-orchestration gates authorize them.
 
-The source archive is built with `scripts/package-source.sh vX.Y.Z`; desktop
-archives are built with `scripts/package-tarball.sh`. Both commands require a
-clean checkout and include generated source/assembly manifests, npm/Cargo
-SBOMs, required notices, and checksums. Inspect the exact archive member list
-and run the packaged artifact audit before upload.
+The source archive is built with `scripts/package-source.sh vX.Y.Z`. The command
+requires a clean checkout and includes generated source/assembly manifests,
+npm/Cargo SBOMs, required notices, and checksums. Inspect the exact archive
+member list and run the packaged artifact audit before upload. Do not commit
+generated tarballs, APKs, or build-service outputs.
 
-Linux desktop tarball:
+```bash
+npm ci
+npm ci --prefix web
+scripts/package-source.sh vX.Y.Z
+node scripts/release-compliance.mjs --audit-artifact \
+  dist-packages/herdr-world-vX.Y.Z-source
+```
+
+## Validation-only Platform Builds
+
+The desktop and Android helpers remain available for local validation and CI
+evidence. They are not authorized initial release assets and must not be
+uploaded to the GitHub release by this process.
+
+Linux desktop validation:
 
 ```bash
 npm ci
 npm ci --prefix web
 scripts/package-tarball.sh vX.Y.Z linux-x86_64
+node scripts/release-compliance.mjs --audit-artifact \
+  dist-packages/herdr-web-vX.Y.Z-linux-x86_64
 ```
 
-macOS ARM desktop tarball, run on an Apple Silicon Mac:
+macOS validation uses the same command with `macos-arm64` or `macos-x86_64`
+on the corresponding host. Android validation uses
+`npm run android:build:debug`. Keep all such outputs local or in CI evidence;
+do not stage them under public release asset names.
 
-```bash
-npm ci
-npm ci --prefix web
-scripts/package-tarball.sh vX.Y.Z macos-arm64
-```
-
-macOS Intel desktop tarball, run on an Intel Mac:
-
-```bash
-npm ci
-npm ci --prefix web
-scripts/package-tarball.sh vX.Y.Z macos-x86_64
-```
-
-Android debug APK:
-
-```bash
-npm ci
-npm ci --prefix web
-npm run android:build:debug
-```
-
-The desktop tarballs are written to `dist-packages/`. The debug APK is written to
-`android/app/build/outputs/apk/debug/app-debug.apk`.
-
-Before uploading or distributing any tarball or APK, inspect the artifact and confirm it matches the
-documented release layout, platform, version, and source commit/tag. For desktop tarballs, list the
-archive contents and verify the wrapper, bridge binary, bundled `web/dist`, and README are present.
-For APKs, inspect the package listing or metadata with available local tools.
-
-To stage the current debug APK under the release asset name for private testing:
-
-```bash
-mkdir -p dist-packages
-cp android/app/build/outputs/apk/debug/app-debug.apk dist-packages/herdr-web-vX.Y.Z-android-debug.apk
-```
-
-For a public release, build a signed release APK instead and use the non-debug release asset name:
-
-```text
-dist-packages/herdr-web-vX.Y.Z-android.apk
-```
 
 ## Browser And Federation Smoke
 
@@ -151,8 +126,9 @@ the automated acceptance gate from a clean dependency install:
 npm run check:acceptance
 ```
 
-Repeat the startup, terminal attach, and launcher checks with an unpacked desktop tarball before
-uploading it. Confirm the bridge rejects every protocol other than `20`
+Repeat the startup, terminal attach, and launcher checks with an unpacked desktop tarball as local
+validation evidence. Do not upload that binary from the source-first release flow. Confirm the
+bridge rejects every protocol other than `20`
 instead of serving a partially compatible UI.
 
 ## Cut
@@ -175,8 +151,9 @@ The script:
 - creates a GitHub release with notes extracted from `CHANGELOG.md`
 - opens the next `## [Unreleased]` changelog section and pushes it
 
-The release script does not upload binary artifacts. Upload separately packaged tarballs and APKs
-manually after the release exists.
+The release script does not upload binary artifacts. The source archive is
+uploaded separately after the release exists; desktop and mobile binaries are
+not authorized release assets in this source-first flow.
 
 ## Android Validation
 
@@ -187,44 +164,19 @@ adding any pairing token or other secret storage.
 
 ## Upload Artifacts
 
-Upload release artifacts manually with GitHub CLI after `node scripts/release.mjs vX.Y.Z` creates
-the release. Upload only artifacts built from the final release commit or tag, and inspect each
-artifact before upload.
-
-Upload the Linux tarball from the Linux build host:
+After `node scripts/release.mjs vX.Y.Z` creates the GitHub release, upload only
+the source archive and its checksum. Upload only artifacts built from the final
+release commit or tag and inspected with the source artifact audit.
 
 ```bash
 gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-linux-x86_64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-linux-x86_64.tar.gz.sha256
+  dist-packages/herdr-world-vX.Y.Z-source.tar.gz \
+  dist-packages/herdr-world-vX.Y.Z-source.tar.gz.sha256
 ```
 
-Upload the macOS ARM tarball from the Apple Silicon Mac build host, or copy it to the release
-operator machine first:
-
-```bash
-gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
-```
-
-Upload the macOS Intel tarball from the Intel Mac build host, or copy it to the release operator
-machine first:
-
-```bash
-gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
-```
-
-Upload the Android debug APK after it has the final debug asset name:
-
-```bash
-gh release upload vX.Y.Z dist-packages/herdr-web-vX.Y.Z-android-debug.apk
-```
-
-If every artifact has been copied to one machine, the same paths can be uploaded in one
-`gh release upload` invocation.
+Do not upload desktop tarballs, Android packages, APKs, or other binary/mobile
+artifacts from this release flow. Their publication requires the separate
+approved gates documented by the later extraction and installer specifications.
 
 ## After
 

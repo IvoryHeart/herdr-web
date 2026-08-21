@@ -47,8 +47,10 @@ of PixiJS.
 Geist font
 ----------
 @fontsource-variable/geist 5.2.9 is distributed under the SIL Open Font
-License 1.1. The applicable license text is LICENSES/OFL-1.1.txt; the locked
-package locator and integrity are recorded in provenance/components.json.
+License 1.1. Copyright 2024 The Geist Project Authors
+(https://github.com/vercel/geist-font). The exact dependency license text is
+LICENSES/OFL-1.1.txt; the locked package locator, integrity, and license hash
+are recorded in provenance/components.json.
 
 Other dependencies
 ------------------
