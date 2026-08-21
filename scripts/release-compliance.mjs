@@ -344,7 +344,7 @@ function filesUnder(root) {
   return listFiles(root).filter((file) => !file.startsWith(".git/"));
 }
 
-function writeArtifactMaterial(stage, sourceCommit, sboms) {
+function writeArtifactMaterial(stage, sourceCommit, sboms, kind) {
   writeJson(join(stage, "provenance/source-manifest.json"), sourceCommit);
   writeJson(join(stage, "provenance/sbom/npm-root.json"), sboms.npmRoot);
   writeJson(join(stage, "provenance/sbom/npm-web.json"), sboms.npmWeb);
@@ -355,6 +355,7 @@ function writeArtifactMaterial(stage, sourceCommit, sboms) {
   const manifestFiles = filesUnder(stage).filter((file) => file !== "provenance/artifact-manifest.json" && file !== "provenance/SHA256SUMS").map((file) => ({ path: file, sha256: sha256(join(stage, file)) }));
   writeJson(manifestPath, {
     manifest_schema: "herdr-world/artifact-members-v1",
+    artifact_kind: kind,
     source_commit: sourceCommit.source_commit,
     members: manifestFiles,
     checksum_file: "provenance/SHA256SUMS",
@@ -391,6 +392,7 @@ function validateArtifactManifest(stage) {
   const manifestFile = assertFile(stage, "provenance/artifact-manifest.json");
   const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
   if (manifest.manifest_schema !== "herdr-world/artifact-members-v1") fail("artifact manifest schema is invalid");
+  if (!["desktop", "source"].includes(manifest.artifact_kind)) fail("artifact manifest kind is invalid");
   const actual = new Set(filesUnder(stage));
   for (const member of manifest.members ?? []) {
     assertSha(member.sha256, `artifact member ${member.path}`);
@@ -431,7 +433,7 @@ function prepareArtifact(root, stage, kind) {
     cargoBridge: cargoSbom(root, "bridge/Cargo.toml"),
     cargoCompat: cargoSbom(root, "vendor/herdr-compat/Cargo.toml"),
   };
-  writeArtifactMaterial(stage, sourceManifest(root), sboms);
+  writeArtifactMaterial(stage, sourceManifest(root), sboms, kind);
   auditTextAndNames(stage, kind);
   validateArtifactManifest(stage);
 }
@@ -452,7 +454,8 @@ try {
     console.log(`source release material validated: ${options.stage}`);
   } else if (options.command === "audit-artifact") {
     if (!options.artifact) fail("--audit-artifact requires a path");
-    auditTextAndNames(options.artifact, "desktop");
+    const manifest = readJson(options.artifact, "provenance/artifact-manifest.json");
+    auditTextAndNames(options.artifact, manifest.artifact_kind);
     validateArtifactManifest(options.artifact);
     console.log(`artifact security and manifest audit passed: ${options.artifact}`);
   } else {

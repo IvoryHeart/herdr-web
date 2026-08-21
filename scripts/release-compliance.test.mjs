@@ -58,7 +58,7 @@ function makeDesktopFixture(name) {
   mkdirSync(join(directory, "share/herdr-web/web"), { recursive: true });
   writeFileSync(join(directory, "share/herdr-web/web/index.html"), "<title>Herdr World</title>\n");
   const members = filesUnder(directory).map((path) => ({ path, sha256: sha256(join(directory, path)) }));
-  writeFileSync(join(directory, "provenance/artifact-manifest.json"), `${JSON.stringify({ manifest_schema: "herdr-world/artifact-members-v1", source_commit: "test", members, checksum_file: "provenance/SHA256SUMS", excluded_from_members: ["provenance/artifact-manifest.json", "provenance/SHA256SUMS"] }, null, 2)}\n`);
+  writeFileSync(join(directory, "provenance/artifact-manifest.json"), `${JSON.stringify({ manifest_schema: "herdr-world/artifact-members-v1", artifact_kind: "desktop", source_commit: "test", members, checksum_file: "provenance/SHA256SUMS", excluded_from_members: ["provenance/artifact-manifest.json", "provenance/SHA256SUMS"] }, null, 2)}\n`);
   const checksumLines = [...filesUnder(directory), "provenance/artifact-manifest.json"].map((path) => `${sha256(join(directory, path))}  ${path}`).sort();
   writeFileSync(join(directory, "provenance/SHA256SUMS"), `${checksumLines.join("\n")}\n`);
   return directory;
@@ -143,6 +143,24 @@ test("desktop assembly audit excludes secrets, local state, workstation paths, a
     } finally {
       rmSync(siblingArtifact, { recursive: true, force: true });
     }
+  } finally {
+    rmSync(artifact, { recursive: true, force: true });
+  }
+});
+
+test("source assembly audit uses the source manifest boundary", () => {
+  const artifact = makeDesktopFixture("source-artifact");
+  try {
+    mkdirSync(join(artifact, "src"), { recursive: true });
+    writeFileSync(join(artifact, "src/example.ts"), "export const source = true;\n");
+    const manifestPath = join(artifact, "provenance/artifact-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.artifact_kind = "source";
+    manifest.members.push({ path: "src/example.ts", sha256: sha256(join(artifact, "src/example.ts")) });
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const checksumLines = [...filesUnder(artifact), "provenance/artifact-manifest.json"].map((path) => `${sha256(join(artifact, path))}  ${path}`).sort();
+    writeFileSync(join(artifact, "provenance/SHA256SUMS"), `${checksumLines.join("\n")}\n`);
+    assert.match(run(["--audit-artifact", artifact]), /artifact security and manifest audit passed/);
   } finally {
     rmSync(artifact, { recursive: true, force: true });
   }
