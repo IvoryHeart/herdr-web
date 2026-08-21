@@ -92,7 +92,12 @@ function git(root, args) {
 
 function run(command, args, cwd) {
   try {
-    return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execFileSync(command, args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } catch (error) {
     fail(`${command} ${args.join(" ")} failed: ${error.stderr?.trim() || error.message}`);
   }
