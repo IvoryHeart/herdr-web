@@ -52,7 +52,8 @@ direct connections to multiple bridges remain the default browser topology.
 This feature includes:
 
 - a mandatory classification record for current and future integrations;
-- removal of `/api/extensions` and a generic extension registry from the plan;
+- withdrawal of the exact generic registry index `GET /api/extensions` from
+  the plan while retaining approved observability-specific routes;
 - a field-level audit of the observability contract against current public
   Herdr state, events, reports, plugins, and terminal-session APIs;
 - a thin browser mapping for upstream plugin metadata/actions only after an
@@ -66,7 +67,8 @@ This feature includes:
 
 ## 4. Non-goals
 
-- No `GET /api/extensions`, generic extension descriptor, or registry version.
+- No exact `GET /api/extensions` generic index, generic extension descriptor,
+  or registry version. This does not match or forbid child paths.
 - No dynamic JavaScript loading, browser marketplace, plugin SDK, or remote
   module URL.
 - No fork of Herdr plugin manifests, IDs, actions, warnings, or marketplace
@@ -77,8 +79,11 @@ This feature includes:
 - No second bridge manager, central multi-host gateway, or mandatory mirror.
 - No generic snapshot/event envelope before two real consumers demonstrate the
   same bounded semantics.
-- No change to an approved observability payload without an approved extension
-  or migration spec.
+- No removal or incompatible change to the approved
+  `/api/extensions/observability`, `/api/extensions/observability/snapshot`, or
+  `/api/extensions/observability/config` transports or their payloads without
+  a separately numbered and approved migration spec defining replacements,
+  compatibility window, and browser/settings migration.
 
 ## 5. Requirements
 
@@ -254,18 +259,23 @@ supervision; development scripts MAY own disposable local processes.
 
 ### Requirement: Make absence of duplicate infrastructure verifiable
 
-CI SHALL fail if implementation introduces `/api/extensions`, a generic
-extension registry, a second persisted bridge-profile store, World surface
-registration inside Foundation, or production imports of a retired registry.
-Tests SHALL verify direct multi-bridge qualification and provider failure
+CI SHALL fail if implementation introduces the exact generic index route
+`GET /api/extensions`, a generic extension registry, a second persisted
+bridge-profile store, World surface registration inside Foundation, or
+production imports of a retired generic registry. Route tests MUST distinguish
+that exact index from the approved observability-specific child routes, which
+remain required until a separately approved migration replaces them. Tests
+SHALL also verify direct multi-bridge qualification and provider failure
 isolation.
 
 #### Scenario: A withdrawn design is copied into Foundation
 
-- **GIVEN** code adds an extension descriptor route
+- **GIVEN** code adds the exact `GET /api/extensions` descriptor index while
+  the approved observability child routes remain registered
 - **WHEN** architecture and route tests run
-- **THEN** they fail and direct the contributor to plugin discovery,
-  `/api/capabilities`, Spec 011 surfaces, or a documented provider gap.
+- **THEN** they fail only for the generic index and direct the contributor to
+  plugin discovery, `/api/capabilities`, Spec 011 surfaces, or a documented
+  provider gap without breaking the observability transport.
 
 ## 6. Privacy and security
 

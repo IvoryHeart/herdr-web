@@ -44,6 +44,24 @@ At authoring time:
 - the owner has authorized upgrading that local Herdr setup to the supported
   protocol-20 baseline.
 
+During review of this draft, protocol-20 validation and cutover used two
+distinct stages:
+
+1. a verified Herdr v0.8.2 binary ran on an isolated profile/socket, the current
+   bridge served it on port 8788, and the hot-reload browser used port 5174;
+   the empty snapshot at that stage was expected because it was not the
+   owner's default session; and
+2. after the owner ran Herdr's supported handoff update, port 8788 was pointed
+   at the upgraded default socket and reported five workspaces and eleven
+   panes before the obsolete port-8787 bridge/assets were replaced. Port 8787
+   then reported Herdr v0.8.2 and terminal protocol 20, and the owner confirmed
+   the World UI was visible.
+
+Thus the PR's initial protocol-20 evidence came from the separate candidate,
+not from the then-protocol-19 service on port 8787. This operational success is
+evidence for the required design; it does not remove the implementation's
+obligation to automate and test the same isolation and rollback boundaries.
+
 Implementation SHALL refresh the three upstream heads immediately before
 extraction and record any change. The immutable commits above remain the audit
 baseline, not a direction to ignore newer compatible upstream work.
@@ -243,8 +261,8 @@ For one World major release:
   deprecated aliases where safe;
 - a canonical `HERDR_WORLD_*` value wins if both are set;
 - warnings MUST omit values that may contain paths, origins, or credentials;
-- legacy data is copied/read through into the new location and is never deleted
-  automatically; and
+- legacy data is migrated into the new location through the conflict-safe
+  transaction below and is never deleted automatically; and
 - browser/Capacitor preference migration is idempotent and preserves configured
   bridges, display/navigation settings, World settings, completion state, and
   unsent note drafts.
@@ -252,6 +270,39 @@ For one World major release:
 An Android application-ID change creates a separate application identity and
 cannot silently inherit private app storage. Mobile release SHALL remain gated
 until export/import or an explicitly retained ID is reviewed and tested.
+
+Each file-backed or key/value store SHALL have its own versioned migration
+journal and completion marker. Legacy stores remain read-only throughout
+migration; the application MUST NOT dual-write legacy and canonical stores.
+Before a completion marker exists, a bounded read-only legacy fallback MAY be
+used only where current behavior requires it. After completion, the canonical
+store is authoritative.
+
+Migration SHALL compare entries by stable store-specific identity and content
+hash before writing:
+
+- an identical entry in both stores is recorded as already satisfied;
+- a legacy-only entry is copied through a staged destination and atomically
+  finalized;
+- a canonical-only entry remains unchanged; and
+- the same identity with different content is a conflict. There is no global
+  “legacy wins” or “canonical wins” rule: migration fails closed for that entry
+  and requires an explicit keep-canonical, restore-legacy, keep-both-with-new-
+  identity, or store-specific merge decision.
+
+The journal SHALL record source/destination identities, hashes, action, staged
+state, and completion without recording note bodies, terminal content, secrets,
+or other private payloads. On restart, staged and completed entries are
+revalidated by hash before resume. An invalid/incomplete staged entry is
+quarantined or removed and recopied; it MUST NOT be treated as canonical data.
+Rollback SHALL undo only canonical entries created or replaced by that journal,
+restore any pre-existing canonical backup, and leave the legacy store intact.
+
+Browser localStorage and Capacitor Preferences SHALL use equivalent per-key
+journal/marker semantics even where the storage API lacks a multi-key atomic
+transaction. A visible first-run migration MUST NOT declare success until every
+required key has a terminal `identical`, `copied`, `canonical-only`, or
+explicitly resolved status.
 
 #### Scenario: Both legacy and canonical environment variables exist
 
@@ -268,29 +319,75 @@ until export/import or an explicitly retained ID is reviewed and tested.
   execution is idempotent, and a manifest records the result without note or
   terminal content.
 
+#### Scenario: Both locations contain identical and disjoint entries
+
+- **GIVEN** one identifier has identical hashes in both stores, another exists
+  only in legacy, and a third exists only in canonical
+- **WHEN** migration runs twice
+- **THEN** the identical entry is not duplicated, the legacy-only entry is
+  copied once, the canonical-only entry is unchanged, and both runs finish with
+  the same journal and canonical content.
+
+#### Scenario: Both locations contain a conflicting entry
+
+- **GIVEN** legacy and canonical stores contain different content under the
+  same stable identifier
+- **WHEN** migration reaches that identifier
+- **THEN** neither version is overwritten, the store remains uncompleted, and
+  a redacted conflict record requires an explicit resolution.
+
+#### Scenario: Migration is interrupted during staging
+
+- **GIVEN** a process stops after staging an entry but before atomic finalization
+- **WHEN** migration resumes or rolls back
+- **THEN** it validates the journal and hashes, never treats partial bytes as
+  canonical, and either completes the copy once or restores the exact
+  pre-migration canonical state while preserving legacy data.
+
 ### Requirement: Upgrade the workstation to the supported protocol safely
 
-The local development daemon SHALL be upgraded from Herdr v0.8.0/protocol 19
-to the exact stable release supported by the current Foundation (initially
-v0.8.2/protocol 20). Before upgrade, implementation SHALL record the current
-binary version, server/socket status, active session names, bridge command,
-static asset directory, and a rollback binary or documented reinstall path.
+For a terminal-protocol change, implementation SHALL first run the exact target
+Herdr daemon on a separate profile/socket and the matching Foundation bridge
+and browser on alternate loopback ports. Candidate health, capabilities,
+snapshot, navigation, terminal, Office, and refresh checks occur there while
+the default daemon and old bridge remain an intact compatible pair. Empty
+candidate state SHALL be identified as isolation rather than mistaken for data
+loss; non-destructive real-session validation may occur only after explicit
+owner selection.
 
-Herdr's supported live-handoff updater SHOULD be used when available. After
-handoff, a newly built protocol-20 Foundation bridge and matching browser assets
-SHALL replace the protocol-19 service on port 8787 only after health checks pass
-on an alternate port. The old bridge binary/assets SHALL remain available until
-the owner accepts the new full-app behavior.
+Before changing the default pair, implementation SHALL record the current and
+target daemon binaries/versions/protocols, server/socket/session status, bridge
+commands/assets, and exact compatibility pairs. Herdr's supported live-handoff
+updater MAY be used only after the parallel candidate is accepted and its
+selected target is proven exact as required by Spec 017.
+
+The final default switch is one daemon+bridge compatibility transaction. It
+stages the accepted target bridge/assets first, hands off or restarts the
+daemon, starts the target bridge on port 8787, and runs bounded health checks.
+The protocol-19 bridge is not promised to remain usable after a protocol-20
+daemon handoff. Rollback therefore MUST restore a complete compatible pair,
+not merely the old bridge. If a live daemon downgrade is unsupported, the plan
+SHALL disclose and obtain approval for any daemon restart/pane-process risk or
+leave the default pair unchanged; it MUST NOT advertise a one-command,
+process-preserving rollback that cannot be delivered.
 
 Protocol 19 remains a negative/legacy test fixture; it need not remain running.
 
-#### Scenario: Herdr upgrades but the new bridge fails health checks
+#### Scenario: The isolated protocol-20 candidate fails health checks
 
-- **GIVEN** the protocol-20 daemon is running and the candidate bridge cannot
-  pass capabilities/snapshot checks
+- **GIVEN** the default protocol-19 daemon/bridge remains healthy and the
+  isolated protocol-20 pair cannot pass capabilities/snapshot checks
 - **WHEN** cutover evaluation runs
-- **THEN** port 8787 is not switched to the failed candidate, diagnostics and
-  rollback instructions are reported, and no user data is deleted.
+- **THEN** neither default component nor port 8787 changes, diagnostics are
+  reported, and no user data is deleted.
+
+#### Scenario: Final protocol cutover fails after daemon handoff
+
+- **GIVEN** the isolated target pair passed and the reviewed cutover has begun
+- **WHEN** the target bridge cannot pass bounded health checks on port 8787
+- **THEN** the transaction activates the predeclared compatible rollback pair,
+  verifies it, and reports any previously approved restart/process consequence
+  rather than starting the protocol-19 bridge against a protocol-20 daemon.
 
 ### Requirement: Provide isolated continuous preview and status
 
@@ -336,18 +433,21 @@ tests or owner inspection SHALL be recorded with reproduction, affected
 Foundation/World versions, disposition, and regression-test status.
 
 Cutover SHALL occur only after health, capability, snapshot, navigation,
-terminal attach/input/focus, Office, multi-bridge, and refresh checks pass. The
-switch SHALL stop only the identified old bridge, start the reviewed candidate
-with the intended state paths, verify port 8787, and retain a one-command
-rollback. Herdr daemon restart or data migration shall not be conflated with
-the bridge port switch when they can be verified separately.
+terminal attach/input/focus, Office, multi-bridge, and refresh checks pass on
+the parallel candidate. A same-protocol bridge-only switch SHALL stop only the
+identified old bridge, start the reviewed candidate with the intended state
+paths, verify port 8787, and retain a one-command bridge rollback. A protocol
+change SHALL use the complete daemon+bridge transaction above; its rollback
+command and consequences cover both components. Data migration remains a
+separate checkpoint and MUST NOT be hidden inside either switch.
 
 #### Scenario: The owner finds an Office regression in preview
 
 - **GIVEN** Foundation conformance is healthy but a World interaction differs
 - **WHEN** the owner reports it
-- **THEN** the old accepted URL remains available until disposition, the issue
-  is assigned to the owning repository, and a regression test precedes cutover.
+- **THEN** the unchanged default compatible pair and URL remain available until
+  disposition before final cutover, the issue is assigned to the owning
+  repository, and a regression test precedes cutover.
 
 ### Requirement: Establish independent and joined CI
 
@@ -382,8 +482,9 @@ pass on the final reviewed commit; older redundant runs need not finish.
 Implementation SHALL use this order, with reviewable commits and rollback at
 each boundary:
 
-1. **Baseline and inventory:** refresh sources, upgrade/test protocol 20 on a
-   candidate, record names/data and behavior.
+1. **Baseline and inventory:** refresh sources, run protocol 20 on an isolated
+   candidate daemon/socket and bridge, and record names/data, exact compatible
+   pairs, behavior, and rollback consequences without changing the default pair.
 2. **Surface seam:** implement Spec 011 in the current integration tree without
    removing working code.
 3. **Foundation creation:** replay generic concerns from current Herdr Web,
@@ -392,10 +493,11 @@ each boundary:
    pass behavior/bundle tests.
 5. **Repository rename and source removal:** rename to `herdr-world`, remove
    duplicate Foundation implementation, and repair current links/automation.
-6. **Identity/data migration:** introduce canonical names, aliases, idempotent
-   copy/read-through migration, and mobile deferral.
-7. **Live product cutover:** run the production-mode candidate, obtain owner
-   acceptance, switch 8787, and retain rollback.
+6. **Identity/data migration:** introduce canonical names, aliases,
+   journalled conflict-safe migration, and mobile deferral.
+7. **Live product cutover:** obtain owner acceptance on the parallel candidate,
+   switch the exact compatible daemon+bridge pair when protocol changes, verify
+   8787, and retain the declared full-pair rollback.
 8. **Close:** create implementation summaries with exact repositories, commits,
    packages, tests, preview findings, and deviations.
 
@@ -426,11 +528,14 @@ Implementation completion later requires:
 - Foundation conformance and World packaged-consumer tests;
 - source/bundle/license/provenance boundary audits;
 - exact-version and incompatible-version negative tests;
-- idempotent environment/data/browser preference migration tests;
+- idempotent environment/data/browser preference migration tests covering
+  identical, disjoint, conflicting, interrupted, resumed, and rolled-back
+  stores;
 - protocol-20 stock-daemon live evidence and protocol-19 rejection evidence;
 - recorded URLs and owner feedback at all four visual checkpoints;
 - successful production-mode cutover with status/doctor output; and
-- a tested rollback that does not delete or corrupt legacy data.
+- a tested compatibility-pair rollback that does not delete/corrupt legacy
+  data or claim unsupported process preservation.
 
 ## 10. Stop conditions
 

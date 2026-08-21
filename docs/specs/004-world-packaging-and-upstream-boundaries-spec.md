@@ -31,7 +31,7 @@ release compatible downstream work.
 | --- | --- |
 | Product and primary repository | **Herdr World** / `herdr-world` |
 | Generic dependency repository | `herdr-world-foundation` |
-| Copyright holder for original World work | **Yaswanth Narvaneni** |
+| Copyright holder for pre-existing and Yaswanth-authored original World work | **Yaswanth Narvaneni** |
 | Original World code license | Apache License 2.0 |
 | Original Foundation additions | MIT, to align with Herdr Web |
 | Inbound contributions | DCO sign-off; no CLA initially |
@@ -79,8 +79,8 @@ Web infrastructure.
 | Public browser package and surface contract | `@herdr-world/foundation` | Foundation; MIT additions and inherited notices |
 | Bridge executable | `herdr-world-bridge` | Foundation distribution component |
 | Narrow compatibility crate | `herdr-world-compat` | Foundation-vendored Herdr slice; Apache-2.0 provenance retained |
-| Product repository, command and artifact prefix | `herdr-world` | Yaswanth Narvaneni; original code Apache-2.0 |
-| Office, future Graph/City surfaces and World providers | World product | Downstream; original code Apache-2.0 unless a file says otherwise |
+| Product repository, command and artifact prefix | `herdr-world` | Yaswanth Narvaneni for pre-existing/Yaswanth-authored work, plus later contributors for their work; original code Apache-2.0 |
+| Office, future Graph/City surfaces and World providers | World product | Downstream; original code Apache-2.0 with contributor copyrights preserved unless a file says otherwise |
 
 Foundation SHALL be usable and testable without the World repository. World
 SHALL consume a released or locally packed exact Foundation version through
@@ -128,8 +128,8 @@ The `herdr-world` repository SHALL contain:
 - an Apache-2.0 root license for original World code;
 - `NOTICE` or equivalent third-party notices that identify inherited and
   redistributed components without claiming ownership of them;
-- an exact `Copyright (c) 2026 Yaswanth Narvaneni` notice for original World
-  work;
+- an exact `Copyright (c) 2026 Yaswanth Narvaneni` notice scoped to
+  pre-existing and Yaswanth-authored original World work;
 - the independent-downstream statement from Section 2;
 - contribution, code-of-conduct, security, support, and governance documents;
   and
@@ -140,12 +140,20 @@ and copyright notice exactly as received, add the downstream holder for new
 Foundation work without replacing the upstream notice, and preserve the Herdr
 Apache-2.0 license and modification records for vendored compatibility files.
 
+DCO sign-off grants the right to submit a contribution under the repository's
+license; it does not assign the contributor's copyright. Later contributor-
+authored work SHALL retain its contributor copyright and attribution under the
+applicable Apache-2.0 or MIT repository scope. Notices and component maps MUST
+NOT imply that Yaswanth Narvaneni owns work authored by another contributor
+unless a separate documented assignment actually exists.
+
 #### Scenario: A reader inspects a mixed repository
 
 - **GIVEN** a clean checkout contains original, adapted, and redistributed work
 - **WHEN** the reader opens the root license and notices
 - **THEN** the owner and applicable license of each component class are clear
-  without assuming every file was written or relicensed by Herdr World.
+  without assuming every file was written or relicensed by Herdr World, and a
+  DCO contribution remains attributed to its contributor.
 
 ### Requirement: Preserve auditable upstream relationships
 

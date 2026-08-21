@@ -71,22 +71,30 @@ least:
 
 ```text
 schema_version
-world: version, source_commit, artifact_url, sha256
-foundation: version, source_commit, package_integrity, bridge_sha256
+world: version, source_commit, artifact_url, artifact_sha256
+foundation: version, source_commit
+foundation.package: immutable_url, sha256, npm_integrity
+foundation.bridge[platform/architecture]: immutable_url, sha256
 surface_api_version
 bridge_api_version
 web_compat
 herdr: version, source_commit_or_release, terminal_protocol
+herdr.artifact[platform/architecture]: immutable_url, sha256
 platform_and_architecture
 included_optional_components
-license_notice_bundle_sha256
-sbom_sha256
+license_notice_bundle: immutable_url + sha256, or enclosing_artifact + member_path + member_sha256
+sbom: immutable_url + sha256, or enclosing_artifact + member_path + member_sha256
 ```
 
+Every required layer and release document SHALL have both a locator and a
+digest. A member embedded in another verified artifact MAY use its enclosing
+artifact locator plus a normalized member path and member digest; a digest
+without either an immutable URL or an enclosing-artifact member is invalid.
 Every URL SHALL resolve to an immutable release asset. The installer SHALL
-verify hashes before activation and fail closed on missing, mismatched, or
-unsupported fields. Lockfiles and component manifests remain available for
-source builds.
+verify the enclosing artifact before extraction, reject duplicate/path-
+traversing members, verify member digests, and fail closed on missing,
+mismatched, or unsupported fields. Lockfiles and component manifests remain
+available for source builds.
 
 #### Scenario: A Foundation asset is replaced at its URL
 
@@ -106,8 +114,14 @@ Herdr is an independent Apache-2.0 upstream component.
 Interactive installation requires confirmation before downloading, replacing,
 or handing off Herdr. Non-interactive installation requires an explicit flag
 such as `--install-herdr`; absence of that flag fails with actionable guidance.
-The installer SHOULD invoke Herdr's supported updater/handoff rather than
-inventing replacement behavior when it can reach the required stable version.
+The current Herdr self-updater selects the configured channel and accepts
+`--handoff`, but does not accept an exact version argument. The installer MAY
+invoke it only after fetching and verifying the channel metadata and proving
+that the selected version, terminal protocol, platform asset URL, and SHA-256
+exactly equal the World distribution manifest. If the channel has advanced,
+the metadata cannot be proven, or any field differs, the installer MUST NOT use
+the channel updater; it SHALL download and verify the manifest's exact immutable
+Herdr release asset and use the documented exact-version install/handoff path.
 
 #### Scenario: Protocol 19 is running but World requires protocol 20
 
@@ -116,6 +130,13 @@ inventing replacement behavior when it can reach the required stable version.
 - **THEN** it offers the exact supported upgrade, records rollback information,
   performs handoff only after confirmation, and rechecks daemon health before
   activating the Foundation bridge.
+
+#### Scenario: Stable advances after the World manifest is published
+
+- **GIVEN** World pins Herdr vN and the stable channel now selects vN+1
+- **WHEN** installation evaluates `herdr update --handoff`
+- **THEN** it refuses the channel updater for this assembly and installs the
+  immutable vN asset whose URL and digest are recorded in the World manifest.
 
 ### Requirement: Install to a user-owned versioned layout
 
@@ -241,22 +262,54 @@ invokes a separate repair action.
 
 Update SHALL download and verify a complete World manifest into staging, run
 static compatibility checks, and optionally run an isolated smoke test before
-activation. If a Herdr update is required, its explicit handoff and rollback
-step occurs before World activation. Foundation and World MUST NOT be updated
-independently behind the active manifest.
+activation. Foundation and World MUST NOT be updated independently behind the
+active manifest.
+
+Preflight SHALL calculate both the target triple and rollback triple:
+
+```text
+Herdr daemon/version/protocol
+Foundation package + bridge/API/web_compat
+World product + surface API
+```
+
+If Herdr does not change, or the previous World/Foundation pair explicitly
+supports the target daemon, ordinary atomic World/Foundation activation and
+rollback are permitted. If Herdr's terminal protocol changes and the previous
+pair does not support the target daemon, the preferred flow SHALL run the exact
+target triple on a parallel candidate socket/ports and leave the live triple
+unchanged until acceptance.
+
+Any flow that changes the live daemon before final acceptance SHALL include an
+exact verified previous Herdr artifact and a confirmed method to restore the
+complete compatible rollback triple. If downgrade requires a daemon restart or
+cannot preserve pane processes, that consequence requires explicit confirmation
+before activation. Without either previous-pair compatibility or confirmed
+full-triple rollback, update MUST leave the live daemon unchanged.
 
 After activation, readiness and smoke checks SHALL cover capabilities,
 snapshot, navigation, terminal attach/input/focus, Office, refresh, and a
 configured multi-bridge path when available. Failure automatically reactivates
-the previous World/Foundation pair and reports whether a separately completed
-Herdr handoff also needs user-selected rollback.
+the preflight-approved compatible rollback triple. It MUST NOT reactivate a
+protocol-incompatible previous bridge and then report Herdr rollback as an
+unresolved user choice.
 
 #### Scenario: New World starts but Office fails its smoke check
 
 - **GIVEN** the previous assembly is retained
 - **WHEN** post-activation acceptance fails
-- **THEN** the service rolls back to the previous exact pair, verifies health,
-  and preserves logs for the failed version without deleting user data.
+- **THEN** the service rolls back to the previous exact compatible triple,
+  verifies health, and preserves logs for the failed version without deleting
+  user data.
+
+#### Scenario: A protocol-bump activation fails
+
+- **GIVEN** the target triple uses protocol 20, the live rollback triple uses
+  protocol 19, and the old Foundation bridge rejects protocol 20
+- **WHEN** target acceptance fails after the live daemon changed
+- **THEN** rollback restores the verified protocol-19 Herdr daemon together
+  with its previous Foundation/World pair and reports any pre-approved restart
+  consequence; it never starts the protocol-19 bridge against protocol 20.
 
 ### Requirement: Ship complete source and notice material
 
@@ -297,8 +350,13 @@ Implementation completion later requires:
 
 - clean installation with no pre-existing Herdr;
 - reuse of an already-compatible Herdr installation;
-- protocol-19-to-20 handoff with rollback evidence;
+- protocol-19-to-20 parallel-candidate/handoff with complete compatible-triple
+  rollback evidence;
+- a stable-channel-advanced test proving the exact pinned Herdr artifact is
+  selected instead of the newer channel target;
 - checksum/manifest mismatch negative tests;
+- missing-locator, embedded-member traversal/duplication, and member-digest
+  negative tests;
 - occupied-port and unrelated-PID safety tests;
 - user service and foreground-mode acceptance;
 - optional-component failure-isolation tests;

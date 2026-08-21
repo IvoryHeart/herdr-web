@@ -39,7 +39,7 @@ development and release.
 
 | Topic | Decision |
 | --- | --- |
-| Owner | Yaswanth Narvaneni |
+| Owner | Yaswanth Narvaneni for pre-existing/Yaswanth-authored work; later contributors retain their copyrights under the project license |
 | Product/repository | Herdr World / `herdr-world` |
 | Generic dependency | `herdr-world-foundation` |
 | World original-code license | Apache-2.0 |
@@ -57,7 +57,7 @@ development and release.
 | Herdr | v0.8.2 at `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`, terminal protocol 20 | Canonical Foundation/World development baseline. Refresh before implementation. |
 | Herdr Web | v0.4.3; audited `main` `cff6335683acc20cbb76c24b67d03f9e75dd78e6` | Foundation starts from current upstream ancestry and replays only remaining generic concerns. |
 | Downstream | `origin/main` `bbf0d8ef652e740824174091382667e2c2e0df60` | Contains completed Spec 015 compatibility/replay work and the combined World implementation to separate. |
-| Local live service | `127.0.0.1:8787` observed on Herdr v0.8.0/protocol 19 at planning time | Owner approved upgrade. Prepare protocol-20 bridge/assets and rollback first; use Herdr's supported updater from outside an attached Herdr session. |
+| Local live service | Initially observed on Herdr v0.8.0/protocol 19; upgraded during PR review to v0.8.2/protocol 20 | Validation first used an isolated daemon with bridge 8788/browser 5174, then the real-socket preview reported 5 workspaces/11 panes before bridge/assets cut over on 8787. Future protocol changes retain this parallel-candidate discipline. |
 | Herdr plugins | Public manifests/actions/hooks/panes/link handlers and terminal observe/control | Runtime workflows use upstream mechanisms rather than a World registry. |
 | herdr-mirror | Optional MIT plugin/companion using public terminal APIs | Useful evidence and optional topology, not a required layer. |
 
@@ -150,8 +150,9 @@ to move.
 - Migrate binaries, packages, environment variables, data paths, browser keys,
   PWA/mobile identity, docs, automation, and artifact names with bounded legacy
   aliases.
-- Upgrade the owner's local Herdr to protocol 20 using supported handoff from
-  outside its attached session.
+- Preserve the completed local protocol-20 baseline and use a parallel
+  daemon/socket plus exact daemon+bridge compatibility transaction for future
+  protocol changes.
 - Keep a loopback hot-reload preview with status/log/stop commands and use
   explicit owner visual checkpoints before production cutover.
 
@@ -172,8 +173,9 @@ to move.
 - Move authoritative live Herdr facts to Herdr/Foundation paths.
 - Retain providers only for proven historical/aggregate/external gaps.
 - Use Herdr plugins/public terminal session APIs for executable companions.
-- Prove no `/api/extensions`, duplicate plugin catalogue, second bridge manager,
-  or mandatory mirror exists.
+- Prove no exact generic `GET /api/extensions` index, duplicate plugin
+  catalogue, second bridge manager, or mandatory mirror exists while retaining
+  the approved observability-specific child routes.
 
 ### Exit gate
 
@@ -191,7 +193,8 @@ to move.
 - Reuse a compatible Herdr or offer an explicit exact upgrade.
 - Supervise core and optional components with separate health/failure states.
 - Default to loopback and direct multi-bridge; keep optional companions opt-in.
-- Stage updates atomically and retain a known-good rollback pair and user data.
+- Stage updates atomically and retain a known-good compatible
+  Herdr/Foundation/World rollback triple and user data.
 
 ### Exit gate
 

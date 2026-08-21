@@ -84,7 +84,8 @@ This feature includes:
 - No representation of Office as a Herdr runtime plugin.
 - No replacement for bridge profiles, `/api/capabilities`, runtime polling,
   caches, generation keys, commands, or terminal WebSockets.
-- No second capability catalogue or generic `/api/extensions` endpoint.
+- No second capability catalogue or exact generic `GET /api/extensions` index;
+  approved observability-specific child routes are unchanged by this spec.
 - No generalized slot system, route grammar, policy language, or version
   negotiation protocol beyond one integer Foundation surface API version.
 - No requirement for Foundation to understand Office, Graph, City,
@@ -158,24 +159,51 @@ MUST NOT receive another surface's context through `unknown`, `any`, or an
 unpaired cast. The host MAY erase the generic only behind an internal object
 that keeps the context, component, and disposer from the same registration.
 
-Each mount attempt SHALL have an `AbortSignal` or equivalent cancellation
-token. If navigation, retry, or unmount wins a race, late context creation and
-lazy-load completion MUST be ignored and any acquired resources disposed
-exactly once.
+Each mount attempt SHALL have a fresh abort controller whose signal is exposed
+through the generation's host adapter. Foundation SHALL complete `load` before
+calling `createContext`, and SHALL call `createContext` at most once for that
+generation. A load failure therefore owns no context and invokes no disposer.
+
+If `createContext` throws before returning a context, Foundation SHALL abort
+the generation and MUST NOT call `dispose` with a partial value. The factory
+owns strong exception safety: before propagating, it MUST release every
+subscription or resource acquired during that invocation. It MUST establish a
+local cleanup guard before acquiring any non-abortable resource whose later
+construction steps can fail. The abort signal is a backstop for abort-aware
+work; it does not transfer ownership of a partial context to Foundation.
+
+On navigation, admission loss, render failure, retry, or assembly teardown,
+Foundation SHALL mark the generation closing, abort it, invoke its disposer
+exactly once if context creation returned, and await the disposer promise's
+settlement before starting a retry or replacement generation. A disposer
+rejection SHALL be caught, reported through the route-local error boundary,
+and treated as settled cleanup; it MUST NOT skip remaining host cleanup or tear
+down unrelated services. Late load/context results from a closed generation
+MUST be ignored. A delayed disposer keeps that registration in its explicit
+closing state rather than allowing overlapping generations.
 
 #### Scenario: Context creation partially succeeds and then throws
 
 - **GIVEN** a registration has subscribed to one host service
 - **WHEN** later context construction fails
-- **THEN** it releases the partial subscription, renders a route-local error,
-  and leaves Foundation polling and unrelated terminals active.
+- **THEN** the factory releases the partial subscription before propagating,
+  Foundation aborts without passing a partial value to `dispose`, a route-local
+  error renders, and Foundation polling and unrelated terminals remain active.
 
 #### Scenario: A stale lazy import resolves after navigation
 
 - **GIVEN** Office is loading and the user switches to Spaces
 - **WHEN** the old import resolves
-- **THEN** it is not mounted, acquired resources are disposed once, and Spaces
-  remains the active surface.
+- **THEN** it is not mounted, no context is created for the closed generation,
+  and Spaces remains the active surface.
+
+#### Scenario: Async disposal is delayed or rejects
+
+- **GIVEN** a mounted Office generation is being replaced
+- **WHEN** its disposer remains pending and then either fulfills or rejects
+- **THEN** no replacement context starts while it is pending, the disposer is
+  invoked once, rejection is contained after settlement, and the fresh
+  generation cannot overlap the old one.
 
 ### Requirement: Keep Foundation services authoritative
 
@@ -272,10 +300,46 @@ Office assets, and any World-only provider wiring. Those modules SHALL be
 reachable from the Office registration or an explicitly World-owned assembly
 contribution, not from Foundation's generic `App` source.
 
-The one v1 product-settings contribution MAY provide a label, render function,
-and lifecycle hooks needed to preserve the existing Office settings entry. It
-MUST NOT grow into a generic settings marketplace. Foundation's settings view
-continues to own generic bridge and display settings.
+The one v1 product-settings seam SHALL preserve a typed binding equivalent to:
+
+```ts
+type ProductSettingsContribution<Context> = {
+  id: string;
+  label: string;
+  createContext: (host: SurfaceHostV1) => Context;
+  load: () => Promise<{
+    default: React.ComponentType<{
+      context: Context;
+      onClose: () => void;
+    }>;
+  }>;
+  dispose: (context: Context) => void | Promise<void>;
+};
+
+type ProductAssembly = {
+  surfaceApiVersion: typeof FOUNDATION_SURFACE_API_VERSION;
+  surfaces: readonly OpaqueSurfaceRegistration[];
+  productSettings?: OpaqueProductSettingsContribution;
+};
+```
+
+The settings contribution generic MUST remain bound through opaque storage so
+its factory, component, close callback, context, and disposer cannot be mixed
+with another contribution. Foundation owns the `onClose` callback passed to
+the loaded component. Invoking it marks that settings generation closing; the
+same result occurs when the settings shell closes it externally.
+
+Settings loading, context creation, cancellation, failure, retry, and disposal
+SHALL follow the surface ordering above. In particular, Foundation loads before
+creating context; a throwing factory releases partial acquisitions itself; and
+close/failure/retry performs abort, exactly-once disposal, and awaited/contained
+promise settlement before another settings generation opens. A disposer
+rejection MUST NOT prevent the generic settings shell from closing. A delayed
+disposer MUST prevent overlapping settings generations.
+
+This seam exists only to preserve the Office settings entry. It MUST NOT grow
+into a generic settings marketplace, and Foundation's settings view continues
+to own generic bridge and display settings.
 
 #### Scenario: Office is omitted from World during a diagnostic build
 
@@ -284,6 +348,15 @@ continues to own generic bridge and display settings.
 - **WHEN** the emitted graph is audited
 - **THEN** Office orchestration, settings, providers, and art are absent while
   Foundation shell + Spaces still build and run.
+
+#### Scenario: Office settings closes while async cleanup is pending
+
+- **GIVEN** the typed settings component invokes its Foundation-owned
+  `onClose` callback
+- **WHEN** its disposer is delayed and later rejects
+- **THEN** Foundation aborts the settings generation, invokes the bound
+  disposer once, prevents a second Office settings generation until settlement,
+  contains the rejection, and keeps generic settings usable.
 
 ### Requirement: Use existing bridge capabilities for admission
 
@@ -378,7 +451,10 @@ Approval requires review of:
 Implementation completion later requires:
 
 - type-level negative tests for mismatched registration/context pairs;
-- cancellation and exactly-once cleanup tests for context and settings races;
+- strong-exception-safety tests for surface and settings factories that throw
+  after partial acquisition;
+- cancellation, delayed-disposer, rejecting-disposer, awaited ordering, and
+  exactly-once cleanup tests for surface and settings races;
 - command validation and qualified multi-bridge identity tests;
 - shared-terminal acquisition/release regression tests;
 - duplicate-ID/route and API-version rejection tests;
