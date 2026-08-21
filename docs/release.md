@@ -30,6 +30,13 @@ scripts/check-vendor.sh
 npm run check
 ```
 
+The check includes the fail-closed provenance and release-compliance tests.
+For a release-specific clean-checkout gate, also run:
+
+```bash
+npm run release:compliance -- --check-clean
+```
+
 Do not cut a release without bridge test/build coverage.
 
 ## Package Artifacts
@@ -40,6 +47,12 @@ the release script stamped `CHANGELOG.md`, rebuild them from the released `main`
 `vX.Y.Z` value before upload. Use the documented packaging commands and any supplemental local build
 instructions for the release operator's environment. Do not commit generated tarballs, APKs, or
 build-service outputs.
+
+The source archive is built with `scripts/package-source.sh vX.Y.Z`; desktop
+archives are built with `scripts/package-tarball.sh`. Both commands require a
+clean checkout and include generated source/assembly manifests, npm/Cargo
+SBOMs, required notices, and checksums. Inspect the exact archive member list
+and run the packaged artifact audit before upload.
 
 Linux desktop tarball:
 

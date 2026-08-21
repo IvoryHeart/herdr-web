@@ -2,6 +2,12 @@
 
 This bundle contains the `herdr-web` browser UI assets and the `herdr-web-bridge` executable.
 
+The root `LICENSE`, `NOTICE`, `LICENSES/`, and `provenance/` directories are
+part of the bundle. `provenance/artifact-manifest.json` identifies every
+member and `provenance/SHA256SUMS` verifies the bytes. The bundle does not
+include a Herdr session, browser-local state, credentials, uploads, or any
+developer checkout.
+
 It does not include Herdr itself. Start or attach a Herdr `v0.8.2` or newer session that reports
 terminal protocol `20` separately before running this bundle.
 

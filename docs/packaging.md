@@ -39,6 +39,15 @@ herdr-web-vX.Y.Z-PLATFORM/
 `bin/herdr-web` is a small wrapper that runs `herdr-web-bridge` with `--static-dir` pointed at the
 bundled web assets.
 
+Every source or desktop archive also carries `NOTICE`, the applicable
+`LICENSES/` texts, the vendor manifest, Office owner attestation, compatibility
+and component provenance, generated npm/Cargo SBOMs, an exact artifact-member
+manifest, and `provenance/SHA256SUMS`. Packaging fails closed if any required
+notice, hash, dependency license classification, or declared-member check is
+missing. The generated material is produced and audited by
+`scripts/release-compliance.mjs`; it excludes Herdr sessions, browser state,
+credentials, uploads, sibling checkouts, and unrelated workspace files.
+
 ## Build A Desktop Tarball
 
 Install dependencies first:
@@ -87,6 +96,9 @@ cat dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
 
 Confirm the archive contains the expected root directory, `bin/herdr-web`,
 `bin/herdr-web-bridge`, bundled `share/herdr-web/web/` assets, and `README.md`.
+Also inspect `provenance/artifact-manifest.json` and
+`provenance/SHA256SUMS`; the archive must include the complete license/notice
+and provenance bundle.
 
 Before release, run the unpacked wrapper against a Herdr `v0.8.2` or newer daemon reporting protocol
 `20`. Confirm the bridge accepts that combination and rejects a daemon reporting any other terminal
