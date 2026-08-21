@@ -1,0 +1,315 @@
+# Herdr World installer and version-locked release orchestration
+
+- **Spec ID:** `017-herdr-world-installer-and-release-orchestration`
+- **Status:** In review
+- **Created:** 2026-08-21
+- **Revised:** 2026-08-21
+- **Owner:** Yaswanth Narvaneni / Herdr World
+- **Reviewers:** IvoryHeart (repository owner)
+- **Approved by:** —
+- **Approved at:** —
+
+> This specification turns the separated repositories into one understandable
+> end-user installation while retaining exact component ownership and versions.
+
+## 1. Purpose
+
+A user should be able to install and run Herdr World without cloning multiple
+repositories, guessing compatible versions, or manually supervising a daemon
+and bridge. The distribution should install three explicit layers—Herdr,
+Foundation, and World—while making it clear which project owns each layer.
+
+The installer is a Herdr World assembly tool, not a new runtime or a claim that
+Herdr/Foundation are one relicensed package.
+
+## 2. Distribution model
+
+The default installation contains:
+
+```text
+required: compatible Herdr runtime
+required: exact Herdr World Foundation bridge/runtime artifact
+required: exact Herdr World UI/product artifact
+optional: separately selected Herdr plugins or companions
+```
+
+The public command and installation identity is `herdr-world`. The initial
+implementation MAY be a repository-owned CLI or script, but its manifest,
+verification, lifecycle, and rollback behavior are normative.
+
+## 3. Scope
+
+This feature includes:
+
+- a versioned distribution manifest joining World, Foundation, and Herdr;
+- user-local install, verification, doctor, start, stop, status, update,
+  rollback, and uninstall behavior;
+- optional installation of a compatible Herdr release with explicit consent;
+- foreground development and supervised background operation;
+- readiness, logs, port selection, data preservation, and failure isolation;
+- atomic version activation and rollback;
+- complete notices, SBOMs, checksums, and assembly provenance; and
+- direct multi-host guidance with optional companions kept optional.
+
+## 4. Non-goals
+
+- No replacement for Herdr's own updater, configuration, sessions, or plugin
+  management.
+- No automatic system-wide installation, `sudo`, firewall change, non-loopback
+  exposure, or remote credential setup.
+- No mandatory `herdr-mirror`, central gateway, provider, or optional plugin.
+- No installation from mutable branches or unverified arbitrary URLs.
+- No promise of every operating system in the first release.
+- No deletion of user data during ordinary uninstall or rollback.
+
+## 5. Requirements
+
+### Requirement: Publish one immutable distribution manifest
+
+Each World release SHALL publish a machine-readable manifest containing at
+least:
+
+```text
+schema_version
+world: version, source_commit, artifact_url, sha256
+foundation: version, source_commit, package_integrity, bridge_sha256
+surface_api_version
+bridge_api_version
+web_compat
+herdr: version, source_commit_or_release, terminal_protocol
+platform_and_architecture
+included_optional_components
+license_notice_bundle_sha256
+sbom_sha256
+```
+
+Every URL SHALL resolve to an immutable release asset. The installer SHALL
+verify hashes before activation and fail closed on missing, mismatched, or
+unsupported fields. Lockfiles and component manifests remain available for
+source builds.
+
+#### Scenario: A Foundation asset is replaced at its URL
+
+- **GIVEN** its bytes no longer match the World manifest
+- **WHEN** installation or update runs
+- **THEN** activation stops, the current version remains active, and the error
+  identifies the component without executing the unverified file.
+
+### Requirement: Detect and install a compatible Herdr explicitly
+
+The installer SHALL detect the current Herdr binary, daemon version, terminal
+protocol, update channel, socket, and health without reading terminal content.
+If compatible, it SHALL reuse the installation. If absent or incompatible, an
+interactive install MAY offer the exact manifest version and explain that
+Herdr is an independent Apache-2.0 upstream component.
+
+Interactive installation requires confirmation before downloading, replacing,
+or handing off Herdr. Non-interactive installation requires an explicit flag
+such as `--install-herdr`; absence of that flag fails with actionable guidance.
+The installer SHOULD invoke Herdr's supported updater/handoff rather than
+inventing replacement behavior when it can reach the required stable version.
+
+#### Scenario: Protocol 19 is running but World requires protocol 20
+
+- **GIVEN** a healthy older daemon owns the default socket
+- **WHEN** interactive installation runs
+- **THEN** it offers the exact supported upgrade, records rollback information,
+  performs handoff only after confirmation, and rechecks daemon health before
+  activating the Foundation bridge.
+
+### Requirement: Install to a user-owned versioned layout
+
+The default installation SHALL require no elevated privileges and SHALL keep
+immutable versions separate from mutable configuration/data. Exact paths may
+follow platform conventions, with semantics equivalent to:
+
+```text
+.../herdr-world/versions/<world-version>/
+.../herdr-world/foundation/<foundation-version>/
+.../herdr-world/current -> versions/<world-version>
+.../herdr-world/config/
+.../herdr-world/data/
+.../herdr-world/logs/
+```
+
+Activation SHALL be atomic. A failed install or update MUST NOT overwrite the
+currently active version. At least the previous known-good World/Foundation
+pair and its manifest SHALL be retained for rollback.
+
+#### Scenario: Power or build failure occurs before activation
+
+- **GIVEN** the current release is healthy
+- **WHEN** staging the next release fails
+- **THEN** the active pointer and service command still reference the healthy
+  release and incomplete staging is reported as removable.
+
+### Requirement: Provide coherent lifecycle commands
+
+The distribution SHALL provide discoverable semantics equivalent to:
+
+```text
+herdr-world install
+herdr-world doctor
+herdr-world start [--foreground]
+herdr-world stop
+herdr-world status
+herdr-world update
+herdr-world rollback
+herdr-world uninstall [--purge-data]
+```
+
+Exact subcommand spelling MAY differ only if documented before implementation.
+Commands SHALL identify the selected Herdr session/socket, Foundation/World
+versions, bind address/port, service ownership, readiness, and logs.
+
+`stop` SHALL target only a process recorded and verified as belonging to that
+installation. `uninstall` preserves configuration, notes, uploads, preferences,
+and rollback metadata by default; data removal requires a separate explicit
+`--purge-data` confirmation.
+
+#### Scenario: Another application owns the configured port
+
+- **GIVEN** the recorded World service is stopped and an unrelated process owns
+  the port
+- **WHEN** `herdr-world stop` runs
+- **THEN** it refuses to signal the unrelated PID and reports the ownership
+  mismatch.
+
+### Requirement: Supervise components without coupling their failure domains
+
+Background operation SHALL use an available user-level service manager or a
+documented repository-owned supervisor with equivalent PID, readiness, log,
+restart/backoff, and shutdown behavior. Foreground mode SHALL remain available
+for development and diagnosis.
+
+Herdr, Foundation bridge, World UI, and optional companions retain separate
+health states. A failed optional provider/plugin MUST NOT restart Herdr or make
+shell + Spaces unavailable. A bridge failure MAY restart that exact bridge with
+bounded backoff but MUST NOT kill an unrelated daemon/session.
+
+#### Scenario: An optional provider repeatedly crashes
+
+- **GIVEN** Herdr, Foundation, and World are healthy
+- **WHEN** the provider exceeds its restart budget
+- **THEN** status reports that optional feature degraded, stops retrying until
+  the documented reset/update event, and leaves core World usable.
+
+### Requirement: Default to local, direct multi-host operation
+
+World SHALL bind loopback by default. Non-loopback bind, allowed host/origin,
+TLS/reverse proxy, and upload exposure require explicit configuration and
+warnings. The installer MUST NOT modify a firewall or SSH configuration.
+
+For multiple hosts, documentation SHALL default to one compatible bridge per
+host and Foundation's existing direct browser profiles with qualified host
+identity. SSH forwarding MAY be documented. `herdr-mirror` or another companion
+MAY be selected explicitly but MUST NOT be installed or required by default.
+
+#### Scenario: A user adds a second machine
+
+- **GIVEN** both machines run compatible bridges
+- **WHEN** the second URL is added to World settings
+- **THEN** the browser connects directly using existing multi-bridge behavior,
+  and installation does not introduce a central coordinator.
+
+### Requirement: Make doctor safe and actionable
+
+`doctor` SHALL perform read-only checks for:
+
+- manifest and artifact integrity;
+- Herdr binary/daemon version, protocol, socket, and health;
+- Foundation bridge/API/`web_compat` and package version;
+- World/Foundation exact compatibility;
+- port ownership and loopback exposure;
+- required files, permissions, licenses/notices, and free space;
+- service/PID/status-record consistency; and
+- recent redacted error summaries.
+
+It SHALL distinguish `healthy`, `degraded optional`, `action required`, and
+`unsafe/incompatible`. It MUST NOT attach to terminal streams, run commands,
+change configuration, migrate data, or restart processes unless the user
+invokes a separate repair action.
+
+#### Scenario: World and Foundation versions do not match
+
+- **GIVEN** files from two releases were manually combined
+- **WHEN** doctor runs
+- **THEN** it reports the exact expected/observed versions and hashes, marks the
+  installation incompatible, and recommends activation of a known manifest.
+
+### Requirement: Update and rollback the assembly as one tested unit
+
+Update SHALL download and verify a complete World manifest into staging, run
+static compatibility checks, and optionally run an isolated smoke test before
+activation. If a Herdr update is required, its explicit handoff and rollback
+step occurs before World activation. Foundation and World MUST NOT be updated
+independently behind the active manifest.
+
+After activation, readiness and smoke checks SHALL cover capabilities,
+snapshot, navigation, terminal attach/input/focus, Office, refresh, and a
+configured multi-bridge path when available. Failure automatically reactivates
+the previous World/Foundation pair and reports whether a separately completed
+Herdr handoff also needs user-selected rollback.
+
+#### Scenario: New World starts but Office fails its smoke check
+
+- **GIVEN** the previous assembly is retained
+- **WHEN** post-activation acceptance fails
+- **THEN** the service rolls back to the previous exact pair, verifies health,
+  and preserves logs for the failed version without deleting user data.
+
+### Requirement: Ship complete source and notice material
+
+Installer artifacts SHALL include or link immutably to corresponding source,
+component and assembly manifests, licenses/notices, SBOMs, and checksums as
+required by Spec 004. Installed offline notices SHALL identify Herdr, Herdr Web
+lineage in Foundation, Foundation, World, and redistributed code/art/fonts.
+
+Source-only prereleases MAY defer executable signing. Stable public binaries
+require an explicitly approved signing policy; the installer SHALL clearly
+report unsigned artifacts and MUST NOT imply signatures exist.
+
+#### Scenario: Installation completes without network access afterward
+
+- **GIVEN** the release assets were verified during installation
+- **WHEN** the user opens local notices and version information offline
+- **THEN** all installed components, source revisions, licenses, versions, and
+  hashes are inspectable without contacting a mutable website.
+
+## 6. Privacy and security
+
+- Downloads use HTTPS and immutable URLs plus hash verification; TLS alone is
+  not artifact identity.
+- No command logs provider credentials, tokens, terminal/note content, or full
+  sensitive environment values.
+- Config/data/backups use user-only permissions where supported.
+- No install/update hook executes code from an optional plugin/provider before
+  its package, license, permissions, and checksum are accepted.
+- Remote exposure remains opt-in and must surface the bridge's authentication
+  and origin-policy limitations.
+
+## 7. Acceptance evidence
+
+Approval requires review of the three-component manifest, user-local layout,
+explicit Herdr update, direct multi-host default, and rollback model.
+
+Implementation completion later requires:
+
+- clean installation with no pre-existing Herdr;
+- reuse of an already-compatible Herdr installation;
+- protocol-19-to-20 handoff with rollback evidence;
+- checksum/manifest mismatch negative tests;
+- occupied-port and unrelated-PID safety tests;
+- user service and foreground-mode acceptance;
+- optional-component failure-isolation tests;
+- atomic update failure and successful rollback tests;
+- uninstall preservation and explicit purge tests; and
+- offline license/notice/SBOM/source-manifest inspection.
+
+## 8. Deferred decisions
+
+- Registry/package-manager distribution beyond release assets.
+- System-wide and managed enterprise installation.
+- Windows service and mobile-store distribution.
+- Automatic signing/key rotation infrastructure.
+- A bundled optional plugin/provider catalogue.
