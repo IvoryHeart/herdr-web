@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "project": "herdr-world",
+  "purpose": "Declarative release assembly boundary for the current pre-extraction World checkout.",
+  "source_commit": "recorded-at-build-time",
+  "compatibility": {
+    "herdr_release": "v0.8.2",
+    "herdr_commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
+    "terminal_protocol": 20,
+    "foundation_repository": "current combined checkout; physical Foundation extraction is Spec 016",
+    "foundation_version": "recorded-at-build-time",
+    "surface_api_version": null,
+    "web_compat": "protocol-20 current bridge compatibility; record exact response in the release manifest"
+  },
+  "artifacts": {
+    "source-archive": {
+      "assembly": "git archive of the clean reviewed commit plus generated compliance material",
+      "required_paths": [
+        "LICENSE",
+        "LICENSE-APACHE-2.0",
+        "NOTICE",
+        "LICENSES/**",
+        "provenance/**",
+        "vendor/herdr-compat/VENDOR-MANIFEST.toml",
+        "web/public/world/LICENSE-PixiJS.txt",
+        "package-lock.json",
+        "web/package-lock.json",
+        "bridge/Cargo.lock",
+        "vendor/herdr-compat/Cargo.lock"
+      ],
+      "generated_paths": [
+        "provenance/source-manifest.json",
+        "provenance/sbom/npm-root.json",
+        "provenance/sbom/npm-web.json",
+        "provenance/sbom/cargo-bridge.json",
+        "provenance/sbom/cargo-herdr-compat.json",
+        "provenance/artifact-manifest.json",
+        "provenance/SHA256SUMS"
+      ],
+      "excluded_paths": [
+        ".git/**",
+        "node_modules/**",
+        "web/node_modules/**",
+        "web/dist/**",
+        "bridge/target/**",
+        "vendor/herdr-compat/target/**",
+        "dist-packages/**",
+        ".scratch/**",
+        ".worktrees/**",
+        "browser-local-state/**",
+        "credentials/**",
+        "uploads/**"
+      ],
+      "omitted_optional_components": [
+        "live Herdr daemon/session and user data",
+        "browser localStorage, Capacitor Preferences, cookies, and service-worker state",
+        "provider credentials and machine-specific configuration",
+        "sibling checkouts and unrelated workspace files",
+        "generated web/dist, Rust target, Android build, and release staging directories"
+      ]
+    },
+    "desktop-tarball": {
+      "assembly": "built bridge plus web/dist and compliance material copied by scripts/package-tarball.sh",
+      "required_paths": [
+        "bin/herdr-web",
+        "bin/herdr-web-bridge",
+        "share/herdr-web/web/**",
+        "README.md",
+        "LICENSE",
+        "LICENSE-APACHE-2.0",
+        "NOTICE",
+        "LICENSES/**",
+        "provenance/**"
+      ],
+      "excluded_paths": [
+        "node_modules/**",
+        "web/node_modules/**",
+        "web/dist/**",
+        "bridge/target/**",
+        "vendor/herdr-compat/target/**",
+        "credentials/**",
+        "browser-local-state/**",
+        "uploads/**",
+        "sibling-checkout/**"
+      ],
+      "omitted_optional_components": [
+        "Herdr runtime; users provide a separately installed compatible Herdr",
+        "user sessions, notes, uploads, pins, sockets, credentials, and browser-local state",
+        "optional providers and companions"
+      ]
+    }
+  },
+  "validation": {
+    "required": true,
+    "missing_hash_or_notice": "fail",
+    "undeclared_member": "fail",
+    "secret_or_local_state": "fail",
+    "machine_specific_absolute_path": "fail",
+    "sibling_checkout_reference": "fail"
+  }
+}

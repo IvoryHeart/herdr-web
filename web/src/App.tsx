@@ -5506,7 +5506,7 @@ export function App() {
             {isCompactLayout ? <ChevronLeft size={20} /> : <PanelLeft size={18} />}
           </button>
           <div className="stage-id" {...selectedPaneMenuPress}>
-            <span className="stage-title">{selectedPane ? paneTitle(selectedPane) : "herdr-web"}</span>
+            <span className="stage-title">{selectedPane ? paneTitle(selectedPane) : "Herdr World"}</span>
             <span className="stage-sub mono">
               {stageBreadcrumb(snapshot, selectedPane, loadState, selectedRuntime?.canConnect ?? false)}
             </span>
@@ -8412,10 +8412,10 @@ function Switcher({
       <header className="sb-head">
         <div className="brand">
           <span className="brand-mark">
-            <img className="brand-logo" src="/herdr-logo.svg" alt="" aria-hidden="true" />
+            <img className="brand-logo" src="/herdr-world-mark.svg" alt="" aria-hidden="true" />
             <span className="brand-title">
               <span className="brand-dot dot" data-status={roll} />
-              herdr-web
+              Herdr World
             </span>
           </span>
           {headerSummary ? (

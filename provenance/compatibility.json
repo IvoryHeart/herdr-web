@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "release": "source-first pre-extraction baseline",
+  "herdr": {
+    "repository": "https://github.com/herdrdev/herdr",
+    "release": "v0.8.2",
+    "commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
+    "terminal_protocol": 20,
+    "license": "Apache-2.0"
+  },
+  "herdr_web": {
+    "repository": "https://github.com/kcosr/herdr-web",
+    "audited_commit": "cff6335683acc20cbb76c24b67d03f9e75dd78e6",
+    "license": "MIT",
+    "upstream_remote": "git@github.com:kcosr/herdr-web.git"
+  },
+  "current_combined_checkout": {
+    "repository": "https://github.com/IvoryHeart/herdr-web",
+    "baseline_commit": "3a90f5419d48405c44c12d40b45a3b72d511e7c9",
+    "world_license": "Apache-2.0",
+    "foundation_additions_license": "MIT",
+    "protocol": "20"
+  },
+  "upstream_ledger": [
+    {"concern": "protocol-20 compatibility", "status": "downstream-only", "url": "https://github.com/kcosr/herdr-web/issues/65", "notes": "Preserved current protocol-20 behavior; upstream waiting does not block downstream work."},
+    {"concern": "supervised development", "status": "adopted", "url": "https://github.com/kcosr/herdr-web/pull/57", "notes": "Generic concern retained with downstream loopback safeguards."},
+    {"concern": "terminal IME replay", "status": "adopted", "url": "https://github.com/kcosr/herdr-web/pull/58", "notes": "Focused replay is recorded in UPSTREAM.md."},
+    {"concern": "dialog/menu focus", "status": "adopted", "url": "https://github.com/kcosr/herdr-web/pull/62", "notes": "Focused replay is recorded in UPSTREAM.md."},
+    {"concern": "screen-reader text", "status": "adopted", "url": "https://github.com/kcosr/herdr-web/pull/64", "notes": "Focused replay is recorded in UPSTREAM.md."},
+    {"concern": "attach-focus protection", "status": "downstream-only", "url": null, "notes": "Current downstream behavior remains covered by focused tests."},
+    {"concern": "multi-bridge behavior", "status": "downstream-only", "url": null, "notes": "Existing direct multi-bridge behavior remains authoritative."}
+  ],
+  "refresh_procedure": [
+    "git fetch upstream main --tags",
+    "git rev-parse upstream/main",
+    "git log --oneline --left-right <recorded-upstream>...upstream/main",
+    "classify adopted, conflicting, proposed, superseded, or downstream-only concerns",
+    "run the clean-checkout and provenance gates before recording a new release"
+  ]
+}

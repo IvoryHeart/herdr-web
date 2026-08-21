@@ -2,8 +2,10 @@
  * MODIFIED FILE NOTICE — Apache-2.0 Section 4(b)
  *
  * This TypeScript geometry adaptation is downstream Herdr World / Office work
- * derived from the historical Claw-Empire Office geometry. Source provenance,
- * source hashes, and license obligations are recorded in docs/world-assets.md.
+ * from the owner-attested historical personal ai-observability / ai-palace
+ * implementation. It is not licensed by or attributed to the Claw-Empire
+ * sprite files. Source provenance, hashes, and license obligations are
+ * recorded in provenance/office-owner-attestation.md.
  */
 export const OFFICE_GEOMETRY = Object.freeze({
   minOfficeWidth: 1000,

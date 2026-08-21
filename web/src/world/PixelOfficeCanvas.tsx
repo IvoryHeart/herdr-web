@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Yaswanth Narvaneni
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * World-owned canvas composition around an owner-attested Office renderer;
+ * see provenance/office-owner-attestation.md. Claw-Empire attribution applies
+ * only to the separately inventoried byte-identical character sprites.
+ */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HerdrOfficeProjection } from "./herdrOfficeProjection";
 import { createOfficeRenderer } from "./officeRenderer";

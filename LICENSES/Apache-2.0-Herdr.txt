@@ -1,0 +1,5 @@
+Apache License 2.0
+
+Herdr and the vendored Herdr compatibility slice are redistributed under the
+Apache License, Version 2.0. See LICENSE-APACHE-2.0 for the complete license
+text and vendor/herdr-compat/VENDOR-MANIFEST.toml for file-level provenance.
