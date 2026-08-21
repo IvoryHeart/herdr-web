@@ -106,9 +106,17 @@ available for source builds.
 ### Requirement: Detect and install a compatible Herdr explicitly
 
 The installer SHALL detect the current Herdr binary, daemon version, terminal
-protocol, update channel, socket, and health without reading terminal content.
-If compatible, it SHALL reuse the installation. If absent or incompatible, an
-interactive install MAY offer the exact manifest version and explain that
+protocol, update channel, socket, health, resolved executable path, and install
+provenance without reading terminal content. Provenance SHALL distinguish at
+least Herdr direct/self-managed, Herdr World-owned isolated, Homebrew, mise,
+Nix, and unknown/external management. The installation record and both target
+and rollback triples SHALL retain the provenance, absolute selected binary,
+manager where applicable, config/socket profile, and which actor owns update,
+rollback, and uninstall. A compatible managed installation MAY be reused, but
+reuse does not transfer ownership to Herdr World.
+
+If Herdr is absent or an owned direct/isolated installation is incompatible,
+an interactive install MAY offer the exact manifest version and explain that
 Herdr is an independent Apache-2.0 upstream component.
 
 Interactive installation requires confirmation before downloading, replacing,
@@ -120,8 +128,29 @@ invoke it only after fetching and verifying the channel metadata and proving
 that the selected version, terminal protocol, platform asset URL, and SHA-256
 exactly equal the World distribution manifest. If the channel has advanced,
 the metadata cannot be proven, or any field differs, the installer MUST NOT use
-the channel updater; it SHALL download and verify the manifest's exact immutable
-Herdr release asset and use the documented exact-version install/handoff path.
+the channel updater. For an installer-owned direct/isolated target it SHALL
+download and verify the manifest's exact immutable Herdr release asset and use
+the documented exact-version install/handoff path.
+
+The installer MUST NOT overwrite, replace, shadow ambiguously, change the
+channel of, uninstall, or claim rollback authority over a Homebrew-, mise-,
+Nix-, or unknown-manager-owned executable. For an incompatible managed install
+it SHALL choose one of two explicit paths:
+
+1. stop with manager-specific update/pin guidance—or a non-mutating
+   unknown-owner diagnostic—let the user perform the owner-managed operation,
+   and re-detect/re-verify that the resulting exact version, protocol, binary
+   path, and artifact identity satisfy the World manifest before continuing;
+   or
+2. with explicit consent, install the exact manifest asset into a versioned
+   Herdr World-owned isolated location and run it by recorded absolute path on
+   a separate config/socket profile, leaving the managed binary, PATH, service,
+   and sessions untouched.
+
+An isolated install MUST NOT rely on PATH precedence. Status, doctor, update,
+rollback, service definitions, and uninstall SHALL address its absolute path
+and socket. Removing World may remove only the isolated Herdr versions it owns;
+it MUST NOT remove or modify the manager-owned installation.
 
 #### Scenario: Protocol 19 is running but World requires protocol 20
 
@@ -131,12 +160,24 @@ Herdr release asset and use the documented exact-version install/handoff path.
   performs handoff only after confirmation, and rechecks daemon health before
   activating the Foundation bridge.
 
-#### Scenario: Stable advances after the World manifest is published
+#### Scenario: Stable advances for a direct installation
 
-- **GIVEN** World pins Herdr vN and the stable channel now selects vN+1
+- **GIVEN** World pins Herdr vN, a direct/self-managed installation is selected,
+  and the stable channel now selects vN+1
 - **WHEN** installation evaluates `herdr update --handoff`
-- **THEN** it refuses the channel updater for this assembly and installs the
-  immutable vN asset whose URL and digest are recorded in the World manifest.
+- **THEN** it refuses the channel updater for this assembly and either stops
+  with exact-version direct-install guidance or, after explicit consent,
+  installs the immutable vN asset as a separate World-owned isolated binary;
+  it does not overwrite the selected direct installation.
+
+#### Scenario: A package-manager-owned Herdr is incompatible
+
+- **GIVEN** Homebrew, mise, or Nix owns the selected Herdr binary and its
+  version does not satisfy the World manifest
+- **WHEN** interactive installation evaluates remediation
+- **THEN** it neither overwrites nor shadows that binary; it stops with exact
+  manager guidance or, after explicit consent, installs and records an isolated
+  World-owned binary/socket and leaves the managed installation untouched.
 
 ### Requirement: Install to a user-owned versioned layout
 
@@ -239,6 +280,8 @@ MAY be selected explicitly but MUST NOT be installed or required by default.
 
 - manifest and artifact integrity;
 - Herdr binary/daemon version, protocol, socket, and health;
+- Herdr executable realpath, install provenance, owning manager, selected
+  update/rollback actor, and ambiguous PATH shadowing;
 - Foundation bridge/API/`web_compat` and package version;
 - World/Foundation exact compatibility;
 - port ownership and loopback exposure;
@@ -268,7 +311,7 @@ active manifest.
 Preflight SHALL calculate both the target triple and rollback triple:
 
 ```text
-Herdr daemon/version/protocol
+Herdr daemon/version/protocol/install provenance/absolute binary/socket profile
 Foundation package + bridge/API/web_compat
 World product + surface API
 ```
@@ -286,6 +329,15 @@ complete compatible rollback triple. If downgrade requires a daemon restart or
 cannot preserve pane processes, that consequence requires explicit confirmation
 before activation. Without either previous-pair compatibility or confirmed
 full-triple rollback, update MUST leave the live daemon unchanged.
+
+Automated Herdr replacement/rollback applies only to a direct or isolated
+binary explicitly owned by the installation record. A package-manager-owned
+daemon remains controlled by that manager: World MAY verify it and provide the
+recorded manager command, but MUST NOT mutate it. If a managed daemon change is
+needed and the previous Foundation/World pair would be incompatible afterward,
+World SHALL keep the managed live triple unchanged and use the isolated target
+path above until the user completes and confirms a manager-owned transition
+whose compatible rollback path has also been recorded.
 
 After activation, readiness and smoke checks SHALL cover capabilities,
 snapshot, navigation, terminal attach/input/focus, Office, refresh, and a
@@ -350,6 +402,11 @@ Implementation completion later requires:
 
 - clean installation with no pre-existing Herdr;
 - reuse of an already-compatible Herdr installation;
+- compatible and incompatible direct, Homebrew, mise, Nix, and unknown-manager
+  installation fixtures, including manager guidance, re-verification, and no
+  overwrite/PATH-shadow/uninstall tests;
+- explicit isolated World-owned Herdr install, absolute-path service,
+  independent socket, rollback, and uninstall tests;
 - protocol-19-to-20 parallel-candidate/handoff with complete compatible-triple
   rollback evidence;
 - a stable-channel-advanced test proving the exact pinned Herdr artifact is

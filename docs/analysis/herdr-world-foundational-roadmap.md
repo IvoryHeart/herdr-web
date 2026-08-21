@@ -191,6 +191,9 @@ to move.
   hashes, notices and SBOMs.
 - Provide user-local install/doctor/start/stop/status/update/rollback/uninstall.
 - Reuse a compatible Herdr or offer an explicit exact upgrade.
+- Detect direct, Herdr World-owned, Homebrew, mise, Nix, and unknown install
+  provenance; never overwrite or claim rollback ownership over a
+  package-manager-managed Herdr binary.
 - Supervise core and optional components with separate health/failure states.
 - Default to loopback and direct multi-bridge; keep optional companions opt-in.
 - Stage updates atomically and retain a known-good compatible

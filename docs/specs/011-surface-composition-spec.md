@@ -175,12 +175,20 @@ work; it does not transfer ownership of a partial context to Foundation.
 On navigation, admission loss, render failure, retry, or assembly teardown,
 Foundation SHALL mark the generation closing, abort it, invoke its disposer
 exactly once if context creation returned, and await the disposer promise's
-settlement before starting a retry or replacement generation. A disposer
-rejection SHALL be caught, reported through the route-local error boundary,
-and treated as settled cleanup; it MUST NOT skip remaining host cleanup or tear
-down unrelated services. Late load/context results from a closed generation
-MUST be ignored. A delayed disposer keeps that registration in its explicit
-closing state rather than allowing overlapping generations.
+settlement before starting a retry or replacement generation.
+
+The disposer owns strong cleanup safety. It MUST release or make inert every
+resource and subscription owned by the context before it fulfills or rejects.
+If one cleanup operation produces a reportable error, the disposer SHALL retain
+that error, continue the remaining cleanup through `finally`, all-settled, or
+equivalent ordering, and may reject only after it confirms that every owned
+resource is released or inert. Rejecting while any ownership remains uncertain
+is a contract violation and MUST be caught by conformance tests. Foundation
+SHALL catch and report a conforming post-cleanup rejection through the
+route-local error boundary; it MUST NOT skip host cleanup or tear down unrelated
+services. Late load/context results from a closed generation MUST be ignored.
+A delayed disposer keeps that registration in its explicit closing state rather
+than allowing overlapping generations.
 
 #### Scenario: Context creation partially succeeds and then throws
 
@@ -199,11 +207,14 @@ closing state rather than allowing overlapping generations.
 
 #### Scenario: Async disposal is delayed or rejects
 
-- **GIVEN** a mounted Office generation is being replaced
-- **WHEN** its disposer remains pending and then either fulfills or rejects
+- **GIVEN** a mounted Office generation owns tracked subscriptions and is being
+  replaced
+- **WHEN** its disposer remains pending and then either fulfills or reports a
+  rejection from one cleanup operation
 - **THEN** no replacement context starts while it is pending, the disposer is
-  invoked once, rejection is contained after settlement, and the fresh
-  generation cannot overlap the old one.
+  invoked once, every tracked resource is released before fulfillment or
+  rejection, rejection is then contained, and the fresh generation cannot
+  overlap the old one.
 
 ### Requirement: Keep Foundation services authoritative
 
@@ -334,8 +345,11 @@ SHALL follow the surface ordering above. In particular, Foundation loads before
 creating context; a throwing factory releases partial acquisitions itself; and
 close/failure/retry performs abort, exactly-once disposal, and awaited/contained
 promise settlement before another settings generation opens. A disposer
-rejection MUST NOT prevent the generic settings shell from closing. A delayed
-disposer MUST prevent overlapping settings generations.
+MUST apply the same strong cleanup safety: all settings resources are released
+or made inert before it may fulfill or report a rejection, and one failed
+cleanup MUST NOT skip the rest. A conforming post-cleanup rejection does not
+prevent the generic settings shell from closing. A delayed disposer MUST
+prevent overlapping settings generations.
 
 This seam exists only to preserve the Office settings entry. It MUST NOT grow
 into a generic settings marketplace, and Foundation's settings view continues
@@ -356,7 +370,8 @@ to own generic bridge and display settings.
 - **WHEN** its disposer is delayed and later rejects
 - **THEN** Foundation aborts the settings generation, invokes the bound
   disposer once, prevents a second Office settings generation until settlement,
-  contains the rejection, and keeps generic settings usable.
+  verifies in conformance tests that all tracked resources were released before
+  rejection, contains the rejection, and keeps generic settings usable.
 
 ### Requirement: Use existing bridge capabilities for admission
 
@@ -454,7 +469,9 @@ Implementation completion later requires:
 - strong-exception-safety tests for surface and settings factories that throw
   after partial acquisition;
 - cancellation, delayed-disposer, rejecting-disposer, awaited ordering, and
-  exactly-once cleanup tests for surface and settings races;
+  exactly-once cleanup tests for surface and settings races, including a
+  rejecting disposer that acquired multiple tracked resources and releases all
+  of them before reporting the retained error;
 - command validation and qualified multi-bridge identity tests;
 - shared-terminal acquisition/release regression tests;
 - duplicate-ID/route and API-version rejection tests;
