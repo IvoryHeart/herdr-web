@@ -1,16 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  SurfaceHostV1,
-  TerminalHandle,
-} from "@herdr-world/foundation/surfaces";
-import { SurfaceTerminalLease } from "../SurfaceTerminalLease";
+import type { SurfaceHostV1 } from "@herdr-world/foundation/surfaces";
 import {
   createOfficeWorldContext,
+  dispatchOfficeSurfaceCommand,
   type OfficeSurfaceContext,
 } from "./assembly";
 import { FALLBACK_CONTEXT } from "./WorldSurface";
@@ -69,41 +64,24 @@ describe("World Foundation host binding", () => {
     });
   });
 
-  it("acquires and releases the production conversation terminal lease", async () => {
-    const release = vi.fn();
-    const handle = {
-      key: "bridge-a:terminal-a",
+  it("routes the exact qualified allow-listed Office command through the registration host", async () => {
+    const dispatch = vi.fn(async () => ({}));
+    const request = {
+      command: "workspace.rename" as const,
       target: {
         bridgeId: "bridge-a",
-        kind: "terminal" as const,
-        nativeTargetId: "terminal-a",
+        kind: "workspace" as const,
+        nativeTargetId: "workspace-a",
       },
-      attach: vi.fn(),
-      input: vi.fn(),
-      resize: vi.fn(),
-      scroll: vi.fn(),
-      focus: vi.fn(),
-      detach: vi.fn(),
-      release,
-    } satisfies TerminalHandle;
-    const acquireTerminal = vi.fn(async () => handle);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
+      params: { label: "Alpha" },
+    };
+    const context = {
+      host: { dispatch } as unknown as SurfaceHostV1,
+      current: FALLBACK_CONTEXT,
+    } satisfies OfficeSurfaceContext;
 
-    await act(async () => {
-      root.render(
-        <SurfaceTerminalLease
-          host={{ acquireTerminal }}
-          target={handle.target}
-        >
-          <span>conversation</span>
-        </SurfaceTerminalLease>,
-      );
-    });
-    expect(acquireTerminal).toHaveBeenCalledWith(handle.target);
-
-    await act(async () => root.unmount());
-    expect(release).toHaveBeenCalledTimes(1);
+    await dispatchOfficeSurfaceCommand(context, request);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith(request);
   });
 });

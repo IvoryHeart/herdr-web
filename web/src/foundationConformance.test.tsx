@@ -67,6 +67,7 @@ describe("Foundation conformance assembly", () => {
         input: vi.fn(),
         resize: vi.fn(),
         scroll: vi.fn(),
+        subscribe: () => () => {},
         focus: vi.fn(),
         detach: vi.fn(),
         release,

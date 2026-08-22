@@ -50,7 +50,7 @@ import type {
   QualifiedSurfaceTarget,
   SurfaceHostV1,
 } from "@herdr-world/foundation/surfaces";
-import { SurfaceTerminalLease } from "../SurfaceTerminalLease";
+import { SurfaceHostContext } from "../surfaceHostContext";
 
 export type WorldSurfaceContext = {
   terminalHost?: Pick<SurfaceHostV1, "acquireTerminal">;
@@ -192,12 +192,14 @@ export default function WorldSurface({ context }: { context?: WorldSurfaceContex
     worldContext.onOpenInSpaces(officeRoomHandoffRequest(room));
   };
   return (
-    <WorldStage
-      projection={worldContext.projection}
-      context={worldContext}
-      onActivateAgent={onActivateAgent}
-      onActivateRoom={onActivateRoom}
-    />
+    <SurfaceHostContext.Provider value={worldContext.terminalHost ?? null}>
+      <WorldStage
+        projection={worldContext.projection}
+        context={worldContext}
+        onActivateAgent={onActivateAgent}
+        onActivateRoom={onActivateRoom}
+      />
+    </SurfaceHostContext.Provider>
   );
 }
 
@@ -891,12 +893,7 @@ function WorldStage({
             onPointerCancel={endConversationInteraction}
             onKeyDown={(event) => moveConversationWithKeyboard(panel.id, event)}
           >
-            <SurfaceTerminalLease
-              host={context.terminalHost}
-              target={panel.terminalTarget}
-            >
-              {panel.content}
-            </SurfaceTerminalLease>
+            {panel.content}
             {!context.compact ? (
               <button
                 type="button"

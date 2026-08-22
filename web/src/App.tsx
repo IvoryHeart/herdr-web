@@ -177,7 +177,8 @@ import {
 } from "./runtimeConnection";
 import type { BridgeConnectionState } from "./runtimeConnection";
 import { qualifiedRuntimeKey, qualifyRuntimeTarget } from "./runtimeIdentity";
-import { TerminalView } from "./TerminalView";
+import { SurfaceTerminalView, TerminalView } from "./TerminalView";
+import type { TerminalViewProps } from "./TerminalView";
 import {
   DEFAULT_TERMINAL_SCREEN_READER_TEXT,
   parseTerminalScreenReaderText,
@@ -189,6 +190,7 @@ import {
   officeSettingsContribution,
   isOfficeSettingsContext,
   isOfficeSurfaceContext,
+  dispatchOfficeSurfaceCommand,
 } from "./world/assembly";
 import { productSurfaceRegistry } from "./productAssembly";
 import { createSurfaceTerminalHandle } from "./surfaceTerminal";
@@ -1331,6 +1333,13 @@ export function App() {
   const worldSettingsSyncRef = useRef(new Map<string, Promise<void>>());
   const officeSurfaceLifecycleRef = useRef<ReturnType<typeof createSurfaceLifecycle> | null>(null);
   const officeSettingsLifecycleRef = useRef<ReturnType<typeof createSettingsLifecycle> | null>(null);
+  const dispatchWorldSurfaceCommand = (request: SurfaceCommandRequest) => {
+    const context = officeSurfaceLifecycleRef.current?.snapshot.context;
+    if (!isOfficeSurfaceContext(context)) {
+      return Promise.reject(new Error("Office surface host is not ready"));
+    }
+    return dispatchOfficeSurfaceCommand(context, request);
+  };
   const [officeSurfaceSnapshot, setOfficeSurfaceSnapshot] =
     useState<SurfaceLifecycleSnapshot | null>(null);
   const [officeSettingsSnapshot, setOfficeSettingsSnapshot] =
@@ -5023,7 +5032,7 @@ export function App() {
         setError("Unsupported Office command");
         return;
       }
-      void dispatchSurfaceCommand({
+      void dispatchWorldSurfaceCommand({
         command,
         target: { bridgeId, kind: "workspace", nativeTargetId: id },
         params: { label: value },
@@ -5059,7 +5068,7 @@ export function App() {
       return;
     }
     if (dialog.surface === "world") {
-      void dispatchSurfaceCommand({
+      void dispatchWorldSurfaceCommand({
         command: "workspace.create",
         target: { bridgeId: dialog.bridgeId, kind: "workspace", nativeTargetId: "new" },
         params: { label: value },
@@ -5114,7 +5123,7 @@ export function App() {
     }
     const { kind, bridgeId, id } = dialog;
     if (dialog.surface === "world") {
-      void dispatchSurfaceCommand({
+      void dispatchWorldSurfaceCommand({
         command: "workspace.rename",
         target: { bridgeId, kind: "workspace", nativeTargetId: id },
         params: { label: null },
@@ -5152,7 +5161,7 @@ export function App() {
         setError("Unsupported Office command");
         return;
       }
-      void dispatchSurfaceCommand({
+      void dispatchWorldSurfaceCommand({
         command: "workspace.close",
         target: { bridgeId, kind: "workspace", nativeTargetId: id },
       }).then(
@@ -5428,6 +5437,11 @@ export function App() {
           targetLabel={worldConversation.targetLabel}
           hostLabel={worldConversation.hostLabel}
           pane={worldConversation.pane}
+          terminalTarget={{
+            bridgeId: worldConversation.runtime.id,
+            kind: "terminal",
+            nativeTargetId: worldConversation.pane.terminal_id,
+          }}
           runtime={worldConversation.runtime}
           session={worldConversation.session}
           onClose={() => closeWorldConversation(worldConversation.windowId)}
@@ -6084,9 +6098,16 @@ export function App() {
             resumeToken={selectedRuntime.resumeToken}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
+            surfaceHost={surfaceHost}
           />
         ) : renderTerminal ? (
-          <TerminalView
+          <HostManagedTerminalView
+            host={surfaceHost}
+            target={selectedTerminalSession?.attachEnabled && selectedRuntime && selectedPane ? {
+              bridgeId: selectedRuntime.id,
+              kind: "terminal",
+              nativeTargetId: selectedPane.terminal_id,
+            } : undefined}
             pane={selectedTerminalSession?.attachEnabled ? selectedPane : null}
             connectionKey={selectedTerminalSession?.sessionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
@@ -7509,6 +7530,22 @@ function hasOpenModal() {
   return document.querySelector(".overlay-root [role='dialog']") !== null;
 }
 
+type HostManagedTerminalViewProps = Omit<
+  TerminalViewProps,
+  "terminalHandle" | "terminalLoading" | "terminalError"
+> & {
+  host: Pick<SurfaceHostV1, "acquireTerminal">;
+  target?: QualifiedSurfaceTarget;
+};
+
+function HostManagedTerminalView({ host, target, ...props }: HostManagedTerminalViewProps) {
+  return target ? (
+    <SurfaceTerminalView {...props} host={host} target={target} />
+  ) : (
+    <TerminalView {...props} />
+  );
+}
+
 function SplitGrid({
   cells,
   selectedPaneId,
@@ -7533,6 +7570,7 @@ function SplitGrid({
   resumeToken,
   httpUrl,
   wsUrl,
+  surfaceHost,
 }: {
   cells: { pane: PaneInfo; style: CSSProperties }[];
   selectedPaneId: string | null;
@@ -7557,6 +7595,7 @@ function SplitGrid({
   resumeToken: number;
   httpUrl: (path: string, query?: URLSearchParams) => string;
   wsUrl: (path: string, query?: URLSearchParams) => string;
+  surfaceHost: Pick<SurfaceHostV1, "acquireTerminal">;
 }) {
   return (
     <div className="pane-grid" aria-label="Split panes">
@@ -7577,7 +7616,13 @@ function SplitGrid({
             style={style}
             onPointerDown={() => onSelectPane(pane)}
           >
-            <TerminalView
+            <HostManagedTerminalView
+              host={surfaceHost}
+              target={terminalSession?.attachEnabled ? {
+                bridgeId: runtime.id,
+                kind: "terminal",
+                nativeTargetId: pane.terminal_id,
+              } : undefined}
               pane={terminalSession?.attachEnabled ? pane : null}
               connectionKey={terminalSession?.sessionKey ?? "disconnected"}
               resumeToken={resumeToken}

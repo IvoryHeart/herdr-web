@@ -54,8 +54,13 @@ import type {
   MobileTouchSelectionEndpointTimeoutMs,
 } from "./mobileTerminalPrefs";
 import type { PaneInfo } from "./types";
+import type {
+  QualifiedSurfaceTarget,
+  SurfaceHostV1,
+  TerminalHandle,
+} from "@herdr-world/foundation/surfaces";
 
-type Props = {
+export type TerminalViewProps = {
   pane: PaneInfo | null;
   connectionKey: string;
   resumeToken: number;
@@ -107,6 +112,12 @@ type Props = {
   accessibilityLabel?: string;
   /** Whether this is the currently selected terminal in a split. */
   selected?: boolean;
+  /** Optional Foundation-owned transport. When present, no raw socket is opened here. */
+  terminalHandle?: TerminalHandle | null;
+  /** Loading state while a Foundation-owned transport is being acquired. */
+  terminalLoading?: boolean;
+  /** Local failure while acquiring a Foundation-owned transport. */
+  terminalError?: string | null;
 };
 
 type UploadCandidate = {
@@ -176,7 +187,10 @@ export function TerminalView({
   terminalScreenReaderText = false,
   accessibilityLabel = "Terminal",
   selected = false,
-}: Props) {
+  terminalHandle = null,
+  terminalLoading = false,
+  terminalError = null,
+}: TerminalViewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -185,6 +199,9 @@ export function TerminalView({
   const rendererGenerationRef = useRef(0);
   const rendererReadyRef = useRef<TerminalRendererReady | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const terminalHandleRef = useRef<TerminalHandle | null>(terminalHandle);
+  const terminalTransportReadyRef = useRef(false);
+  const surfaceAutoFocusTerminalRef = useRef<string | null>(null);
   const requestReconnectRef = useRef<(reason: ReconnectReason) => void>(() => {});
   const terminalInputBlockedRef = useRef(false);
   const uploadInputId = useId();
@@ -244,6 +261,7 @@ export function TerminalView({
   terminalInputBatchDelayMsRef.current = terminalInputBatchDelayMs;
   connectionKeyRef.current = connectionKey;
   terminalIdRef.current = pane?.terminal_id ?? null;
+  terminalHandleRef.current = terminalHandle;
 
   useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
@@ -377,8 +395,22 @@ export function TerminalView({
   );
 
   const sendTerminalInputFrame = useCallback(
-    (socket: WebSocket, data: string) => {
+    (data: string) => {
       if (!inputEnabledRef.current) {
+        return;
+      }
+      const terminalHandle = terminalHandleRef.current;
+      if (terminalHandle) {
+        const value = terminalInputTransportRef.current === "binary"
+          ? terminalInputEncoderRef.current.encode(data)
+          : data;
+        void Promise.resolve(terminalHandle.input(value)).catch((error: unknown) => {
+          console.warn("shared terminal input failed", error);
+        });
+        return;
+      }
+      const socket = socketRef.current;
+      if (socket?.readyState !== WebSocket.OPEN) {
         return;
       }
       if (terminalInputTransportRef.current === "binary") {
@@ -414,13 +446,17 @@ export function TerminalView({
     }
     const flush = () => {
       inputFlushTimerRef.current = null;
-      const socket = socketRef.current;
-      if (!inputEnabledRef.current || socket?.readyState !== WebSocket.OPEN) {
+      if (
+        !inputEnabledRef.current ||
+        (terminalHandleRef.current
+          ? !terminalTransportReadyRef.current
+          : socketRef.current?.readyState !== WebSocket.OPEN)
+      ) {
         return;
       }
       const next = inputQueueRef.current.shift();
       if (next !== undefined) {
-        sendTerminalInputFrame(socket, next);
+        sendTerminalInputFrame(next);
       }
       if (inputQueueRef.current.length > 0) {
         inputFlushTimerRef.current = window.setTimeout(flush, 35);
@@ -436,14 +472,18 @@ export function TerminalView({
       batchedInputRef.current = emptyTerminalInputBatch();
       return;
     }
-    const socket = socketRef.current;
-    if (!inputEnabledRef.current || socket?.readyState !== WebSocket.OPEN) {
+    if (
+      !inputEnabledRef.current ||
+      (terminalHandleRef.current
+        ? !terminalTransportReadyRef.current
+        : socketRef.current?.readyState !== WebSocket.OPEN)
+    ) {
       return;
     }
     const drained = drainTerminalInputBatch(pending);
     batchedInputRef.current = drained.batch;
     if (drained.data !== null) {
-      sendTerminalInputFrame(socket, drained.data);
+      sendTerminalInputFrame(drained.data);
     }
   }, [clearBatchedInputTimer, sendTerminalInputFrame]);
 
@@ -458,15 +498,18 @@ export function TerminalView({
       if (!inputEnabledRef.current) {
         return;
       }
-      const socket = socketRef.current;
-      if (socket?.readyState !== WebSocket.OPEN) {
+      if (
+        terminalHandleRef.current
+          ? !terminalTransportReadyRef.current
+          : socketRef.current?.readyState !== WebSocket.OPEN
+      ) {
         return;
       }
       const delayMs = terminalInputBatchDelayMsRef.current;
       const bytes = terminalInputEncoderRef.current.encode(data).byteLength;
       if (shouldSendTerminalInputImmediately(bytes, delayMs)) {
         flushBatchedTerminalInput();
-        sendTerminalInputFrame(socket, data);
+        sendTerminalInputFrame(data);
         return;
       }
       const result = appendTerminalInputBatch(batchedInputRef.current, data, bytes);
@@ -481,6 +524,27 @@ export function TerminalView({
     },
     [flushBatchedTerminalInput, scheduleBatchedTerminalInputFlush, sendTerminalInputFrame],
   );
+
+  const sendTerminalScroll = useCallback((lines: number) => {
+    if (!scrollEnabledRef.current || lines === 0) {
+      return;
+    }
+    const direction = lines < 0 ? "up" : "down";
+    const boundedLines = Math.min(Math.abs(lines), 200);
+    const terminalHandle = terminalHandleRef.current;
+    if (terminalHandle) {
+      if (terminalTransportReadyRef.current) {
+        void Promise.resolve(terminalHandle.scroll(direction, boundedLines)).catch((error: unknown) => {
+          console.warn("shared terminal scroll failed", error);
+        });
+      }
+      return;
+    }
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "scroll", direction, lines: boundedLines }));
+    }
+  }, []);
 
   useEffect(() => {
     if (terminalInputBatchDelayMs <= 0) {
@@ -590,21 +654,7 @@ export function TerminalView({
             })
           : null;
         disposeScroll = renderer.onScroll((lines) => {
-          const socket = socketRef.current;
-          if (
-            !scrollEnabledRef.current ||
-            socket?.readyState !== WebSocket.OPEN ||
-            lines === 0
-          ) {
-            return;
-          }
-          socket.send(
-            JSON.stringify({
-              type: "scroll",
-              direction: lines < 0 ? "up" : "down",
-              lines: Math.min(Math.abs(lines), 200),
-            }),
-          );
+          sendTerminalScroll(lines);
         });
 
         const flushResize = () => {
@@ -621,7 +671,11 @@ export function TerminalView({
           }
           lastMeasuredHostSize = nextSize;
           publishReady();
-          if (socketRef.current?.readyState !== WebSocket.OPEN) {
+          if (
+            terminalHandleRef.current
+              ? !terminalTransportReadyRef.current
+              : socketRef.current?.readyState !== WebSocket.OPEN
+          ) {
             requestReconnectRef.current("resize");
           }
         };
@@ -688,6 +742,7 @@ export function TerminalView({
     measureTerminal,
     pane?.terminal_id,
     sendTerminalInputData,
+    sendTerminalScroll,
   ]);
 
   useEffect(() => {
@@ -714,6 +769,7 @@ export function TerminalView({
     const terminalId = pane?.terminal_id ?? null;
     const ready = rendererReady;
     if (!terminalId) {
+      terminalTransportReadyRef.current = false;
       setConnectionState("idle");
       requestReconnectRef.current = () => {};
       return;
@@ -728,6 +784,132 @@ export function TerminalView({
       requestReconnectRef.current = () => {};
       return;
     }
+
+    if (terminalHandle) {
+      const surfaceHandle = terminalHandle;
+      let disposed = false;
+      let attachPromise: Promise<void> | null = null;
+      let attached = false;
+      terminalTransportReadyRef.current = false;
+      setConnectionState("connecting");
+
+      const sendResize = (size: TerminalSize) => {
+        if (!resizeEnabledRef.current || !terminalTransportReadyRef.current) {
+          return;
+        }
+        void Promise.resolve(surfaceHandle.resize(size.cols, size.rows)).catch((error: unknown) => {
+          console.warn("shared terminal resize failed", error);
+        });
+      };
+      sendResizeRef.current = sendResize;
+
+      const writeTerminalData = (data: Uint8Array) => {
+        if (
+          disposed ||
+          !terminalTransportReadyRef.current ||
+          rendererReadyRef.current?.generation !== ready.generation
+        ) {
+          return;
+        }
+        ready.renderer.write(data);
+      };
+      let unsubscribe: (() => void) | null = null;
+      try {
+        unsubscribe = surfaceHandle.subscribe(writeTerminalData);
+      } catch (error) {
+        console.warn("shared terminal subscription failed", error);
+        setConnectionState("error");
+      }
+
+      const attachSurface = () => {
+        if (disposed || attached || attachPromise) {
+          return;
+        }
+        const attachFocusSnapshot: TerminalAttachFocusSnapshot = {
+          target: document.activeElement,
+          externalFocusSequence: externalFocusSequenceRef.current,
+        };
+        attachPromise = Promise.resolve(surfaceHandle.attach())
+          .then(() => {
+            if (disposed) {
+              return;
+            }
+            attached = true;
+            terminalTransportReadyRef.current = true;
+            terminalInputBlockedRef.current = false;
+            setCloseReason(null);
+            setHasAttachedForTerminal(true);
+            setConnectionState("attached");
+            const size = ready.measure();
+            if (size) {
+              sendResize(size);
+            }
+            const shouldAutoFocusSurfaceTerminal =
+              surfaceAutoFocusTerminalRef.current !== terminalId &&
+              shouldRestoreTerminalFocus({
+              autoFocus: autoFocusRef.current,
+              currentTarget: document.activeElement,
+              currentExternalFocusSequence: externalFocusSequenceRef.current,
+              attachSnapshot: attachFocusSnapshot,
+              });
+            surfaceAutoFocusTerminalRef.current = terminalId;
+            if (shouldAutoFocusSurfaceTerminal) {
+              ready.renderer.focus();
+            }
+            flushBatchedTerminalInput();
+            flushQueuedTerminalInput();
+          })
+          .catch((error: unknown) => {
+            if (disposed) {
+              return;
+            }
+            setCloseReason(error instanceof Error ? error.message : "Shared terminal attach failed");
+            setConnectionState("error");
+          })
+          .finally(() => {
+            attachPromise = null;
+          });
+      };
+
+      const requestReconnect = (reason: ReconnectReason) => {
+        if (disposed) {
+          return;
+        }
+        if (reason === "resize" && attached) {
+          const size = ready.measure("refresh");
+          if (size) {
+            sendResize(size);
+          }
+          return;
+        }
+        attachSurface();
+      };
+      requestReconnectRef.current = requestReconnect;
+      const removeNativeResumeHandler = addNativeResumeHandler(() => requestReconnect("resume"));
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          requestReconnect("visible");
+        }
+      };
+      const handleOnline = () => requestReconnect("online");
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("online", handleOnline);
+      attachSurface();
+
+      return () => {
+        disposed = true;
+        requestReconnectRef.current = () => {};
+        removeNativeResumeHandler();
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("online", handleOnline);
+        terminalTransportReadyRef.current = false;
+        unsubscribe?.();
+        unsubscribe = null;
+        sendResizeRef.current = () => {};
+      };
+    }
+
+    terminalTransportReadyRef.current = false;
 
     let disposed = false;
     let socket: WebSocket | null = null;
@@ -1132,6 +1314,7 @@ export function TerminalView({
     flushQueuedTerminalInput,
     pane?.terminal_id,
     rendererReady,
+    terminalHandle,
     transparentBackground,
     terminalOutputCoalesceMs,
     wsUrl,
@@ -1463,7 +1646,13 @@ export function TerminalView({
         disabled={uploadDisabled}
         onChange={handleFileInput}
       />
-      {!pane ? <div className="terminal-overlay">No panes available</div> : null}
+      {terminalLoading ? (
+        <div className="terminal-overlay">Connecting shared terminal…</div>
+      ) : terminalError ? (
+        <div className="terminal-overlay">{terminalError}</div>
+      ) : !pane ? (
+        <div className="terminal-overlay">No panes available</div>
+      ) : null}
       {pane && showConnectionOverlay && connectionState !== "attached" ? (
         <div className="terminal-overlay">
           {terminalConnectionCopy(connectionState, closeReason, hasAttachedForTerminal)}
@@ -1521,6 +1710,71 @@ export function TerminalView({
         />
       ) : null}
     </section>
+  );
+}
+
+export type SurfaceTerminalViewProps = Omit<
+  TerminalViewProps,
+  "terminalHandle" | "terminalLoading" | "terminalError"
+> & {
+  host: Pick<SurfaceHostV1, "acquireTerminal">;
+  target: QualifiedSurfaceTarget;
+};
+
+export function useSurfaceTerminalHandle(
+  host: Pick<SurfaceHostV1, "acquireTerminal">,
+  target: QualifiedSurfaceTarget,
+) {
+  const [handle, setHandle] = useState<TerminalHandle | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let active = true;
+    let acquired: TerminalHandle | null = null;
+    setHandle(null);
+    setStatus("loading");
+    void host.acquireTerminal(target).then((next) => {
+      if (!active) {
+        void Promise.resolve(next.release()).catch(() => {});
+        return;
+      }
+      acquired = next;
+      setHandle(next);
+      setStatus("ready");
+    }).catch((error: unknown) => {
+      if (active) {
+        console.warn("shared terminal acquisition failed", error);
+        setStatus("error");
+      }
+    });
+    return () => {
+      active = false;
+      setHandle(null);
+      if (acquired) {
+        void Promise.resolve(acquired.release()).catch(() => {});
+      }
+    };
+  }, [host, target.bridgeId, target.kind, target.nativeTargetId]);
+
+  return { handle, status };
+}
+
+/**
+ * Acquires the public host handle before mounting a terminal renderer. The
+ * renderer subscribes to the handle's output fanout; it never opens a second
+ * raw terminal socket and never releases another view's reference.
+ */
+export function SurfaceTerminalView({ host, target, ...props }: SurfaceTerminalViewProps) {
+  const { handle, status } = useSurfaceTerminalHandle(host, target);
+
+  return (
+    <TerminalView
+      {...props}
+      pane={handle ? props.pane : null}
+      terminalHandle={handle}
+      terminalLoading={status === "loading"}
+      terminalError={status === "error" ? "Shared terminal unavailable" : null}
+    />
   );
 }
 

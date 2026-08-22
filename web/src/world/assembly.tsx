@@ -5,6 +5,7 @@ import {
 } from "@herdr-world/foundation/surfaces";
 import type {
   QualifiedSurfaceTarget,
+  SurfaceCommandRequest,
   SurfaceHostV1,
 } from "@herdr-world/foundation/surfaces";
 import { WorldSettingsDialog } from "./WorldSettingsDialog";
@@ -76,6 +77,14 @@ export function createOfficeWorldContext(context: OfficeSurfaceContext): WorldSu
       }
     },
   };
+}
+
+/** Route Office commands through the host captured by the registration. */
+export function dispatchOfficeSurfaceCommand(
+  context: OfficeSurfaceContext,
+  request: SurfaceCommandRequest,
+) {
+  return context.host.dispatch(request);
 }
 
 export const officeRegistration = defineSurface<OfficeSurfaceContext>({

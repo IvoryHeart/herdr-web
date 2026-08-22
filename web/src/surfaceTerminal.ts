@@ -2,6 +2,7 @@ import type { BridgeRuntime } from "./bridge";
 import type {
   QualifiedSurfaceTarget,
   TerminalHandle,
+  TerminalOutputListener,
 } from "@herdr-world/foundation/surfaces";
 
 function terminalSocketUrl(runtime: BridgeRuntime, terminalId: string) {
@@ -30,6 +31,7 @@ export function createSurfaceTerminalHandle(
     cancel: () => void;
     socket: WebSocket;
   } | null = null;
+  const listeners = new Set<TerminalOutputListener>();
 
   const ensureSocket = () => {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -47,6 +49,30 @@ export function createSurfaceTerminalHandle(
     }
     const next = new WebSocket(terminalSocketUrl(runtime, target.nativeTargetId));
     next.binaryType = "arraybuffer";
+    const onMessage = (event: MessageEvent) => {
+      if (socket !== next) {
+        return;
+      }
+      if (event.data instanceof ArrayBuffer) {
+        const output = new Uint8Array(event.data);
+        for (const listener of listeners) {
+          listener(output);
+        }
+        return;
+      }
+      if (event.data instanceof Blob) {
+        void event.data.arrayBuffer().then((buffer) => {
+          if (socket !== next) {
+            return;
+          }
+          const output = new Uint8Array(buffer);
+          for (const listener of listeners) {
+            listener(output);
+          }
+        });
+      }
+    };
+    next.addEventListener("message", onMessage);
     socket = next;
     let settleCancel: (() => void) | null = null;
     const promise = new Promise<void>((resolve, reject) => {
@@ -65,10 +91,11 @@ export function createSurfaceTerminalHandle(
         if (socket === next) {
           socket = null;
         }
-        if (opening?.socket === next) {
-          opening = null;
-        }
-        reject(new Error(message));
+      if (opening?.socket === next) {
+        opening = null;
+      }
+      next.removeEventListener("message", onMessage);
+      reject(new Error(message));
       };
       const onOpen = () => {
         if (settled) {
@@ -114,19 +141,29 @@ export function createSurfaceTerminalHandle(
     opening = null;
     socket = null;
     current?.close();
+    listeners.clear();
   };
 
   return {
     key: JSON.stringify([target.bridgeId, target.nativeTargetId]),
     target,
     attach,
-    input: (value) => ensureSocket().send(JSON.stringify({ type: "input", data: value })),
+    input: (value) => {
+      const current = ensureSocket();
+      current.send(
+        typeof value === "string" ? JSON.stringify({ type: "input", data: value }) : value,
+      );
+    },
     resize: (columns, rows) =>
       ensureSocket().send(JSON.stringify({ type: "resize", cols: columns, rows })),
     scroll: (direction, lines = 1) =>
       ensureSocket().send(JSON.stringify({ type: "scroll", direction, lines })),
     focus: () => {
       // Focus ownership belongs to the renderer using this handle.
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     detach,
     release: detach,
