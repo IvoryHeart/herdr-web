@@ -6,6 +6,11 @@
 
 ### Added
 
+- Added the Spec 011 surface API v1 contract, deterministic assembly
+  validation, serialized typed lifecycle kernel, settings-contribution parity,
+  and least-purpose `SurfaceHostV1` conformance seam. The existing App
+  mounting path remains on `surfaceRegistry` pending the later package and
+  repository extraction. [PR #23](https://github.com/IvoryHeart/herdr-web/pull/23)
 - Added a Foundation-owned, qualified terminal session owner with idempotent
   view handles, bounded late-subscriber replay, focus-owned resize, shared
   reconnect scheduling, and Spaces/Office transport sharing for Spec 011.
