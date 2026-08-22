@@ -688,6 +688,16 @@ test("uses the fixed mobile conversation layout without exposing desktop resize 
 });
 
 test("passes Escape through to a focused Office terminal", async ({ page, request }) => {
+  let resolveTerminalFrame: (() => void) | null = null;
+  const terminalFrameReceived = new Promise<void>((resolve) => {
+    resolveTerminalFrame = resolve;
+  });
+  page.on("websocket", (socket) => {
+    if (/\/ws\/terminal(?:\?|$)/.test(socket.url())) {
+      socket.once("framereceived", () => resolveTerminalFrame?.());
+    }
+  });
+
   await page.goto("/world");
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
@@ -696,7 +706,9 @@ test("passes Escape through to a focused Office terminal", async ({ page, reques
   await expect(bubble).toBeVisible();
   const terminalInput = bubble.locator(".terminal-host textarea.ghostty-hidden-input");
   await expect(terminalInput).toHaveCount(1);
+  await terminalFrameReceived;
   await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
   await page.keyboard.press("Escape");
 
   await expect(bubble).toBeVisible();
