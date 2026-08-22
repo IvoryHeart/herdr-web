@@ -21,6 +21,28 @@ import {
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
 
+/**
+ * The feature namespace published by the bridge `/api/capabilities` contract.
+ * Surface assembly validation uses this existing contract list; it is not an
+ * extension registry or a second runtime capability catalogue.
+ */
+export const BRIDGE_CAPABILITY_FEATURES = [
+  "snapshot",
+  "structural_events",
+  "shared_selection",
+  "agent_activity",
+  "agent_pins",
+  "launcher_presets",
+  "notes",
+  "uploads",
+  "terminal_attach",
+  "terminal_input",
+  "terminal_resize",
+  "terminal_scroll",
+  "terminal_shared_fanout",
+  "observability_extension",
+] as const;
+
 export function sameOriginHostLabel(): string {
   const hostname = globalThis.location?.hostname?.trim();
   if (

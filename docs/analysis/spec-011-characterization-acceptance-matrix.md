@@ -9,19 +9,20 @@
   compatibility check, deterministic assembly validation, typed serialized
   lifecycle kernel, and least-purpose `SurfaceHostV1` terminal/command/
   capability/navigation adapter.
-- **Focused evidence:** `surfaceContract.test.ts` — 17 tests pass; the
+- **Focused evidence:** `surfaceContract.test.ts` — 20 tests pass; the
   coverage includes API match/mismatch, malformed and duplicate assemblies,
   compile-time generic rejection, load/context/factory/disposer races, stale
-  generations, independent kernels, settings lifecycle, qualified identities,
-  semantic commands, and narrow terminal handles backed by
-  `terminalSessionOwners`.
+  generations including rejected stale loads, independent kernels, settings
+  lifecycle, qualified identities, canonical direct/host owner sharing,
+  abort-closed authority, semantic commands, and narrow terminal handles
+  backed by `terminalSessionOwners`.
 - **Public entry:** `web/src/surfaces.ts` is the documented contract facade.
   It is exercised as a conformance seam; the current App still mounts through
   `surfaceRegistry` and has not been cut over.
 - **Upstream evidence:** the dated immutable audit is
   [`upstream-v050-audit-2026-08-22.md`](upstream-v050-audit-2026-08-22.md).
-- **Validation evidence:** focused contract `17/17`; full web `60/60` files,
-  `452/452` tests; retained terminal/focus/IME/accessibility/output suite
+- **Validation evidence:** focused contract `20/20`; full web `60/60` files,
+  `455/455` tests; retained terminal/focus/IME/accessibility/output suite
   `10/10` files, `69/69` tests; E2E `44 passed`, `2 skipped`; security and
   independence audits passed; `npm run check` passed. The existing CI-only
   Office resize skip remains unchanged and is tracked as
@@ -85,7 +86,8 @@ shared-owner phase; the public package/repository seam remains future work.
   The current owner preserves the attach query, renderer output ordering,
   admission gates, focus protection, close policy, cleanup behavior, and
   lossless live fanout when bounded late-subscriber replay becomes incomplete.
-- The candidate preview is running at `http://127.0.0.1:5190/` with its
-  protocol-20 bridge at `http://127.0.0.1:8790/`; the existing installations on
-  8787 and 8788 remain untouched. Manual preview validation is limited to the
-  configured daemon state and does not claim a production cutover.
+- The contract-tranche preview is running at `http://127.0.0.1:5191/` with its
+  protocol-20 bridge at `http://127.0.0.1:8791/`; the existing installations on
+  8787, 8788, 8790, 5174, and 5190 remain untouched. Manual preview validation
+  is limited to the configured daemon state and does not claim a production
+  cutover.

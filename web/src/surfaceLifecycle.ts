@@ -114,8 +114,8 @@ export class LifecycleKernel<Context, Component> {
     try {
       loaded = await this.#registration.load();
     } catch (error) {
-      await this.#failGeneration(generation, "load", error);
-      return { status: "failed", generation: generation.id };
+      const reported = await this.#failGeneration(generation, "load", error);
+      return { status: reported ? "failed" : "stale", generation: generation.id };
     }
 
     if (!this.#isCurrent(generation)) {
@@ -127,8 +127,8 @@ export class LifecycleKernel<Context, Component> {
       context = this.#registration.createContext(generation.host);
     } catch (error) {
       // No assignment occurred, so Foundation has no value it may dispose.
-      await this.#failGeneration(generation, "context", error);
-      return { status: "failed", generation: generation.id };
+      const reported = await this.#failGeneration(generation, "context", error);
+      return { status: reported ? "failed" : "stale", generation: generation.id };
     }
     generation.createdContext = { value: context };
 
@@ -208,13 +208,20 @@ export class LifecycleKernel<Context, Component> {
     generation: Generation<Context>,
     kind: "load" | "context",
     error: unknown,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    if (!this.#isCurrent(generation)) {
+      return false;
+    }
     await this.close(kind === "load" ? "external" : "external", generation.id);
+    if (this.#disposed || (this.#active && this.#active !== generation)) {
+      return false;
+    }
     this.#report(error, {
       kind,
       generation: generation.id,
       reason: generation.closeReason,
     });
+    return true;
   }
 
   async #disposeGeneration(generation: Generation<Context>): Promise<void> {

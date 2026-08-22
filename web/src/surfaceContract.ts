@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { BridgeRuntime } from "./bridge";
+import { BRIDGE_CAPABILITY_FEATURES, type BridgeRuntime } from "./bridge";
 import type { BridgeHttpUrl } from "./bridgeApi";
 import { terminalSessionOwners } from "./terminalSessionOwner";
 import type {
@@ -198,9 +198,13 @@ function isSurfaceRoute(value: string): value is SurfaceRoute {
 
 function validateFeatureNames(values: readonly string[]): readonly string[] {
   const seen = new Set<string>();
+  const knownFeatures = new Set<string>(BRIDGE_CAPABILITY_FEATURES);
   for (const value of values) {
     if (!/^[a-z][a-z0-9_.-]*$/u.test(value)) {
       throw new Error(`Invalid required bridge feature: ${JSON.stringify(value)}`);
+    }
+    if (!knownFeatures.has(value)) {
+      throw new Error(`Unknown required bridge feature: ${value}`);
     }
     if (seen.has(value)) {
       throw new Error(`Duplicate required bridge feature: ${value}`);
@@ -217,7 +221,7 @@ function hasControlCharacters(value: string): boolean {
   });
 }
 
-export class OpaqueSurfaceRegistration {
+class OpaqueSurfaceRegistration {
   readonly definition: SurfaceDefinition;
   readonly #createLifecycle: (options: SurfaceLifecycleOptions) => OpaqueSurfaceLifecycle;
 
@@ -241,13 +245,17 @@ export class OpaqueSurfaceRegistration {
   }
 }
 
+export type SurfaceRegistrationToken = {
+  readonly definition: SurfaceDefinition;
+};
+
 export function defineSurface<Context>(
   registration: SurfaceRegistration<Context>,
-): OpaqueSurfaceRegistration {
+): SurfaceRegistrationToken {
   return OpaqueSurfaceRegistration.from(registration);
 }
 
-export class OpaqueProductSettingsContribution {
+class OpaqueProductSettingsContribution {
   readonly id: string;
   readonly label: string;
   readonly #createLifecycle: (
@@ -281,20 +289,25 @@ export class OpaqueProductSettingsContribution {
 
 export function defineProductSettingsContribution<Context>(
   contribution: ProductSettingsContribution<Context>,
-): OpaqueProductSettingsContribution {
+): ProductSettingsContributionToken {
   return OpaqueProductSettingsContribution.from(contribution);
 }
 
+export type ProductSettingsContributionToken = {
+  readonly id: string;
+  readonly label: string;
+};
+
 export type ProductAssembly = {
   surfaceApiVersion: typeof FOUNDATION_SURFACE_API_VERSION;
-  surfaces: readonly OpaqueSurfaceRegistration[];
-  productSettings?: OpaqueProductSettingsContribution;
+  surfaces: readonly SurfaceRegistrationToken[];
+  productSettings?: ProductSettingsContributionToken;
 };
 
 type ProductAssemblyCandidate = {
   surfaceApiVersion?: number;
-  surfaces: readonly OpaqueSurfaceRegistration[];
-  productSettings?: OpaqueProductSettingsContribution;
+  surfaces: readonly SurfaceRegistrationToken[];
+  productSettings?: ProductSettingsContributionToken;
 };
 
 export function validateProductAssembly(
@@ -396,6 +409,7 @@ export function createSurfaceHostV1(input: SurfaceHostFactoryInput): SurfaceHost
     },
     commands: {
       dispatch: async (command) => {
+        assertSurfaceAuthority(input.signal);
         const runtime = runtimeForTarget(command.target, runtimeByBridgeId);
         assertCommandAvailable(command, runtime);
         return input.commandOwner.dispatch(command, runtime, input.signal);
@@ -403,6 +417,7 @@ export function createSurfaceHostV1(input: SurfaceHostFactoryInput): SurfaceHost
     },
     terminals: {
       acquire: (target, options) => {
+        assertSurfaceAuthority(input.signal);
         const source = sourceByBridgeId.get(target.identity.bridgeId);
         const runtime = runtimeByBridgeId.get(target.identity.bridgeId);
         if (
@@ -414,9 +429,11 @@ export function createSurfaceHostV1(input: SurfaceHostFactoryInput): SurfaceHost
         ) {
           throw new Error("Terminal runtime generation is unavailable");
         }
-        return terminalSessionOwners.acquire({
+        const ownerHandle = terminalSessionOwners.acquire({
           profileId: target.identity.bridgeId,
-          connectionKey: terminalOwnerConnectionKey(target.identity),
+          // Keep this identical to terminalSessionDescriptor.connectionKey;
+          // generationKey already contains the qualified connection identity.
+          connectionKey: target.identity.generationKey,
           terminalId: target.nativeTargetId,
           wsUrl: source.wsUrl,
           outputCoalesceMs: options.outputCoalesceMs,
@@ -429,9 +446,51 @@ export function createSurfaceHostV1(input: SurfaceHostFactoryInput): SurfaceHost
           onState: options.onState,
           onConnectAttempt: options.onConnectAttempt,
         });
+        let released = false;
+        const release = () => {
+          if (released) {
+            return;
+          }
+          released = true;
+          input.signal.removeEventListener("abort", release);
+          ownerHandle.release();
+        };
+        input.signal.addEventListener("abort", release, { once: true });
+        return {
+          updateAdmission: (inputEnabled, resizeEnabled, scrollEnabled) => {
+            if (!released) {
+              ownerHandle.updateAdmission(inputEnabled, resizeEnabled, scrollEnabled);
+            }
+          },
+          setFocusOwner: (wantsFocus) => {
+            if (!released) {
+              ownerHandle.setFocusOwner(wantsFocus);
+            }
+          },
+          reportSize: (size) => {
+            if (!released) {
+              ownerHandle.reportSize(size);
+            }
+          },
+          sendInput: (data, transport) =>
+            released ? false : ownerHandle.sendInput(data, transport),
+          sendScroll: (lines) => (released ? false : ownerHandle.sendScroll(lines)),
+          requestReconnect: () => {
+            if (!released) {
+              ownerHandle.requestReconnect();
+            }
+          },
+          release,
+        };
       },
     },
   };
+}
+
+function assertSurfaceAuthority(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new Error("Surface generation is aborted");
+  }
 }
 
 function runtimeView(runtime: BridgeRuntime): SurfaceRuntimeView {
@@ -513,8 +572,4 @@ function assertCommandAvailable(command: SurfaceCommand, runtime: SurfaceRuntime
   if (runtime.state !== "ready" || !runtime.commands.includes(requiredCommand)) {
     throw new Error(`Surface command is unavailable: ${command.type}`);
   }
-}
-
-export function terminalOwnerConnectionKey(identity: SurfaceRuntimeIdentity): string {
-  return JSON.stringify([identity.connectionKey, identity.generationKey]);
 }

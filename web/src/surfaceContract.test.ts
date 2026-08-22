@@ -18,7 +18,7 @@ import {
   validateProductAssembly,
   validateSurfaceDefinition,
 } from "./surfaceContract";
-import { LifecycleKernel } from "./surfaceLifecycle";
+import { createOpaqueProductSettingsLifecycle, LifecycleKernel } from "./surfaceLifecycle";
 import type { BridgeRuntime } from "./bridge";
 import { terminalSessionOwners } from "./terminalSessionOwner";
 
@@ -36,6 +36,7 @@ const noopCommandOwner = {
 
 afterEach(() => {
   terminalSessionOwners.disposeAll();
+  FakeWebSocket.instances = [];
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -67,6 +68,9 @@ describe("Spec 011 public surface contract", () => {
     expect(() =>
       validateSurfaceDefinition({ ...valid, requiredBridgeFeatures: ["terminal attach"] }),
     ).toThrow(/invalid.*feature/iu);
+    expect(() =>
+      validateSurfaceDefinition({ ...valid, requiredBridgeFeatures: ["made_up_feature"] }),
+    ).toThrow(/unknown.*feature/iu);
     expect(() =>
       validateSurfaceDefinition({ ...valid, requiredBridgeFeatures: ["snapshot", "snapshot"] }),
     ).toThrow(/duplicate.*feature/iu);
@@ -219,6 +223,69 @@ describe("Spec 011 public surface contract", () => {
     );
     terminalA.release();
     terminalB.release();
+  });
+
+  it("shares one merged owner with the direct terminal acquisition path", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const host = createSurfaceHostV1({
+      signal: new AbortController().signal,
+      runtimes: [{ runtime: runtime("bridge-a", "generation-a", ["terminal_attach"]), wsUrl }],
+      navigation: {
+        currentSurfaceId: "spaces",
+        goTo: () => {},
+        subscribe: () => () => {},
+      },
+      commandOwner: noopCommandOwner,
+    });
+    const options = terminalOptions();
+    const direct = terminalSessionOwners.acquire({
+      profileId: "bridge-a",
+      connectionKey: "generation-a",
+      terminalId: "terminal-1",
+      wsUrl,
+      ...options,
+    });
+    const surface = host.terminals.acquire(
+      { identity: host.runtimes[0].identity, kind: "terminal", nativeTargetId: "terminal-1" },
+      options,
+    );
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    surface.release();
+    direct.release();
+  });
+
+  it("fails closed on generation abort and releases a terminal exactly once", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const controller = new AbortController();
+    const host = createSurfaceHostV1({
+      signal: controller.signal,
+      runtimes: [{ runtime: runtime("bridge-a", "generation-a", ["terminal_attach"]), wsUrl }],
+      navigation: {
+        currentSurfaceId: "spaces",
+        goTo: () => {},
+        subscribe: () => () => {},
+      },
+      commandOwner: noopCommandOwner,
+    });
+    const target = {
+      identity: host.runtimes[0].identity,
+      kind: "terminal" as const,
+      nativeTargetId: "terminal-1",
+    };
+    const handle = host.terminals.acquire(target, terminalOptions());
+    const socket = FakeWebSocket.instances[0];
+    expect(socket).toBeDefined();
+    controller.abort();
+    controller.abort();
+    handle.release();
+    expect(socket.closeCalls).toBe(1);
+    expect(() => host.terminals.acquire(target, terminalOptions())).toThrow(/aborted/iu);
+    await expect(
+      host.commands.dispatch({ type: "focusPane", target: { ...target, kind: "pane" } }),
+    ).rejects.toThrow(/aborted/iu);
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 });
 
@@ -388,6 +455,41 @@ describe("typed surface lifecycle kernel", () => {
     expect(createContext).toHaveBeenCalledOnce();
   });
 
+  it("ignores a rejecting lazy load after replacement", async () => {
+    const firstLoad = deferred<{ default: SurfaceComponentForTest }>();
+    const secondLoad = deferred<{ default: SurfaceComponentForTest }>();
+    const firstLoadStarted = deferred<void>();
+    const secondLoadStarted = deferred<void>();
+    const errors: string[] = [];
+    let loadCount = 0;
+    const kernel = new LifecycleKernel(
+      {
+        createContext: () => ({ kind: "alpha" as const, value: 1 }),
+        load: () => {
+          loadCount += 1;
+          if (loadCount === 1) {
+            firstLoadStarted.resolve();
+            return firstLoad.promise;
+          }
+          secondLoadStarted.resolve();
+          return secondLoad.promise;
+        },
+        dispose: () => {},
+      },
+      lifecycleOptions(errors),
+    );
+
+    const retiredAttempt = kernel.mount();
+    await firstLoadStarted.promise;
+    const replacement = kernel.retry();
+    await secondLoadStarted.promise;
+    firstLoad.reject(new Error("retired lazy load failed"));
+    expect((await retiredAttempt).status).toBe("stale");
+    expect(errors).toEqual([]);
+    secondLoad.resolve({ default: () => null });
+    expect((await replacement).status).toBe("mounted");
+  });
+
   it("reports a rejecting disposer only after tracked resources are released", async () => {
     const resources = new Set(["subscription", "timer"]);
     const reported: unknown[] = [];
@@ -457,7 +559,7 @@ describe("typed surface lifecycle kernel", () => {
   it("applies the same load/context/close contract to settings contributions", async () => {
     const order: string[] = [];
     const callbacks: { onClose?: () => void } = {};
-    const contribution = defineProductSettingsContribution({
+    const contributionDefinition = {
       id: "office-settings",
       label: "Office settings",
       load: async () => {
@@ -476,8 +578,12 @@ describe("typed surface lifecycle kernel", () => {
       dispose: async () => {
         order.push("dispose");
       },
-    });
-    const lifecycle = contribution.createLifecycle(lifecycleOptions());
+    } satisfies ProductSettingsContribution<AlphaContext>;
+    defineProductSettingsContribution(contributionDefinition);
+    const lifecycle = createOpaqueProductSettingsLifecycle(
+      contributionDefinition,
+      lifecycleOptions(),
+    );
     const mounted = await lifecycle.mount();
     expect(mounted.status).toBe("mounted");
     expect(order).toEqual(["load", "create"]);
@@ -499,7 +605,7 @@ describe("typed surface lifecycle kernel", () => {
     const disposeStarted = deferred<void>();
     const resources = new Set(["subscription", "timer"]);
     const errors: string[] = [];
-    const contribution = defineProductSettingsContribution({
+    const contributionDefinition = {
       id: "delayed-settings",
       label: "Delayed settings",
       load: async () => ({ default: () => null }),
@@ -510,8 +616,9 @@ describe("typed surface lifecycle kernel", () => {
         await cleanup.promise;
         throw new Error("settings cleanup report");
       },
-    });
-    const lifecycle = contribution.createLifecycle({
+    } satisfies ProductSettingsContribution<AlphaContext>;
+    defineProductSettingsContribution(contributionDefinition);
+    const lifecycle = createOpaqueProductSettingsLifecycle(contributionDefinition, {
       createHost: (signal) => testHost(signal),
       onError: (_error, info) => {
         expect(resources.size).toBe(0);
@@ -648,18 +755,35 @@ function runtime(
 const wsUrl = (path: string, query?: URLSearchParams) =>
   `ws://test${path}${query && query.toString() ? `?${query.toString()}` : ""}`;
 
+function terminalOptions() {
+  return {
+    outputCoalesceMs: 0,
+    initialSize: { cols: 80, rows: 24 },
+    inputEnabled: true,
+    resizeEnabled: true,
+    scrollEnabled: true,
+    focusOwner: true,
+    onOutput: () => {},
+    onState: () => {},
+    onConnectAttempt: () => {},
+  };
+}
+
 class FakeWebSocket {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
+  static instances: FakeWebSocket[] = [];
   readyState = FakeWebSocket.CONNECTING;
   binaryType = "arraybuffer";
   readonly url: string;
+  closeCalls = 0;
   #listeners = new Map<string, Set<(event: Event) => void>>();
 
   constructor(url: string) {
     this.url = url;
+    FakeWebSocket.instances.push(this);
   }
 
   addEventListener(type: string, listener: (event: Event) => void) {
@@ -669,6 +793,10 @@ class FakeWebSocket {
   }
 
   close() {
+    this.closeCalls += 1;
+    if (this.readyState === FakeWebSocket.CLOSED) {
+      return;
+    }
     this.readyState = FakeWebSocket.CLOSED;
     for (const listener of this.#listeners.get("close") ?? []) {
       listener(new Event("close"));
