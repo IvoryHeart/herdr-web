@@ -8,6 +8,7 @@
     "dev:local": "scripts/dev-local.sh",
     "dev:web": "npm run dev --prefix web",
     "dev:bridge": "scripts/run-bridge.sh",
+    "test:surface-api": "node --test scripts/surface-api.test.mjs",
     "build:web": "npm run build --prefix web",
     "test:dev": "node --test scripts/dev.test.mjs",
     "test:web": "npm run test --prefix web",
@@ -30,7 +31,7 @@
     "build": "npm run build:web && npm run bridge:build",
     "test": "npm run test:dev && npm run test:web && npm run bridge:test",
     "lint": "npm run lint:web && npm run bridge:fmt",
-    "check": "npm run vendor:check && npm run release:compliance && npm run lint && npm run test && npm run test:release-compliance && npm run build",
+    "check": "npm run vendor:check && npm run release:compliance && npm run lint && npm run test && npm run test:surface-api && npm run test:release-compliance && npm run build",
     "check:acceptance": "npm run check && npm run test:e2e && npm run test:security && npm run test:independence"
   },
   "devDependencies": {
