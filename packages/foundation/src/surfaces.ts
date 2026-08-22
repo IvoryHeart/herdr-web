@@ -138,13 +138,17 @@ export type SurfaceCommandRequest = {
   params?: Readonly<Record<string, string | number | boolean | null>>;
 };
 
+export type TerminalOutput = Uint8Array;
+export type TerminalOutputListener = (data: TerminalOutput) => void;
+
 export type TerminalHandle = {
   readonly key: string;
   readonly target: QualifiedSurfaceTarget;
   attach: () => void | Promise<void>;
-  input: (value: string) => void | Promise<void>;
+  input: (value: string | Uint8Array) => void | Promise<void>;
   resize: (columns: number, rows: number) => void | Promise<void>;
   scroll: (direction: "up" | "down", lines?: number) => void | Promise<void>;
+  subscribe: (listener: TerminalOutputListener) => () => void;
   focus: () => void;
   detach: () => void;
   release: () => void | Promise<void>;
@@ -205,6 +209,7 @@ export class SharedTerminalHandlePool {
       input: (...args: Parameters<TerminalHandle["input"]>) => owner.input(...args),
       resize: (...args: Parameters<TerminalHandle["resize"]>) => owner.resize(...args),
       scroll: (...args: Parameters<TerminalHandle["scroll"]>) => owner.scroll(...args),
+      subscribe: (...args: Parameters<TerminalHandle["subscribe"]>) => owner.subscribe(...args),
       focus: (...args: Parameters<TerminalHandle["focus"]>) => owner.focus(...args),
       detach: (...args: Parameters<TerminalHandle["detach"]>) => owner.detach(...args),
       release: async () => {

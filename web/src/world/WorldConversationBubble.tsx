@@ -1,9 +1,11 @@
 import { Maximize2, MessageCircle, X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useContext, useEffect, useId, useRef } from "react";
 import type { BridgeRuntime } from "../bridge";
 import { agentActivityKey } from "../agentActivity";
 import type { PaneInfo } from "../types";
-import { TerminalView } from "../TerminalView";
+import { SurfaceTerminalView, TerminalView } from "../TerminalView";
+import { SurfaceHostContext } from "../surfaceHostContext";
+import type { QualifiedSurfaceTarget } from "@herdr-world/foundation/surfaces";
 import type { TerminalSessionDescriptor } from "../terminalSessions";
 import type {
   MobileLongPressBehavior,
@@ -20,6 +22,7 @@ export function WorldConversationBubble({
   targetLabel,
   hostLabel,
   pane,
+  terminalTarget,
   runtime,
   session,
   onClose,
@@ -42,6 +45,7 @@ export function WorldConversationBubble({
   targetLabel: string;
   hostLabel: string;
   pane: PaneInfo;
+  terminalTarget?: QualifiedSurfaceTarget;
   runtime: BridgeRuntime;
   session: TerminalSessionDescriptor;
   onClose: () => void;
@@ -62,6 +66,35 @@ export function WorldConversationBubble({
 }) {
   const bubbleRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  const terminalHost = useContext(SurfaceHostContext);
+  const terminalProps = {
+    pane: session.attachEnabled ? pane : null,
+    connectionKey: session.sessionKey,
+    resumeToken: runtime.resumeToken,
+    httpUrl: runtime.httpUrl,
+    wsUrl: runtime.wsUrl,
+    inputEnabled: session.inputEnabled,
+    resizeEnabled: session.resizeEnabled,
+    scrollEnabled: session.scrollEnabled,
+    uploadEnabled: session.uploadEnabled,
+    autoFocus: !touchInput,
+    scrollSensitivity: touchInput ? 2 : 0.4,
+    mobileControls: touchInput,
+    terminalFontSizePx,
+    terminalScreenReaderText,
+    accessibilityLabel: `${targetLabel} terminal`,
+    selected: true,
+    mobileControlsScalePercent,
+    mobileTapTarget,
+    mobileLongPressBehavior,
+    mobileTouchSelectionEndpointTimeoutMs,
+    mobileCommandExpandingInput,
+    mobileCommandEnterNewline,
+    terminalInputTransport,
+    terminalInputBatchDelayMs,
+    terminalOutputCoalesceMs,
+    transparentBackground: true,
+  };
 
   useEffect(() => {
     officeDebug("conversation-bubble:mount", {
@@ -142,34 +175,15 @@ export function WorldConversationBubble({
         </div>
       </header>
       <div className="world-conversation-terminal">
-        <TerminalView
-          pane={session.attachEnabled ? pane : null}
-          connectionKey={session.sessionKey}
-          resumeToken={runtime.resumeToken}
-          httpUrl={runtime.httpUrl}
-          wsUrl={runtime.wsUrl}
-          inputEnabled={session.inputEnabled}
-          resizeEnabled={session.resizeEnabled}
-          scrollEnabled={session.scrollEnabled}
-          uploadEnabled={session.uploadEnabled}
-          autoFocus={!touchInput}
-          scrollSensitivity={touchInput ? 2 : 0.4}
-          mobileControls={touchInput}
-          terminalFontSizePx={terminalFontSizePx}
-          terminalScreenReaderText={terminalScreenReaderText}
-          accessibilityLabel={`${targetLabel} terminal`}
-          selected
-          mobileControlsScalePercent={mobileControlsScalePercent}
-          mobileTapTarget={mobileTapTarget}
-          mobileLongPressBehavior={mobileLongPressBehavior}
-          mobileTouchSelectionEndpointTimeoutMs={mobileTouchSelectionEndpointTimeoutMs}
-          mobileCommandExpandingInput={mobileCommandExpandingInput}
-          mobileCommandEnterNewline={mobileCommandEnterNewline}
-          terminalInputTransport={terminalInputTransport}
-          terminalInputBatchDelayMs={terminalInputBatchDelayMs}
-          terminalOutputCoalesceMs={terminalOutputCoalesceMs}
-          transparentBackground
-        />
+        {terminalHost && terminalTarget ? (
+          <SurfaceTerminalView
+            {...terminalProps}
+            host={terminalHost}
+            target={terminalTarget}
+          />
+        ) : (
+          <TerminalView {...terminalProps} />
+        )}
       </div>
     </section>
   );

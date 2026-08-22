@@ -27,6 +27,7 @@ function host(): Omit<SurfaceHostV1, "signal"> {
       input: () => {},
       resize: () => {},
       scroll: () => {},
+      subscribe: () => () => {},
       focus: () => {},
       detach: () => {},
       release: () => {},
@@ -240,6 +241,7 @@ describe("Foundation surface contract", () => {
       key: "bridge-b:terminal-1",
       target: { bridgeId: "bridge-b", kind: "terminal" as const, nativeTargetId: "terminal-1" },
       attach: () => {}, input: () => {}, resize: () => {}, scroll: () => {},
+      subscribe: () => () => {},
       focus: () => {}, detach: () => {}, release: () => {},
     }));
     const controller = new AbortController();
@@ -275,22 +277,42 @@ describe("Foundation surface contract", () => {
   it("shares a terminal owner and releases only the view handles", async () => {
     const pool = new SharedTerminalHandlePool();
     const release = vi.fn();
+    const attach = vi.fn();
+    const listeners = new Set<(data: Uint8Array) => void>();
     const factory = vi.fn(async () => ({
       key: "bridge-a:terminal-a",
       target: { bridgeId: "bridge-a", kind: "terminal" as const, nativeTargetId: "terminal-a" },
-      attach: () => {}, input: () => {}, resize: () => {}, scroll: () => {},
+      attach,
+      input: () => {}, resize: () => {}, scroll: () => {},
+      subscribe: (listener: (data: Uint8Array) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
       focus: () => {}, detach: () => {}, release,
     }));
     const target = { bridgeId: "bridge-a", kind: "terminal" as const, nativeTargetId: "terminal-a" };
     const first = await pool.acquire(target, factory);
     const second = await pool.acquire(target, factory);
     expect(factory).toHaveBeenCalledTimes(1);
+    await first.attach();
+    await second.attach();
+    expect(attach).toHaveBeenCalledTimes(2);
+    const firstOutput = vi.fn();
+    const secondOutput = vi.fn();
+    const unsubscribeFirst = first.subscribe(firstOutput);
+    const unsubscribeSecond = second.subscribe(secondOutput);
+    const output = new Uint8Array([79, 75]);
+    for (const listener of listeners) listener(output);
+    expect(firstOutput).toHaveBeenCalledWith(output);
+    expect(secondOutput).toHaveBeenCalledWith(output);
+    unsubscribeFirst();
     await first.release();
     await first.release();
     expect(release).not.toHaveBeenCalled();
     expect(pool.size).toBe(1);
     await second.release();
     expect(release).toHaveBeenCalledTimes(1);
+    unsubscribeSecond();
     expect(pool.size).toBe(0);
   });
 
@@ -311,6 +333,7 @@ describe("Foundation surface contract", () => {
       input() {}
       resize() {}
       scroll() {}
+      subscribe() { return () => {}; }
       focus() {}
       detach() {}
       release() {

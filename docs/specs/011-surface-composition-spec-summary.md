@@ -5,7 +5,7 @@
 - **Surface API:** `1`
 - **Foundation package:** `@herdr-world/foundation@0.1.0`
 - **Foundation artifact:** produced by `npm run foundation:pack`
-- **Artifact SHA-512:** `sha512-tWjpQ7S+ung+k9jCij9LRFuG7bXtUePR6iwTEGQ5A0DRJAoiauLem97gDPX8UsCsJmJt2O6/bCxI2a8HzL4OIA==`
+- **Artifact SHA-512:** `sha512-iWkyrW1gwnkG7wPQPdwNAH7ADrf9cc5+4H03T/C0ZMiuB6cT7oXYgSHWFQ9gK8rQl1OtjdZZ3wi1wYsTB3taDw==`
 - **Physical extraction:** explicitly deferred to Spec 016
 
 ## Delivered behavior
@@ -20,8 +20,9 @@
   validation. The conformance registry is Spaces at `/`; the World assembly
   contributes Office at `/world`.
 - Routed production World selection, Spaces handoff, and Office room commands
-  through the registration-provided `SurfaceHostV1`; conversation panels now
-  acquire and release a host-owned terminal lease without closing Herdr panes.
+  through the registration-provided `SurfaceHostV1`; conversation panels and
+  Spaces terminal views now acquire the same host-owned transport fanout and
+  release only their own view references without closing Herdr panes.
 - Made the packed Foundation conformance application render generic
   runtime/workspace navigation and terminal lifecycle behavior, including a
   multi-runtime selection proof. Fixed the generic Spaces view to retain the
@@ -74,9 +75,9 @@
 - Registry publication is deferred; the content-addressed `npm pack` tarball is
   the v1 artifact as allowed by Spec 011.
 - The shared terminal pool is a host-owned lifecycle primitive; the existing
-  protocol-20 terminal renderer remains the pixel/transport consumer while
-  the production World path acquires and releases the corresponding host
-  lease. Direct renderer replacement remains part of Spec 016 extraction.
+  protocol-20 terminal renderer remains the pixel consumer while its input,
+  resize, scroll, and output subscription cross the public host handle.
+  Direct renderer extraction remains part of Spec 016.
 - No dynamic browser plugin registry, second bridge manager, new capability
   catalogue, Graph, City, provider cleanup, installer, or branding migration
   is included.
