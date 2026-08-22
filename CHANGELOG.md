@@ -12,7 +12,6 @@
   navigation, host-owned shared terminal fanout for Spaces and Office, a multi-runtime
   Foundation conformance assembly, and exact packed-artifact boundary checks.
   Repository extraction remains a separate Spec 016 operation.
-  [PR #19](https://github.com/IvoryHeart/herdr-web/pull/19)
 
 - Added the Herdr World downstream identity, Apache-2.0 licensing boundary, contributor and
   security policy, component provenance inventory, and fail-closed source-release compliance

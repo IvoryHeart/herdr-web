@@ -14,7 +14,8 @@ export type FoundationConformanceHost = Pick<
 /**
  * Public Foundation-only shell + Spaces conformance application. Consumers
  * provide the existing host adapter; no product registrations, providers,
- * assets, or World code are reachable from this entry point.
+ * product assets, or downstream implementation code are reachable from this
+ * entry point.
  */
 export function FoundationConformanceApp({ host }: { host: FoundationConformanceHost }) {
   const [runtimes, setRuntimes] = useState<readonly SurfaceBridgeRuntime[]>(host.runtimes());

@@ -104,6 +104,23 @@ export const FOUNDATION_BRIDGE_COMMANDS: readonly BridgeCommand[] = [
   "pane.move",
 ];
 
+const COMMAND_TARGET_KINDS: Readonly<Record<BridgeCommand, SurfaceTargetKind>> = {
+  "workspace.create": "workspace",
+  "workspace.rename": "workspace",
+  "workspace.close": "workspace",
+  "workspace.focus": "workspace",
+  "workspace.move_block": "workspace",
+  "tab.create": "workspace",
+  "tab.rename": "tab",
+  "tab.close": "tab",
+  "tab.focus": "tab",
+  "pane.rename": "pane",
+  "pane.close": "pane",
+  "pane.split": "pane",
+  "pane.focus_direction": "pane",
+  "pane.move": "pane",
+};
+
 export type SurfaceTargetKind = "workspace" | "tab" | "pane" | "terminal" | "agent";
 
 /** A cross-host identity; native IDs are never valid without a bridge ID. */
@@ -165,6 +182,7 @@ export type TerminalHandleFactory = (
 export class SharedTerminalHandlePool {
   readonly #entries = new Map<string, { owner: TerminalHandle; references: number }>();
   readonly #pending = new Map<string, Promise<{ owner: TerminalHandle; references: number }>>();
+  readonly #releasing = new Map<string, Promise<void>>();
 
   async acquire(target: QualifiedSurfaceTarget, factory: TerminalHandleFactory) {
     const validated = validateQualifiedSurfaceTarget(target);
@@ -172,6 +190,13 @@ export class SharedTerminalHandlePool {
       throw new SurfaceContractError("invalid-id", "Terminal acquisition requires a terminal target");
     }
     const key = terminalTargetKey(validated);
+    const releasing = this.#releasing.get(key);
+    if (releasing) {
+      // A new view must not overlap the previous owner's detach/close. The
+      // terminal pane remains alive, but transport ownership is still
+      // serialized at this boundary.
+      await releasing;
+    }
     let entry = this.#entries.get(key);
     if (!entry) {
       let pending = this.#pending.get(key);
@@ -224,7 +249,13 @@ export class SharedTerminalHandlePool {
         current.references -= 1;
         if (current.references === 0) {
           this.#entries.delete(key);
-          await current.owner.release();
+          const releasing = Promise.resolve(current.owner.release()).finally(() => {
+            if (this.#releasing.get(key) === releasing) {
+              this.#releasing.delete(key);
+            }
+          });
+          this.#releasing.set(key, releasing);
+          await releasing;
         }
       },
     }) satisfies TerminalHandle;
@@ -280,6 +311,12 @@ export function validateSurfaceCommandRequest(
       `Surface command is not allow-listed: ${request.command}`,
     );
   }
+  if (request.target.kind !== COMMAND_TARGET_KINDS[request.command]) {
+    throw new SurfaceContractError(
+      "invalid-command",
+      `Surface command ${request.command} requires a ${COMMAND_TARGET_KINDS[request.command]} target`,
+    );
+  }
   if (request.params) {
     for (const value of Object.values(request.params)) {
       if (
@@ -293,6 +330,33 @@ export function validateSurfaceCommandRequest(
           "Surface command parameters must be scalar values",
         );
       }
+    }
+    const direction = request.params.direction;
+    if (
+      request.command === "pane.split" &&
+      direction !== undefined &&
+      direction !== "right" &&
+      direction !== "down"
+    ) {
+      throw new SurfaceContractError("invalid-command", "Pane split direction is invalid");
+    }
+    if (
+      request.command === "pane.focus_direction" &&
+      direction !== undefined &&
+      direction !== "left" &&
+      direction !== "right" &&
+      direction !== "up" &&
+      direction !== "down"
+    ) {
+      throw new SurfaceContractError("invalid-command", "Pane focus direction is invalid");
+    }
+    if (
+      request.command === "pane.move" &&
+      request.params.destination !== undefined &&
+      request.params.destination !== "new_tab" &&
+      request.params.destination !== "new_workspace"
+    ) {
+      throw new SurfaceContractError("invalid-command", "Pane move destination is invalid");
     }
   }
   return request;
@@ -556,6 +620,17 @@ export class SurfaceLifecycle {
   }
 
   async open(): Promise<SurfaceLifecycleSnapshot> {
+    // Treat a second open as a replacement, including concurrent retry/open
+    // callers. This keeps a returned context owned by exactly one generation
+    // and makes delayed disposal a hard serialization boundary.
+    if (this.#active) {
+      try {
+        await this.close();
+      } catch {
+        // The disposer has settled and reported its error; a fresh generation
+        // is still allowed to start.
+      }
+    }
     if (this.#closing) {
       await this.#waitForClosing();
     }

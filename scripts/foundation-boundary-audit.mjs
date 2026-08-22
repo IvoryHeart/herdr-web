@@ -39,6 +39,30 @@ try {
   await execFileAsync("tar", ["-xzf", tarball, "-C", extracted]);
   const packageRoot = join(extracted, "package");
   const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  const foundationManifest = JSON.parse(
+    await readFile(join(packageRoot, "foundation-manifest.json"), "utf8"),
+  );
+  for (const [field, expected] of Object.entries({
+    package: "@herdr-world/foundation",
+    packageVersion: packageJson.version,
+    surfaceApi: artifact.surfaceApi,
+    bridgeApi: artifact.bridgeApi,
+    web_compat: artifact.web_compat,
+    supportedHerdr: artifact.supportedHerdr,
+    terminalProtocol: artifact.terminalProtocol,
+  })) {
+    if (foundationManifest[field] !== expected) {
+      throw new Error(`packed Foundation manifest mismatch: ${field}`);
+    }
+  }
+  if (
+    !packageJson.exports?.["./surfaces"] ||
+    !packageJson.exports?.["./conformance"] ||
+    packageJson.dependencies ||
+    packageJson.optionalDependencies
+  ) {
+    throw new Error("packed Foundation exports or dependency metadata is not boundary-safe");
+  }
   for (const peer of ["react", "react-dom"]) {
     if (!packageJson.peerDependencies?.[peer]) {
       throw new Error(`${peer} must remain a Foundation peer dependency`);
@@ -53,7 +77,7 @@ try {
     }
   }
   await visit(packageRoot);
-  const forbidden = /PixelOffice|WorldSurface|Office settings|officeObservability|prometheus|herdr-world-mark|world\/characters/iu;
+  const forbidden = /PixelOffice|WorldSurface|Office settings|officeObservability|prometheus|herdr-world-mark|world[\\/]characters|web[\\/]src[\\/]world|@herdr[\\/]web|provider implementation/iu;
   for (const path of emittedFiles) {
     const bytes = await readFile(path);
     if (forbidden.test(bytes.toString("utf8"))) {

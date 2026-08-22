@@ -5,7 +5,7 @@
 - **Surface API:** `1`
 - **Foundation package:** `@herdr-world/foundation@0.1.0`
 - **Foundation artifact:** produced by `npm run foundation:pack`
-- **Artifact SHA-512:** `sha512-iWkyrW1gwnkG7wPQPdwNAH7ADrf9cc5+4H03T/C0ZMiuB6cT7oXYgSHWFQ9gK8rQl1OtjdZZ3wi1wYsTB3taDw==`
+- **Artifact SHA-512:** `sha512-pt2uwBgWT20nfEACTbEp7AuEiJpMQmcRUaQW+nIF2i6sBSC6sApZzL8fAYf/Qw4uYIlZXTZaKCcVNuErbOkEEg==`
 - **Physical extraction:** explicitly deferred to Spec 016
 
 ## Delivered behavior
@@ -32,7 +32,8 @@
 - Added generation-scoped lifecycle handling for surfaces and settings:
   load-before-context, fresh context generations, cancellation, stale-result
   rejection, failed-factory no-dispose behavior, awaited replacement, delayed
-  and rejecting disposer containment, and exactly-once disposal.
+  and rejecting disposer containment, resource-complete cleanup before
+  rejection, concurrent retry race handling, and exactly-once disposal.
 - Added a Foundation-only conformance application/test and retained existing
   World browser characterization coverage for Office, settings, navigation,
   conversations, completion, focus, accessibility, terminals, refresh, and
@@ -48,7 +49,9 @@
 ## Test evidence
 
 - `npm run test --prefix web`: lifecycle, type-negative, API validation,
-  settings parity, shared-terminal, conformance, and existing web tests.
+  settings parity, delayed/rejecting cleanup, shared-terminal, qualified
+  multi-bridge identity, conformance, and existing web tests (`62 files`,
+  `432 passed`).
 - `npm run test:foundation-boundary`: exact packed-consumer and emitted-output
   audit.
 - `npm run foundation:pack`: package metadata and SHA-512 artifact record.
@@ -60,7 +63,19 @@
   `world/assembly.test.tsx`, `foundationConformance.test.tsx`, and
   `surfaceTerminal.test.ts`.
 - Existing browser suite remains the characterization source for current
-  protocol-20 Spaces/Office behavior and the two documented skips.
+  protocol-20 Spaces/Office behavior and the two documented skips: `45 passed`,
+  `2 skipped`.
+
+## Live validation
+
+- Candidate bridge: `http://127.0.0.1:8789/`; Vite HMR: `http://127.0.0.1:5175/`.
+- The candidate reported Herdr `0.8.2`, bridge API `1`, `web_compat` `1`, and
+  terminal protocol `20`; the existing services on ports `8787` and `8788`
+  were left untouched.
+- Shell + Spaces and World + Office were browser-checked at the candidate URL;
+  Office rendered its live canvas without page errors.
+- Candidate logs remain at `/tmp/herdr-world-spec011-bridge-8789.log` and
+  `/tmp/herdr-world-spec011-vite-5175.log` while the preview is running.
 
 ## Constraints and deviations
 

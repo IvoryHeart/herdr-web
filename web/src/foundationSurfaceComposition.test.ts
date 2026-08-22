@@ -11,7 +11,10 @@ import {
   settleCleanups,
   withAcquisitionGuard,
 } from "@herdr-world/foundation/surfaces";
-import type { SurfaceHostV1 } from "@herdr-world/foundation/surfaces";
+import type {
+  QualifiedSurfaceTarget,
+  SurfaceHostV1,
+} from "@herdr-world/foundation/surfaces";
 
 function host(): Omit<SurfaceHostV1, "signal"> {
   return {
@@ -82,6 +85,18 @@ describe("Foundation surface contract", () => {
       dispose: () => {},
     } as never;
     expect(() => defineSurface(invalidFeature)).toThrow();
+    expect(() => defineSurface({
+      definition: { id: "spaces", label: "Spaces", route: "/spaces", semanticIcon: "spaces", requiredBridgeFeatures: [] },
+      createContext: () => null,
+      load: async () => ({ default: () => null }),
+      dispose: () => {},
+    })).toThrow(/Spaces surface must use route/iu);
+    expect(() => defineSurface({
+      definition: { id: "world", label: "Office", route: "/office", semanticIcon: "office", requiredBridgeFeatures: [] },
+      createContext: () => null,
+      load: async () => ({ default: () => null }),
+      dispose: () => {},
+    })).toThrow(/world surface must use route/iu);
   });
 
   it("loads before creating context, creates once per generation, and disposes once", async () => {
@@ -197,6 +212,68 @@ describe("Foundation surface contract", () => {
     expect(count).toBe(2);
   });
 
+  it("keeps every acquired resource released before a rejecting disposer reports", async () => {
+    const resources = new Set(["subscription", "terminal"]);
+    const reported: string[] = [];
+    let generation = 0;
+    const surface = defineSurface({
+      definition: { id: "spaces", label: "Spaces", route: "/", semanticIcon: "spaces", requiredBridgeFeatures: [] },
+      load: async () => ({ default: () => null }),
+      createContext: () => ({ generation: ++generation }),
+      dispose: async () => {
+        try {
+          resources.delete("subscription");
+          throw new Error("subscription cleanup failed");
+        } finally {
+          resources.delete("terminal");
+        }
+      },
+    });
+    const lifecycle = createSurfaceLifecycle(surface, {
+      host: host(),
+      onError: (error) => {
+        expect(resources.size).toBe(0);
+        reported.push((error as Error).message);
+      },
+    });
+
+    await lifecycle.open();
+    await lifecycle.retry();
+
+    expect(reported).toEqual(["subscription cleanup failed"]);
+    expect(resources.size).toBe(0);
+    expect(generation).toBe(2);
+  });
+
+  it("serializes concurrent retry races and ignores the superseded load", async () => {
+    const created: number[] = [];
+    const disposed: number[] = [];
+    let nextGeneration = 0;
+    const surface = defineSurface({
+      definition: { id: "spaces", label: "Spaces", route: "/", semanticIcon: "spaces", requiredBridgeFeatures: [] },
+      load: async () => ({ default: () => null }),
+      createContext: () => {
+        const value = ++nextGeneration;
+        created.push(value);
+        return { value };
+      },
+      dispose: (context: { value: number }) => {
+        disposed.push(context.value);
+      },
+    });
+    const lifecycle = createSurfaceLifecycle(surface, { host: host() });
+    await lifecycle.open();
+
+    const firstRetry = lifecycle.retry();
+    const secondRetry = lifecycle.retry();
+    await Promise.all([firstRetry, secondRetry]);
+
+    expect(created).toEqual([1, 2]);
+    expect(disposed).toEqual([1]);
+    expect(lifecycle.snapshot.status).toBe("ready");
+    expect(lifecycle.snapshot.generation).toBe(3);
+  });
+
   it("applies identical lifecycle rules to product settings", async () => {
     const events: string[] = [];
     const contribution = defineProductSettings({
@@ -217,6 +294,43 @@ describe("Foundation surface contract", () => {
     await lifecycle.retry();
     await lifecycle.dispose();
     expect(events).toEqual(["load", "context", "dispose", "load", "context", "dispose"]);
+  });
+
+  it("awaits and contains delayed settings disposal before reopening", async () => {
+    let release!: () => void;
+    const cleanupFinished = new Promise<void>((resolve) => { release = resolve; });
+    const events: string[] = [];
+    const contribution = defineProductSettings({
+      id: "world-settings",
+      label: "World settings",
+      createContext: () => ({ generation: events.filter((event) => event === "context").length + 1 }),
+      load: async () => ({ default: () => null }),
+      dispose: async (context) => {
+        events.push(`dispose:${context.generation}`);
+        await cleanupFinished;
+        events.push("cleanup");
+        throw new Error("settings cleanup failed");
+      },
+    });
+    const lifecycle = createSettingsLifecycle(contribution, {
+      host: host(),
+      onError: (error) => events.push(`reported:${(error as Error).message}`),
+    });
+
+    await lifecycle.open();
+    const reopening = lifecycle.retry();
+    await Promise.resolve();
+    expect(events).toEqual(["dispose:1"]);
+    release();
+    await reopening;
+
+    expect(events).toEqual([
+      "dispose:1",
+      "cleanup",
+      "reported:settings cleanup failed",
+    ]);
+    expect(lifecycle.snapshot.status).toBe("ready");
+    expect(lifecycle.snapshot.generation).toBe(2);
   });
 
   it("provides strong-exception-safety helpers for partial factories and all-settled cleanup", async () => {
@@ -257,6 +371,15 @@ describe("Foundation surface contract", () => {
       command: "server.stop" as never,
       target: { bridgeId: "bridge-b", kind: "pane", nativeTargetId: "1" },
     })).rejects.toThrow(/allow-listed/iu);
+    await expect(wrapped.dispatch({
+      command: "workspace.rename",
+      target: { bridgeId: "bridge-b", kind: "pane", nativeTargetId: "1" },
+    })).rejects.toThrow(/requires a workspace target/iu);
+    await expect(wrapped.dispatch({
+      command: "pane.split",
+      target: { bridgeId: "bridge-b", kind: "pane", nativeTargetId: "1" },
+      params: { direction: "diagonal" },
+    })).rejects.toThrow(/direction is invalid/iu);
     await wrapped.acquireTerminal({
       bridgeId: "bridge-b",
       kind: "terminal",
@@ -314,6 +437,38 @@ describe("Foundation surface contract", () => {
     expect(release).toHaveBeenCalledTimes(1);
     unsubscribeSecond();
     expect(pool.size).toBe(0);
+  });
+
+  it("keeps same native terminal IDs isolated by bridge identity", async () => {
+    const pool = new SharedTerminalHandlePool();
+    const releases = vi.fn();
+    const factory = vi.fn(async (target: QualifiedSurfaceTarget) => ({
+      key: `${target.bridgeId}:${target.nativeTargetId}`,
+      target,
+      attach: () => {},
+      input: () => {},
+      resize: () => {},
+      scroll: () => {},
+      subscribe: () => () => {},
+      focus: () => {},
+      detach: () => {},
+      release: () => releases(target.bridgeId),
+    }));
+    const first = await pool.acquire(
+      { bridgeId: "bridge-a", kind: "terminal", nativeTargetId: "1" },
+      factory,
+    );
+    const second = await pool.acquire(
+      { bridgeId: "bridge-b", kind: "terminal", nativeTargetId: "1" },
+      factory,
+    );
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    await first.release();
+    expect(releases).toHaveBeenCalledWith("bridge-a");
+    expect(releases).not.toHaveBeenCalledWith("bridge-b");
+    await second.release();
+    expect(releases).toHaveBeenCalledWith("bridge-b");
   });
 
   it("deduplicates concurrent terminal acquisition and delegates class methods", async () => {
