@@ -25,7 +25,11 @@ export function createSurfaceTerminalHandle(
   target: QualifiedSurfaceTarget,
 ): TerminalHandle {
   let socket: WebSocket | null = null;
-  let opening: Promise<void> | null = null;
+  let opening: {
+    promise: Promise<void>;
+    cancel: () => void;
+    socket: WebSocket;
+  } | null = null;
 
   const ensureSocket = () => {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -39,35 +43,76 @@ export function createSurfaceTerminalHandle(
       return;
     }
     if (opening) {
-      return opening;
+      return opening.promise;
     }
     const next = new WebSocket(terminalSocketUrl(runtime, target.nativeTargetId));
     next.binaryType = "arraybuffer";
     socket = next;
-    opening = new Promise<void>((resolve, reject) => {
-      const onOpen = () => {
-        next.removeEventListener("error", onError);
-        resolve();
-      };
-      const onError = () => {
+    let settleCancel: (() => void) | null = null;
+    const promise = new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
         next.removeEventListener("open", onOpen);
+        next.removeEventListener("error", onError);
+        next.removeEventListener("close", onClose);
+      };
+      const fail = (message: string) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
         if (socket === next) {
           socket = null;
         }
-        reject(new Error("Terminal attach failed"));
+        if (opening?.socket === next) {
+          opening = null;
+        }
+        reject(new Error(message));
+      };
+      const onOpen = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        if (opening?.socket === next) {
+          opening = null;
+        }
+        resolve();
+      };
+      const onError = () => {
+        fail("Terminal attach failed");
+      };
+      const onClose = () => {
+        fail("Terminal attach closed before opening");
       };
       next.addEventListener("open", onOpen, { once: true });
       next.addEventListener("error", onError, { once: true });
-    }).finally(() => {
-      opening = null;
+      next.addEventListener("close", onClose, { once: true });
+      settleCancel = () => fail("Terminal attach cancelled");
     });
-    await opening;
+    const pending = {
+      promise,
+      cancel: () => settleCancel?.(),
+      socket: next,
+    };
+    opening = pending;
+    try {
+      await promise;
+    } finally {
+      if (opening === pending) {
+        opening = null;
+      }
+      settleCancel = null;
+    }
   };
 
   const detach = () => {
     const current = socket;
-    socket = null;
+    opening?.cancel();
     opening = null;
+    socket = null;
     current?.close();
   };
 

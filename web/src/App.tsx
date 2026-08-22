@@ -608,6 +608,7 @@ type MenuState = {
 type DialogState = {
   mode: "rename" | "close" | "create";
   kind: MenuKind;
+  surface?: "world";
   bridgeId: BridgeId;
   id: string;
   label: string;
@@ -3592,11 +3593,67 @@ export function App() {
 
   const navigateSurfaceTarget = (target: QualifiedSurfaceTarget) => {
     const runtime = bridge.getRuntime(target.bridgeId);
-    if (!runtime) {
+    if (!runtime || !runtimeIsAdmitted(runtime.id)) {
       return;
     }
     const snapshot = snapshotForBridge(target.bridgeId);
-    if (target.kind === "workspace") {
+    if (activeSurface.id === "world") {
+      if (target.kind === "workspace") {
+        const room = worldProjection.roomRoster.find(
+          (entry) =>
+            entry.hostKey === target.bridgeId &&
+            entry.workspaceRef.nativeTargetId === target.nativeTargetId,
+        );
+        if (!room) {
+          return;
+        }
+        openWorldTargetInSpaces(officeRoomHandoffRequest(room));
+      } else if (target.kind === "agent") {
+        const agent = worldProjection.roster.find(
+          (entry) =>
+            entry.hostKey === target.bridgeId && entry.agent.key === target.nativeTargetId,
+        )?.agent;
+        if (!agent) {
+          return;
+        }
+        openWorldTargetInSpaces(officeAgentHandoffRequest(agent));
+      } else if (target.kind === "tab") {
+        const desk = worldProjection.deskRoster.find(
+          (entry) =>
+            entry.desk.hostKey === target.bridgeId &&
+            entry.desk.tabRef.nativeTargetId === target.nativeTargetId,
+        );
+        if (!desk) {
+          return;
+        }
+        const room = worldProjection.roomRoster.find(({ key }) => key === desk.desk.roomKey);
+        if (room) {
+          openWorldTargetInSpaces(officeRoomHandoffRequest(room));
+        }
+      } else {
+        const agent = worldProjection.roster.find(({ agent: candidate }) =>
+          target.kind === "pane"
+            ? candidate.currentPaneRef.profileId === target.bridgeId &&
+              candidate.currentPaneRef.nativeTargetId === target.nativeTargetId
+            : candidate.currentTerminalRef.profileId === target.bridgeId &&
+              candidate.currentTerminalRef.nativeTargetId === target.nativeTargetId,
+        )?.agent;
+        if (agent) {
+          openWorldTargetInSpaces(officeAgentHandoffRequest(agent));
+          return;
+        }
+        const pane = snapshot?.panes.find((item) =>
+          target.kind === "pane"
+            ? item.pane_id === target.nativeTargetId
+            : item.terminal_id === target.nativeTargetId,
+        );
+        if (!pane) {
+          return;
+        }
+        navigatePrimaryView("spaces");
+        focusPane(target.bridgeId, pane);
+      }
+    } else if (target.kind === "workspace") {
       selectSpace(target.bridgeId, target.nativeTargetId);
     } else if (target.kind === "tab") {
       selectTab(target.bridgeId, target.nativeTargetId);
@@ -4960,6 +5017,22 @@ export function App() {
       return;
     }
     const { kind, bridgeId, id } = dialog;
+    if (dialog.surface === "world") {
+      const command = kind === "space" ? "workspace.rename" : null;
+      if (!command) {
+        setError("Unsupported Office command");
+        return;
+      }
+      void dispatchSurfaceCommand({
+        command,
+        target: { bridgeId, kind: "workspace", nativeTargetId: id },
+        params: { label: value },
+      }).then(
+        () => setDialog(null),
+        (error: unknown) => setError(error instanceof Error ? error.message : "Office command failed"),
+      );
+      return;
+    }
     const runtime = bridge.getRuntime(bridgeId);
     const commands = runtime ? createCommands(runtime.httpUrl) : null;
     if (!commands) {
@@ -4983,6 +5056,29 @@ export function App() {
 
   const submitCreateRoom = (value: string) => {
     if (!dialog || dialog.mode !== "create") {
+      return;
+    }
+    if (dialog.surface === "world") {
+      void dispatchSurfaceCommand({
+        command: "workspace.create",
+        target: { bridgeId: dialog.bridgeId, kind: "workspace", nativeTargetId: "new" },
+        params: { label: value },
+      }).then(
+        (result) => {
+          const workspaceId = createdWorkspaceId(result);
+          if (workspaceId) {
+            setSelectedBridgeId(dialog.bridgeId);
+            setWorldSelectedKey(
+              qualifiedRuntimeKey(
+                qualifyRuntimeTarget(dialog.bridgeId, "workspace", workspaceId),
+              ),
+            );
+          }
+          setWorldHandoffStatus(`Room “${value}” created.`);
+          setDialog(null);
+        },
+        (error: unknown) => setError(error instanceof Error ? error.message : "Office command failed"),
+      );
       return;
     }
     const runtime = bridge.getRuntime(dialog.bridgeId);
@@ -5017,6 +5113,17 @@ export function App() {
       return;
     }
     const { kind, bridgeId, id } = dialog;
+    if (dialog.surface === "world") {
+      void dispatchSurfaceCommand({
+        command: "workspace.rename",
+        target: { bridgeId, kind: "workspace", nativeTargetId: id },
+        params: { label: null },
+      }).then(
+        () => setDialog(null),
+        (error: unknown) => setError(error instanceof Error ? error.message : "Office command failed"),
+      );
+      return;
+    }
     const runtime = bridge.getRuntime(bridgeId);
     const commands = runtime ? createCommands(runtime.httpUrl) : null;
     if (!commands) {
@@ -5040,6 +5147,20 @@ export function App() {
       return;
     }
     const { kind, bridgeId, id } = dialog;
+    if (dialog.surface === "world") {
+      if (kind !== "space") {
+        setError("Unsupported Office command");
+        return;
+      }
+      void dispatchSurfaceCommand({
+        command: "workspace.close",
+        target: { bridgeId, kind: "workspace", nativeTargetId: id },
+      }).then(
+        () => setDialog(null),
+        (error: unknown) => setError(error instanceof Error ? error.message : "Office command failed"),
+      );
+      return;
+    }
     const runtime = bridge.getRuntime(bridgeId);
     const commands = runtime ? createCommands(runtime.httpUrl) : null;
     if (!commands) {
@@ -5295,6 +5416,11 @@ export function App() {
       id: worldConversation.windowId,
       targetKey: worldConversation.targetKey,
       selectedKey: worldConversation.agent?.key ?? null,
+      terminalTarget: {
+        bridgeId: worldConversation.runtime.id,
+        kind: "terminal",
+        nativeTargetId: worldConversation.pane.terminal_id,
+      },
       content: (
         <WorldConversationBubble
           key={`${worldConversation.windowId}:${worldConversation.session.sessionKey}`}
@@ -5431,6 +5557,7 @@ export function App() {
     setDialog({
       mode: "create",
       kind: "space",
+      surface: "world",
       bridgeId: runtime.id,
       id: "new",
       label: "",
@@ -5458,6 +5585,7 @@ export function App() {
     setDialog({
       mode: "rename",
       kind: "space",
+      surface: "world",
       bridgeId: room.hostKey,
       id: room.workspaceRef.nativeTargetId,
       label: room.displayLabel,
@@ -5473,6 +5601,7 @@ export function App() {
     setDialog({
       mode: "close",
       kind: "space",
+      surface: "world",
       bridgeId: room.hostKey,
       id: room.workspaceRef.nativeTargetId,
       label: room.displayLabel,
@@ -5480,6 +5609,7 @@ export function App() {
     });
   };
   const worldSurfaceContext: WorldSurfaceContext = {
+    terminalHost: surfaceHost,
     projection: worldProjection,
     observability: worldObservability,
     selectedKey: worldSelectedKey,

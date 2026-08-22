@@ -46,8 +46,14 @@ import {
   officeRoomHandoffRequest,
 } from "./herdrOfficeHandoff";
 import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
+import type {
+  QualifiedSurfaceTarget,
+  SurfaceHostV1,
+} from "@herdr-world/foundation/surfaces";
+import { SurfaceTerminalLease } from "../SurfaceTerminalLease";
 
 export type WorldSurfaceContext = {
+  terminalHost?: Pick<SurfaceHostV1, "acquireTerminal">;
   projection: HerdrOfficeProjection;
   observability: OfficeObservability;
   selectedKey: string | null;
@@ -78,6 +84,7 @@ export type WorldConversationBubblePanel = {
   id: string;
   targetKey: string;
   selectedKey: string | null;
+  terminalTarget?: QualifiedSurfaceTarget;
   content: ReactNode;
 };
 
@@ -884,7 +891,12 @@ function WorldStage({
             onPointerCancel={endConversationInteraction}
             onKeyDown={(event) => moveConversationWithKeyboard(panel.id, event)}
           >
-            {panel.content}
+            <SurfaceTerminalLease
+              host={context.terminalHost}
+              target={panel.terminalTarget}
+            >
+              {panel.content}
+            </SurfaceTerminalLease>
             {!context.compact ? (
               <button
                 type="button"
