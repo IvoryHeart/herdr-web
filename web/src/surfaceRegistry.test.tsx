@@ -5,13 +5,14 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { CoreNavigationProvider, CoreSurfaceOutlet } from "./CoreNavigation";
 import { SurfaceRegistry, coreSurfaceRegistry } from "./surfaceRegistry";
+import { productSurfaceRegistry } from "./productAssembly";
 
 afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("internal surface registry", () => {
-  it("describes the statically bundled multi-host core surface", () => {
+describe("surface assemblies", () => {
+  it("keeps Foundation conformance limited to Spaces", () => {
     expect(coreSurfaceRegistry.get("spaces")).toMatchObject({
       id: "spaces",
       label: "Spaces",
@@ -20,7 +21,8 @@ describe("internal surface registry", () => {
       hostScope: "multi-host",
       requiredCapabilities: ["snapshot", "terminal_attach"],
     });
-    expect(coreSurfaceRegistry.get("world")).toMatchObject({
+    expect(coreSurfaceRegistry.get("world")).toBeNull();
+    expect(productSurfaceRegistry.get("world")).toMatchObject({
       id: "world",
       label: "Office",
       route: "/world",
@@ -28,7 +30,7 @@ describe("internal surface registry", () => {
       hostScope: "multi-host",
       requiredCapabilities: ["snapshot"],
     });
-    expect(coreSurfaceRegistry.resolvePath("/world/")?.id).toBe("world");
+    expect(productSurfaceRegistry.resolvePath("/world/")?.id).toBe("world");
     expect(
       coreSurfaceRegistry.supports("spaces", {
         features: ["snapshot", "terminal_attach"],
@@ -38,7 +40,7 @@ describe("internal surface registry", () => {
       coreSurfaceRegistry.missingCapabilities("spaces", { features: ["snapshot"] }),
     ).toEqual(["terminal_attach"]);
     expect(
-      coreSurfaceRegistry.supports("world", { features: ["snapshot"] }),
+      productSurfaceRegistry.supports("world", { features: ["snapshot"] }),
     ).toBe(true);
   });
 
