@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
@@ -181,6 +181,25 @@ test("desktop assembly audit excludes secrets, local state, workstation paths, a
       fails(["--audit-artifact", incompleteChecksumArtifact]);
     } finally {
       rmSync(incompleteChecksumArtifact, { recursive: true, force: true });
+    }
+
+    const hiddenDirectoryArtifact = makeDesktopFixture("hidden-directory-artifact");
+    try {
+      mkdirSync(join(hiddenDirectoryArtifact, ".git"), { recursive: true });
+      mkdirSync(join(hiddenDirectoryArtifact, "node_modules/hidden-package"), { recursive: true });
+      writeFileSync(join(hiddenDirectoryArtifact, ".git/config"), "must not ship\n");
+      writeFileSync(join(hiddenDirectoryArtifact, "node_modules/hidden-package/secret.txt"), "must not ship\n");
+      fails(["--audit-artifact", hiddenDirectoryArtifact]);
+    } finally {
+      rmSync(hiddenDirectoryArtifact, { recursive: true, force: true });
+    }
+
+    const symlinkArtifact = makeDesktopFixture("symlink-artifact");
+    try {
+      symlinkSync("README.md", join(symlinkArtifact, "readme-link"));
+      fails(["--audit-artifact", symlinkArtifact]);
+    } finally {
+      rmSync(symlinkArtifact, { recursive: true, force: true });
     }
   } finally {
     rmSync(artifact, { recursive: true, force: true });

@@ -195,10 +195,12 @@ function listFiles(root) {
   const files = [];
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "web" && false) continue;
       const filename = join(directory, entry.name);
+      const relativePath = relative(root, filename).split(sep).join("/");
+      if (entry.isSymbolicLink()) fail(`artifact contains an unsupported symlink: ${relativePath}`);
       if (entry.isDirectory()) visit(filename);
-      else if (entry.isFile()) files.push(relative(root, filename).split(sep).join("/"));
+      else if (entry.isFile()) files.push(relativePath);
+      else fail(`artifact contains an unsupported filesystem entry: ${relativePath}`);
     }
   }
   visit(root);
@@ -421,7 +423,7 @@ function copyPolicyMaterial(root, stage) {
 }
 
 function filesUnder(root) {
-  return listFiles(root).filter((file) => !file.startsWith(".git/"));
+  return listFiles(root);
 }
 
 function writeArtifactMaterial(stage, sourceCommit, sboms, kind) {

@@ -1,7 +1,11 @@
 # Release Process
 
-`herdr-web` is a private, vendored web app release. Releases create Git tags and GitHub releases.
-They do not publish npm packages, and the package versions are not release versions.
+Herdr World is an open-source downstream project in the current combined,
+pre-extraction checkout. Releases create Git tags and GitHub releases for the
+source-first Herdr World release; they do not publish npm packages, and package
+versions are not release versions. The checkout retains legacy `herdr-web`
+operational identifiers only where the approved migration boundary requires
+them.
 
 ## Prerequisites
 
