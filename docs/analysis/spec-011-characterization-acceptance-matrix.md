@@ -19,7 +19,7 @@ terminal owner, shared transport, package boundary, or production cutover.
 | Reconnection and lifecycle signals | `TerminalView.characterization.test.tsx`, `terminalReconnectPolicy.test.ts`, `terminalConnectionStatus.test.ts` | Unexpected close/error, connect timeout, online, visibility, native resume, close reasons, non-retryable closures, and bounded attach-conflict retries remain deterministic. |
 | Focus, accessibility, and IME | `TerminalView.characterization.test.tsx`, `terminalAttachFocus.test.ts`, `terminalAccessibleText.test.ts`, `terminalImeFocus.test.ts`, `terminalImeInput.test.ts` | Pending attach does not steal a newly focused control; existing screen-reader and IME contracts remain covered. |
 | Primary/split and multi-bridge isolation | `TerminalView.characterization.test.tsx`, `terminalSessions.test.ts`, `herdrOfficeProjection.test.ts`, `herdrOfficeHandoff.test.ts` | Same native IDs are qualified by bridge/runtime identity; output and socket ownership do not cross views or hosts. |
-| Spaces ↔ Office navigation and Office commands | `spec011SurfaceCharacterization.test.tsx`, `herdrOfficeHandoff.test.ts`, `commands.test.ts`, `worldRuntime.test.ts` | Navigation preserves qualified observation; Office room create, rename, clear, and close requests use the selected bridge. |
+| Spaces ↔ Office navigation and Office commands | `tests/e2e/world.spec.ts` (real App navigation/history, room management, and exact colliding-host handoff), `tests/e2e/federation.spec.ts`, `herdrOfficeHandoff.test.ts`, `commands.test.ts`, `worldRuntime.test.ts` | The real fixture path preserves route/bridge behavior; fixture logs prove room commands and terminal handoff reach the selected host. |
 | Office conversation release | `TerminalView.characterization.test.tsx` | Closing an Office conversation releases the browser transport view and does not issue a Herdr pane-close command. |
 
 No test in this phase is skipped or marked as a substitute for an unimplemented
@@ -44,10 +44,11 @@ row marked “future” is intentionally not claimed as passing in this PR.
 
 ## Known gaps and proposed later seams
 
-- A full App-level route/bridge/Office interaction test would require a
-  substantive host/context refactor or broad provider harness. This PR keeps
-  the gap explicit and tests the production navigation, command, runtime, and
-  handoff seams that already exist.
+- The real fixture e2e coverage is the App-level route/bridge/Office evidence;
+  no duplicate unit harness is added for behavior that would merely echo props
+  or call command helpers directly. The later host/context seam still needs
+  shared-owner acceptance tests, which are listed below rather than implied by
+  current independent-view coverage.
 - The later implementation needs a host-owned terminal handle seam around the
   current socket lifecycle. That seam must preserve the current attach query,
   renderer output ordering, admission gates, focus protection, close policy,
