@@ -5633,7 +5633,8 @@ export function App() {
         ) : renderTerminal ? (
           <TerminalView
             pane={selectedTerminalSession?.attachEnabled ? selectedPane : null}
-            connectionKey={selectedTerminalSession?.sessionKey ?? "disconnected"}
+            profileId={selectedRuntime?.id ?? "disconnected"}
+            connectionKey={selectedTerminalSession?.connectionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
@@ -7108,7 +7109,8 @@ function SplitGrid({
           >
             <TerminalView
               pane={terminalSession?.attachEnabled ? pane : null}
-              connectionKey={terminalSession?.sessionKey ?? "disconnected"}
+              profileId={runtime.id}
+              connectionKey={terminalSession?.connectionKey ?? "disconnected"}
               resumeToken={resumeToken}
               httpUrl={httpUrl}
               wsUrl={wsUrl}

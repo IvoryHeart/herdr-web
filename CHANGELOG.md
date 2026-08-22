@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added a Foundation-owned, qualified terminal session owner with idempotent
+  view handles, bounded late-subscriber replay, focus-owned resize, shared
+  reconnect scheduling, and Spaces/Office transport sharing for Spec 011.
 - Added the Herdr World downstream identity, Apache-2.0 licensing boundary, contributor and
   security policy, component provenance inventory, and fail-closed source-release compliance
   foundation from approved Spec 004. [PR #18](https://github.com/IvoryHeart/herdr-web/pull/18)

@@ -144,7 +144,8 @@ export function WorldConversationBubble({
       <div className="world-conversation-terminal">
         <TerminalView
           pane={session.attachEnabled ? pane : null}
-          connectionKey={session.sessionKey}
+          profileId={runtime.id}
+          connectionKey={session.connectionKey}
           resumeToken={runtime.resumeToken}
           httpUrl={runtime.httpUrl}
           wsUrl={runtime.wsUrl}
