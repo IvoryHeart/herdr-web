@@ -1,5 +1,35 @@
 # Spec 011 characterization and future acceptance matrix
 
+## 2026-08-22 contract/lifecycle-kernel tranche
+
+- **Implementation base:** `origin/main` at
+  `57ba410c0b4bdd4ba43a43847a2c765dc076ffa5`
+- **Branch:** `codex/spec-011-surface-contract-v1`
+- **Delivered phase:** public typed surface/settings contract, exact API
+  compatibility check, deterministic assembly validation, typed serialized
+  lifecycle kernel, and least-purpose `SurfaceHostV1` terminal/command/
+  capability/navigation adapter.
+- **Focused evidence:** `surfaceContract.test.ts` — 17 tests pass; the
+  coverage includes API match/mismatch, malformed and duplicate assemblies,
+  compile-time generic rejection, load/context/factory/disposer races, stale
+  generations, independent kernels, settings lifecycle, qualified identities,
+  semantic commands, and narrow terminal handles backed by
+  `terminalSessionOwners`.
+- **Public entry:** `web/src/surfaces.ts` is the documented contract facade.
+  It is exercised as a conformance seam; the current App still mounts through
+  `surfaceRegistry` and has not been cut over.
+- **Upstream evidence:** the dated immutable audit is
+  [`upstream-v050-audit-2026-08-22.md`](upstream-v050-audit-2026-08-22.md).
+- **Validation evidence:** focused contract `17/17`; full web `60/60` files,
+  `452/452` tests; retained terminal/focus/IME/accessibility/output suite
+  `10/10` files, `69/69` tests; E2E `44 passed`, `2 skipped`; security and
+  independence audits passed; `npm run check` passed. The existing CI-only
+  Office resize skip remains unchanged and is tracked as
+  [issue #7](https://github.com/IvoryHeart/herdr-web/issues/7).
+
+This is a contract/kernel tranche, not completion of Spec 011, the package
+seam, the Foundation repository, or the App/Office extraction.
+
 - **Phase:** shared terminal owner implementation
 - **Base:** `cbd9a0c406806f3fbb5fe9b783b2e52082f688da` (merged PR #21)
 - **Scope:** current `herdr-web` production behavior before Foundation extraction

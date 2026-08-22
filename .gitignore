@@ -11,5 +11,6 @@
 .scratch/
 .worktrees/
 *.log
+.runtime/
 *.swp
 .DS_Store
