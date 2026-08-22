@@ -1,8 +1,18 @@
-# herdr-web
+# Herdr World
 
-> This repository is not associated with, endorsed by, or maintained by the official Herdr project.
-> It is experimental, Herdr compatibility code is vendored, and the runtime/API shape is expected to
-> change.
+> Herdr World is an independent downstream project compatible with Herdr and derived in part from
+> Herdr Web. It is not affiliated with, sponsored by, endorsed by, or maintained by the Herdr or
+> Herdr Web projects.
+
+This checkout is the pre-extraction downstream tree. Its existing `herdr-web` package, bridge,
+data-key, and artifact names remain bounded compatibility identifiers until the repository/package
+separation defined by Spec 016. The product identity, licensing boundary, provenance, and public
+project policy are documented in [`docs/project-identity.md`](docs/project-identity.md),
+[`NOTICE`](NOTICE), and [`provenance/components.json`](provenance/components.json).
+
+Original Herdr World work is Copyright (c) 2026 Yaswanth Narvaneni and Apache-2.0 unless a file or
+component record says otherwise. The repository does not claim ownership of Herdr, Herdr Web,
+Claw-Empire, PixiJS, fonts, or any other dependency.
 
 ## Spec-driven delivery
 
@@ -89,10 +99,13 @@ For source development:
 
 Android development also needs a JDK and Android SDK. See [docs/android.md](docs/android.md).
 
-## Quick Start From Release
+## Validation Quick Start From A Desktop Build
 
-Download the matching desktop tarball from the GitHub release, unpack it, and run the bundled
-wrapper:
+The initial Spec 004 release is source-only. The desktop flow below is for
+local validation evidence; desktop and Android binaries are not authorized
+initial release assets.
+
+Build or obtain a validation desktop tarball, unpack it, and run the bundled wrapper:
 
 ```bash
 tar -xzf herdr-web-vX.Y.Z-linux-x86_64.tar.gz
@@ -110,8 +123,9 @@ The desktop tarball includes the web assets and `herdr-web-bridge`; it does not 
 Start or attach Herdr `v0.8.2` or newer with terminal protocol `20` separately before running the
 bridge.
 
-For Android, install the APK from the same release and add the bridge URL in the Bridge area of
-Settings. LAN bridges must admit the bridge hostname and Android's app origin explicitly:
+For local Android validation, install a locally built APK and add the bridge URL in the Bridge area
+of Settings. Android binaries are not initial release assets. LAN bridges must admit the bridge
+hostname and Android's app origin explicitly:
 
 ```bash
 bin/herdr-web --host 0.0.0.0 --port 4000 \
@@ -157,6 +171,8 @@ an already-running bridge.
 npm run lint
 npm run test
 npm run build
+npm run release:compliance
+npm run test:release-compliance
 ```
 
 Useful narrower commands:
@@ -176,6 +192,12 @@ scripts/package-tarball.sh vX.Y.Z macos-arm64
 scripts/package-tarball.sh vX.Y.Z macos-x86_64
 scripts/check-vendor.sh
 ```
+
+Release compliance is fail-closed. It validates notices, component and asset
+provenance, destination hashes, lockfile-based dependency evidence, clean
+assembly boundaries, and exclusion of secrets, user state, machine paths,
+sibling checkouts, and unrelated workspace files. A missing required notice or
+checksum is a packaging error, not a warning.
 
 The Android app is a Capacitor shell around the bundled `web/dist` assets. It starts disconnected
 and uses the Bridge area in Settings to save one or more Herdr bridge URLs. Browser-served builds

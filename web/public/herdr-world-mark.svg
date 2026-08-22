@@ -1,0 +1,19 @@
+<!-- Copyright (c) 2026 Yaswanth Narvaneni; Apache-2.0. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Herdr World mark</title>
+  <desc id="desc">A copper and teal world mark formed from two interlocking arcs.</desc>
+  <defs>
+    <linearGradient id="copper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f6bd78" />
+      <stop offset="1" stop-color="#c96a5d" />
+    </linearGradient>
+    <linearGradient id="teal" x1="0" x2="1" y1="1" y2="0">
+      <stop offset="0" stop-color="#68d6c2" />
+      <stop offset="1" stop-color="#4f9fd1" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#171522" />
+  <path d="M128 258c0-78 57-140 128-140s128 62 128 140-57 140-128 140-128-62-128-140Z" fill="none" stroke="url(#copper)" stroke-width="42" />
+  <path d="M384 254c0 78-57 140-128 140s-128-62-128-140 57-140 128-140 128 62 128 140Z" fill="none" stroke="url(#teal)" stroke-width="42" stroke-dasharray="442 220" stroke-linecap="round" />
+  <circle cx="256" cy="256" r="34" fill="#f7e9d1" />
+</svg>

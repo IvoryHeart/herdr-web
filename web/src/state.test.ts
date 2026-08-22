@@ -336,7 +336,7 @@ describe("sortPanesForPicker", () => {
 
 describe("paneTitle", () => {
   it("uses cwd basename before falling back to a generic terminal title", () => {
-    expect(paneTitle({ ...pane("1-1"), foreground_cwd: "/home/kevin/worktrees/herdr" })).toBe(
+    expect(paneTitle({ ...pane("1-1"), foreground_cwd: "/workspace/herdr" })).toBe(
       "herdr",
     );
     expect(paneTitle(pane("1-2"))).toBe("Terminal");
@@ -350,13 +350,13 @@ describe("paneListSubtitle", () => {
         {
           ...pane("1-1"),
           display_agent: "Codex",
-          foreground_cwd: "/home/kevin/worktrees/herdr-web",
+          foreground_cwd: "/workspace/herdr-world",
         },
         "development",
         "review",
         "srv",
       ),
-    ).toBe("srv · development · review · herdr-web");
+    ).toBe("srv · development · review · herdr-world");
   });
 
   it("removes repeated title and context values", () => {
@@ -366,7 +366,7 @@ describe("paneListSubtitle", () => {
           ...pane("1-1"),
           label: "Codex",
           display_agent: "Codex",
-          foreground_cwd: "/home/kevin/Codex",
+          foreground_cwd: "/workspace/Codex",
         },
         "workspace",
         "Codex",
@@ -442,14 +442,14 @@ describe("rename clear heuristics", () => {
   });
 
   it("treats cwd-derived workspace labels as already default", () => {
-    const panes = [{ ...pane("1-1"), cwd: "/home/kevin/worktrees/herdr-web" }];
+    const panes = [{ ...pane("1-1"), cwd: "/workspace/herdr-web" }];
 
     expect(canClearWorkspaceName(workspace("herdr-web"), panes)).toBe(false);
     expect(canClearWorkspaceName(workspace("Herdr Web"), panes)).toBe(true);
   });
 
   it("uses bridge-provided workspace clearability when cwd heuristics would differ", () => {
-    const panes = [{ ...pane("1-1"), cwd: "/home/kevin/worktrees/herdr-web/web/src" }];
+    const panes = [{ ...pane("1-1"), cwd: "/workspace/herdr-web/web/src" }];
 
     expect(canClearWorkspaceName({ ...workspace("herdr-web"), can_clear_name: false }, panes)).toBe(
       false,

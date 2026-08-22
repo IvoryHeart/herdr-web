@@ -13,9 +13,14 @@ The reference workspace is historical provenance only; contributors do not
 need to clone or start another repository to build, test, or run Herdr Web.
 The release notice bundle MUST include the Apache-2.0 license and this
 attribution. The adapted TypeScript geometry/drawing files are modified files
-and MUST carry a prominent modification notice as required by Apache-2.0
-Section 4(b); the provenance manifest will identify the exact source hashes,
-copied-file hashes, and notices.
+and carry prominent modification notices as required by Apache-2.0 Section
+4(b). Their historical provenance is an owner-attested personal
+ai-observability / ai-palace implementation, not an inference from the sprite
+license. The full attestation, approval/integration references, source hashes,
+and evidence limitation are in
+[`provenance/office-owner-attestation.md`](../provenance/office-owner-attestation.md)
+and the machine-readable inventory in
+[`provenance/components.json`](../provenance/components.json).
 
 The historical reference Office directory was untracked in the source
 checkout at port time, so that local directory has no source commit to cite.
@@ -38,14 +43,17 @@ these SHA-256 values identify the exact copied assets:
 | `11-D-1.png` | `6e2c79f2fdb5afe8fd8c1537ba550a8ada9d301e4b493e4a528dbb37d3d4a549` |
 | `12-D-1.png` | `334595aa69f05095faa88227413dcddd6d1a2f177fbaeb625bd78f8dc7bcef34` |
 
-The geometry and drawing behavior are TypeScript adaptations of `office-geometry.js`,
-`office-drawing.js`, and the rendering portions of `office-scene.js`; their source hashes at port
-time were respectively:
+The geometry and drawing behavior are owner-attested TypeScript adaptations of
+`office-geometry.js`, `office-drawing.js`, and the rendering portions of
+`office-scene.js`; their source hashes at port time were respectively:
 
 - `6ab54a94369e8695c3bac2cf94ac76bab62613563382e4a712944ff0ff70e028`
 - `56edfdd364ace64663e4a98c931d15d2ef5bfcb725acee8d8791e88f974fd210`
 - `f4975a6e840506a003f39153dfa6e32830d311624402980a1884ecb5351a1e3f`
 
 PixiJS `8.3.4` is pinned as an npm dependency. Its MIT license is retained at
-`web/public/world/LICENSE-PixiJS.txt`. The Claw-Empire Apache-2.0 license is a
-release requirement and is not inferred from PixiJS or any neighboring asset.
+`web/public/world/LICENSE-PixiJS.txt`. Pixel Agents is reference-only and is
+not a source or license attribution for any distributed file. The Claw-Empire
+Apache-2.0 license is a release requirement for the twelve sprites only; it is
+not inferred for Office geometry, the renderer, PixiJS, or any neighboring
+asset.

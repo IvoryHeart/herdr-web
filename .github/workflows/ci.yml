@@ -39,6 +39,8 @@ jobs:
         run: npm ci --prefix web
       - name: Run complete non-live checks
         run: npm run check
+      - name: Verify clean-checkout release boundary
+        run: npm run release:compliance -- --check-clean
       - name: Run independence audit
         run: npm run test:independence
       - uses: taiki-e/install-action@cargo-audit

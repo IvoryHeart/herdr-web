@@ -11,6 +11,11 @@ fi
 
 VERSION="$1"
 PLATFORM="${2:-}"
+VERSION_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+if [[ ! "$VERSION" =~ $VERSION_PATTERN ]]; then
+  echo "release version must match vX.Y.Z with an optional prerelease/build suffix" >&2
+  exit 2
+fi
 
 if [[ -z "$PLATFORM" ]]; then
   os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -26,15 +31,27 @@ if [[ -z "$PLATFORM" ]]; then
   esac
 fi
 
+PLATFORM_PATTERN='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+if [[ ! "$PLATFORM" =~ $PLATFORM_PATTERN ]]; then
+  echo "platform must be a safe single path component" >&2
+  exit 2
+fi
+
 PKG_ROOT="$ROOT/dist-packages"
 NAME="herdr-web-${VERSION}-${PLATFORM}"
-STAGE="$PKG_ROOT/$NAME"
-ARCHIVE="$PKG_ROOT/$NAME.tar.gz"
+mkdir -p "$PKG_ROOT"
+PKG_ROOT_REAL="$(cd "$PKG_ROOT" && pwd -P)"
+STAGE="$PKG_ROOT_REAL/$NAME"
+ARCHIVE="$PKG_ROOT_REAL/$NAME.tar.gz"
+if [[ "$(dirname "$STAGE")" != "$PKG_ROOT_REAL" || "$(dirname "$ARCHIVE")" != "$PKG_ROOT_REAL" ]]; then
+  echo "release packaging path escaped dist-packages" >&2
+  exit 2
+fi
 
 npm --prefix "$ROOT" run build:web
 cargo build --release --manifest-path "$ROOT/bridge/Cargo.toml" --bin herdr-web-bridge
 
-rm -rf "$STAGE" "$ARCHIVE"
+rm -rf -- "$STAGE" "$ARCHIVE" "$ARCHIVE.sha256"
 mkdir -p "$STAGE/bin" "$STAGE/share/herdr-web/web"
 
 cp "$ROOT/bridge/target/release/herdr-web-bridge" "$STAGE/bin/herdr-web-bridge"
@@ -52,6 +69,11 @@ exec "$BIN_DIR/herdr-web-bridge" --static-dir "$ROOT/share/herdr-web/web" "$@"
 WRAPPER
 chmod +x "$STAGE/bin/herdr-web" "$STAGE/bin/herdr-web-bridge"
 
+# Copy and validate the complete notice/provenance/SBOM/checksum material. The
+# checker requires a clean tracked checkout and rejects missing metadata,
+# undeclared members, secrets, local state, and workstation paths.
+node "$ROOT/scripts/release-compliance.mjs" --prepare-desktop --root "$ROOT" --stage "$STAGE"
+
 (
   cd "$PKG_ROOT"
   COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" "$NAME"
@@ -60,7 +82,8 @@ chmod +x "$STAGE/bin/herdr-web" "$STAGE/bin/herdr-web-bridge"
   elif command -v shasum >/dev/null; then
     shasum -a 256 "$(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
   else
-    echo "warning: no sha256 tool found; checksum not written" >&2
+    echo "error: no SHA-256 tool found; release packaging cannot continue" >&2
+    exit 1
   fi
 )
 

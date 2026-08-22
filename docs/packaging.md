@@ -1,30 +1,33 @@
 # Packaging
 
-`herdr-web` ships as separate desktop bridge/web tarballs and an Android APK.
+`herdr-web` contains packaging helpers for source, desktop, and Android validation.
+Spec 004 authorizes a source-only initial release; desktop and Android outputs
+are not public release assets until later approved gates authorize them.
 
 The desktop tarball does not include Herdr itself. Users still need a running Herdr `v0.8.2` or
 newer session or daemon that reports terminal protocol `20`; the bundled bridge connects to the
 normal Herdr socket.
 
-## Release Artifacts
+## Initial Source Release
 
-Recommended GitHub release assets:
+The only authorized initial GitHub release assets are the source archive and its
+checksum:
 
 ```text
-herdr-web-vX.Y.Z-linux-x86_64.tar.gz
-herdr-web-vX.Y.Z-linux-x86_64.tar.gz.sha256
-herdr-web-vX.Y.Z-macos-arm64.tar.gz
-herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
-herdr-web-vX.Y.Z-macos-x86_64.tar.gz
-herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
-herdr-web-vX.Y.Z-android-debug.apk
+herdr-world-vX.Y.Z-source.tar.gz
+herdr-world-vX.Y.Z-source.tar.gz.sha256
 ```
 
-Build or provide Linux artifacts from a Linux environment, macOS ARM artifacts from an Apple Silicon
-Mac environment, and macOS x86_64 artifacts from an Intel Mac environment. Build the APK from a
-machine with the documented Android SDK setup. Local release operators may use supplemental
-build-service instructions for those environments, but the artifact names and layouts below remain
-the source of truth.
+Build it from the final release commit or tag:
+
+```bash
+scripts/package-source.sh vX.Y.Z
+node scripts/release-compliance.mjs --audit-artifact \
+  dist-packages/herdr-world-vX.Y.Z-source
+```
+
+Do not upload desktop tarballs, Android packages, APKs, or other binary/mobile
+artifacts from the source-first release flow.
 
 ## Desktop Tarball Shape
 
@@ -39,7 +42,16 @@ herdr-web-vX.Y.Z-PLATFORM/
 `bin/herdr-web` is a small wrapper that runs `herdr-web-bridge` with `--static-dir` pointed at the
 bundled web assets.
 
-## Build A Desktop Tarball
+Every source or desktop archive also carries `NOTICE`, the applicable
+`LICENSES/` texts, the vendor manifest, Office owner attestation, compatibility
+and component provenance, generated npm/Cargo SBOMs, an exact artifact-member
+manifest, and `provenance/SHA256SUMS`. Packaging fails closed if any required
+notice, hash, dependency license classification, or declared-member check is
+missing. The generated material is produced and audited by
+`scripts/release-compliance.mjs`; it excludes Herdr sessions, browser state,
+credentials, uploads, sibling checkouts, and unrelated workspace files.
+
+## Validation-only Desktop Tarball
 
 Install dependencies first:
 
@@ -78,7 +90,7 @@ dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz
 dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
 ```
 
-Before uploading or distributing a desktop tarball, inspect it:
+Before relying on a desktop tarball as validation evidence, inspect it:
 
 ```bash
 tar -tzf dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz
@@ -87,6 +99,9 @@ cat dist-packages/herdr-web-vX.Y.Z-PLATFORM.tar.gz.sha256
 
 Confirm the archive contains the expected root directory, `bin/herdr-web`,
 `bin/herdr-web-bridge`, bundled `share/herdr-web/web/` assets, and `README.md`.
+Also inspect `provenance/artifact-manifest.json` and
+`provenance/SHA256SUMS`; the archive must include the complete license/notice
+and provenance bundle.
 
 Before release, run the unpacked wrapper against a Herdr `v0.8.2` or newer daemon reporting protocol
 `20`. Confirm the bridge accepts that combination and rejects a daemon reporting any other terminal
@@ -98,7 +113,7 @@ menu/dialog focus restoration. If Settings → Terminal → Screen-reader text i
 enabled, verify the bounded visible-viewport mirror is present; leave it off
 by default for ordinary users.
 
-## Build Android APK
+## Validation-only Android APK
 
 Follow [docs/android.md](android.md) for SDK prerequisites, then build:
 
@@ -114,8 +129,9 @@ The debug build artifact is:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Before uploading or distributing an APK, inspect the package listing or metadata with available
-local tools, and confirm it was built from the intended release commit or tag.
+Before relying on an APK as validation evidence, inspect the package listing or metadata with
+available local tools, and confirm it was built from the intended release commit or tag. Do not
+upload it from the source-first release flow.
 
 To stage the current debug APK under the release asset name for private testing:
 
@@ -124,10 +140,10 @@ mkdir -p dist-packages
 cp android/app/build/outputs/apk/debug/app-debug.apk dist-packages/herdr-web-vX.Y.Z-android-debug.apk
 ```
 
-For a public release, build a signed release APK instead and use the non-debug release asset name:
+Signed APK publication is not authorized by the source-first release flow:
 
 ```text
-dist-packages/herdr-web-vX.Y.Z-android.apk
+no public APK asset
 ```
 
 ## User Quick Start From Tarball
@@ -188,40 +204,14 @@ WebSocket.
 
 ## Manual Release Upload
 
-The release script creates the GitHub release from changelog notes. Separately packaged tarballs and
-APKs are uploaded manually after the release exists.
-
-Upload the Linux tarball from the Linux build host:
+The release script creates the GitHub release from changelog notes. Upload only
+the source archive and checksum after the release exists:
 
 ```bash
 gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-linux-x86_64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-linux-x86_64.tar.gz.sha256
+  dist-packages/herdr-world-vX.Y.Z-source.tar.gz \
+  dist-packages/herdr-world-vX.Y.Z-source.tar.gz.sha256
 ```
 
-Upload the macOS ARM tarball from the Apple Silicon Mac build host, or copy it to the release
-operator machine first:
-
-```bash
-gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-macos-arm64.tar.gz.sha256
-```
-
-Upload the macOS Intel tarball from the Intel Mac build host, or copy it to the release operator
-machine first:
-
-```bash
-gh release upload vX.Y.Z \
-  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz \
-  dist-packages/herdr-web-vX.Y.Z-macos-x86_64.tar.gz.sha256
-```
-
-Upload the Android debug APK after it has the final debug asset name:
-
-```bash
-gh release upload vX.Y.Z dist-packages/herdr-web-vX.Y.Z-android-debug.apk
-```
-
-If every artifact has been copied to one machine, the same paths can be uploaded in one
-`gh release upload` invocation.
+Desktop tarballs and Android packages are validation-only outputs and must not
+be uploaded until their separate approved release gates are complete.
