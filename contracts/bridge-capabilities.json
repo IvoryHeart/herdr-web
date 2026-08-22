@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "features": [
+    "snapshot",
+    "structural_events",
+    "shared_selection",
+    "agent_activity",
+    "agent_pins",
+    "launcher_presets",
+    "notes",
+    "uploads",
+    "terminal_attach",
+    "terminal_input",
+    "terminal_resize",
+    "terminal_scroll",
+    "terminal_shared_fanout",
+    "observability_extension"
+  ]
+}

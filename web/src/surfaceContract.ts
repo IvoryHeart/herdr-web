@@ -1,12 +1,8 @@
-import type { ComponentType } from "react";
-import { BRIDGE_CAPABILITY_FEATURES, type BridgeRuntime } from "./bridge";
+import type { BridgeRuntime } from "./bridge";
 import type { BridgeHttpUrl } from "./bridgeApi";
+import bridgeCapabilityManifest from "../../contracts/bridge-capabilities.json";
 import { terminalSessionOwners } from "./terminalSessionOwner";
-import type {
-  TerminalSessionHandle,
-  TerminalSessionOwnerState,
-} from "./terminalSessionOwner";
-import type { TerminalSize } from "./terminalRenderer";
+import type { TerminalSessionHandle } from "./terminalSessionOwner";
 import {
   createOpaqueProductSettingsLifecycle,
   createOpaqueSurfaceLifecycle,
@@ -16,141 +12,54 @@ import type {
   OpaqueSurfaceLifecycle,
   SurfaceLifecycleOptions,
 } from "./surfaceLifecycle";
+import {
+  productSettingsContributionTokenBrand,
+  surfaceRegistrationTokenBrand,
+  FOUNDATION_SURFACE_API_VERSION,
+} from "./surfaceTypes";
+import type {
+  ProductAssembly,
+  ProductAssemblyInput,
+  ProductSettingsContribution,
+  ProductSettingsContributionToken,
+  SurfaceCapabilityAdmission,
+  SurfaceCommand,
+  SurfaceCommandResult,
+  SurfaceDefinition,
+  SurfaceDefinitionInput,
+  SurfaceHostV1,
+  SurfaceRegistration,
+  SurfaceRegistrationToken,
+  SurfaceRoute,
+  SurfaceRuntimeIdentity,
+  SurfaceRuntimeState,
+  SurfaceRuntimeView,
+  SurfaceTarget,
+} from "./surfaceTypes";
 
-/** The only surface API version understood by this Foundation tranche. */
-export const FOUNDATION_SURFACE_API_VERSION = 1 as const;
-
-export type SurfaceRoute = "/" | `/${string}`;
-
-export type SurfaceDefinition = {
-  id: string;
-  label: string;
-  route: SurfaceRoute;
-  semanticIcon: string;
-  requiredBridgeFeatures: readonly string[];
-};
-
-export type SurfaceComponent<Context> = ComponentType<{ context: Context }>;
-
-export type SurfaceRuntimeIdentity = {
-  bridgeId: string;
-  connectionKey: string;
-  generationKey: string;
-};
-
-export type SurfaceRuntimeState =
-  | "disabled"
-  | "connecting"
-  | "ready"
-  | "degraded"
-  | "incompatible"
-  | "offline";
-
-export type SurfaceRuntimeView = {
-  identity: SurfaceRuntimeIdentity;
-  label: string;
-  state: SurfaceRuntimeState;
-  features: readonly string[];
-  commands: readonly string[];
-};
-
-export type SurfaceCapabilityAdmission = {
-  identity: SurfaceRuntimeIdentity;
-  available: boolean;
-  missingFeatures: readonly string[];
-  state: SurfaceRuntimeState;
-};
-
-export type SurfaceTargetKind = "workspace" | "tab" | "pane" | "terminal";
-
-export type SurfaceTarget = {
-  identity: SurfaceRuntimeIdentity;
-  kind: SurfaceTargetKind;
-  nativeTargetId: string;
-};
-
-export type SurfaceCommand =
-  | { type: "focusWorkspace"; target: SurfaceTarget & { kind: "workspace" } }
-  | { type: "focusTab"; target: SurfaceTarget & { kind: "tab" } }
-  | { type: "focusPane"; target: SurfaceTarget & { kind: "pane" } }
-  | { type: "closePane"; target: SurfaceTarget & { kind: "pane" } };
-
-export type SurfaceCommandResult = {
-  accepted: true;
-  target: SurfaceTarget;
-};
-
-export type SurfaceTerminalAcquireOptions = {
-  outputCoalesceMs: number;
-  initialSize: TerminalSize;
-  inputEnabled: boolean;
-  resizeEnabled: boolean;
-  scrollEnabled: boolean;
-  focusOwner: boolean;
-  onOutput: (data: Uint8Array) => void;
-  onState: (state: TerminalSessionOwnerState) => void;
-  onConnectAttempt: () => void;
-};
-
-export type SurfaceTerminalHandle = Pick<
-  TerminalSessionHandle,
-  | "updateAdmission"
-  | "setFocusOwner"
-  | "reportSize"
-  | "sendInput"
-  | "sendScroll"
-  | "requestReconnect"
-  | "release"
->;
-
-export type SurfaceHostV1 = {
-  readonly apiVersion: typeof FOUNDATION_SURFACE_API_VERSION;
-  readonly signal: AbortSignal;
-  readonly runtimes: readonly SurfaceRuntimeView[];
-  readonly navigation: {
-    readonly currentSurfaceId: string;
-    goTo(surfaceId: string): void;
-    subscribe(listener: (surfaceId: string) => void): () => void;
-  };
-  readonly capabilities: {
-    forRuntime(bridgeId: string): SurfaceCapabilityAdmission | null;
-    admission(requiredFeatures: readonly string[]): readonly SurfaceCapabilityAdmission[];
-  };
-  readonly commands: {
-    dispatch(command: SurfaceCommand): Promise<SurfaceCommandResult>;
-  };
-  readonly terminals: {
-    acquire(
-      target: SurfaceTarget & { kind: "terminal" },
-      options: SurfaceTerminalAcquireOptions,
-    ): SurfaceTerminalHandle;
-  };
-};
-
-export type SurfaceRegistration<Context> = {
-  definition: SurfaceDefinition;
-  createContext: (host: SurfaceHostV1) => Context;
-  load: () => Promise<{ default: SurfaceComponent<Context> }>;
-  dispose: (context: Context) => void | Promise<void>;
-};
-
-export type ProductSettingsContribution<Context> = {
-  id: string;
-  label: string;
-  createContext: (host: SurfaceHostV1) => Context;
-  load: () => Promise<{
-    default: ComponentType<{ context: Context; onClose: () => void }>;
-  }>;
-  dispose: (context: Context) => void | Promise<void>;
-};
-
-export type SurfaceDefinitionInput = {
-  id: string;
-  label: string;
-  route: string;
-  semanticIcon: string;
-  requiredBridgeFeatures: readonly string[];
-};
+export { FOUNDATION_SURFACE_API_VERSION } from "./surfaceTypes";
+export type {
+  ProductAssembly,
+  ProductAssemblyInput,
+  ProductSettingsContribution,
+  ProductSettingsContributionToken,
+  SurfaceCapabilityAdmission,
+  SurfaceCommand,
+  SurfaceCommandResult,
+  SurfaceComponent,
+  SurfaceDefinition,
+  SurfaceDefinitionInput,
+  SurfaceHostV1,
+  SurfaceRegistration,
+  SurfaceRegistrationToken,
+  SurfaceRoute,
+  SurfaceRuntimeIdentity,
+  SurfaceRuntimeState,
+  SurfaceRuntimeView,
+  SurfaceTarget,
+  SurfaceTerminalAcquireOptions,
+  SurfaceTerminalHandle,
+} from "./surfaceTypes";
 
 /**
  * Runtime validation is kept separate from the typed definition so malformed
@@ -198,7 +107,7 @@ function isSurfaceRoute(value: string): value is SurfaceRoute {
 
 function validateFeatureNames(values: readonly string[]): readonly string[] {
   const seen = new Set<string>();
-  const knownFeatures = new Set<string>(BRIDGE_CAPABILITY_FEATURES);
+  const knownFeatures = new Set<string>(bridgeCapabilityManifest.features);
   for (const value of values) {
     if (!/^[a-z][a-z0-9_.-]*$/u.test(value)) {
       throw new Error(`Invalid required bridge feature: ${JSON.stringify(value)}`);
@@ -223,6 +132,7 @@ function hasControlCharacters(value: string): boolean {
 
 class OpaqueSurfaceRegistration {
   readonly definition: SurfaceDefinition;
+  readonly [surfaceRegistrationTokenBrand] = "surface-registration-token" as const;
   readonly #createLifecycle: (options: SurfaceLifecycleOptions) => OpaqueSurfaceLifecycle;
 
   private constructor(
@@ -245,19 +155,24 @@ class OpaqueSurfaceRegistration {
   }
 }
 
-export type SurfaceRegistrationToken = {
-  readonly definition: SurfaceDefinition;
-};
-
 export function defineSurface<Context>(
   registration: SurfaceRegistration<Context>,
 ): SurfaceRegistrationToken {
   return OpaqueSurfaceRegistration.from(registration);
 }
 
+export function createSurfaceLifecycleFromToken(
+  token: SurfaceRegistrationToken,
+  options: SurfaceLifecycleOptions,
+): OpaqueSurfaceLifecycle {
+  return requireSurfaceRegistrationToken(token).createLifecycle(options);
+}
+
 class OpaqueProductSettingsContribution {
   readonly id: string;
   readonly label: string;
+  readonly [productSettingsContributionTokenBrand] =
+    "product-settings-contribution-token" as const;
   readonly #createLifecycle: (
     options: SurfaceLifecycleOptions,
   ) => OpaqueProductSettingsLifecycle;
@@ -293,25 +208,15 @@ export function defineProductSettingsContribution<Context>(
   return OpaqueProductSettingsContribution.from(contribution);
 }
 
-export type ProductSettingsContributionToken = {
-  readonly id: string;
-  readonly label: string;
-};
-
-export type ProductAssembly = {
-  surfaceApiVersion: typeof FOUNDATION_SURFACE_API_VERSION;
-  surfaces: readonly SurfaceRegistrationToken[];
-  productSettings?: ProductSettingsContributionToken;
-};
-
-type ProductAssemblyCandidate = {
-  surfaceApiVersion?: number;
-  surfaces: readonly SurfaceRegistrationToken[];
-  productSettings?: ProductSettingsContributionToken;
-};
+export function createProductSettingsLifecycleFromToken(
+  token: ProductSettingsContributionToken,
+  options: SurfaceLifecycleOptions,
+): OpaqueProductSettingsLifecycle {
+  return requireProductSettingsToken(token).createLifecycle(options);
+}
 
 export function validateProductAssembly(
-  assembly: ProductAssemblyCandidate,
+  assembly: ProductAssemblyInput,
 ): asserts assembly is ProductAssembly {
   assertFoundationSurfaceApiVersion(assembly.surfaceApiVersion);
   if (assembly.surfaces.length === 0) {
@@ -319,7 +224,8 @@ export function validateProductAssembly(
   }
   const ids = new Set<string>();
   const routes = new Map<string, string>();
-  for (const surface of assembly.surfaces) {
+  for (const candidate of assembly.surfaces) {
+    const surface = requireSurfaceRegistrationToken(candidate);
     const definition = validateSurfaceDefinition(surface.definition);
     if (ids.has(definition.id)) {
       throw new Error(`Duplicate surface ID: ${definition.id}`);
@@ -334,11 +240,28 @@ export function validateProductAssembly(
     }
     routes.set(normalizedRoute, definition.id);
   }
+  if (assembly.productSettings !== undefined) {
+    requireProductSettingsToken(assembly.productSettings);
+  }
 }
 
 export function createProductAssembly(input: ProductAssembly): ProductAssembly {
   validateProductAssembly(input);
   return input;
+}
+
+function requireSurfaceRegistrationToken(value: unknown): OpaqueSurfaceRegistration {
+  if (!(value instanceof OpaqueSurfaceRegistration)) {
+    throw new Error("Invalid surface registration token");
+  }
+  return value;
+}
+
+function requireProductSettingsToken(value: unknown): OpaqueProductSettingsContribution {
+  if (!(value instanceof OpaqueProductSettingsContribution)) {
+    throw new Error("Invalid product settings contribution token");
+  }
+  return value;
 }
 
 export function assertFoundationSurfaceApiVersion(
@@ -429,55 +352,72 @@ export function createSurfaceHostV1(input: SurfaceHostFactoryInput): SurfaceHost
         ) {
           throw new Error("Terminal runtime generation is unavailable");
         }
-        const ownerHandle = terminalSessionOwners.acquire({
-          profileId: target.identity.bridgeId,
-          // Keep this identical to terminalSessionDescriptor.connectionKey;
-          // generationKey already contains the qualified connection identity.
-          connectionKey: target.identity.generationKey,
-          terminalId: target.nativeTargetId,
-          wsUrl: source.wsUrl,
-          outputCoalesceMs: options.outputCoalesceMs,
-          initialSize: options.initialSize,
-          inputEnabled: options.inputEnabled,
-          resizeEnabled: options.resizeEnabled,
-          scrollEnabled: options.scrollEnabled,
-          focusOwner: options.focusOwner,
-          onOutput: options.onOutput,
-          onState: options.onState,
-          onConnectAttempt: options.onConnectAttempt,
-        });
+        let ownerHandle: TerminalSessionHandle | null = null;
         let released = false;
         const release = () => {
-          if (released) {
+          if (released && !ownerHandle) {
             return;
           }
           released = true;
           input.signal.removeEventListener("abort", release);
-          ownerHandle.release();
+          const handle = ownerHandle;
+          ownerHandle = null;
+          handle?.release();
         };
         input.signal.addEventListener("abort", release, { once: true });
+        try {
+          ownerHandle = terminalSessionOwners.acquire({
+            profileId: target.identity.bridgeId,
+            // Keep this identical to terminalSessionDescriptor.connectionKey;
+            // generationKey already contains the qualified connection identity.
+            connectionKey: target.identity.generationKey,
+            terminalId: target.nativeTargetId,
+            wsUrl: source.wsUrl,
+            outputCoalesceMs: options.outputCoalesceMs,
+            initialSize: options.initialSize,
+            inputEnabled: options.inputEnabled,
+            resizeEnabled: options.resizeEnabled,
+            scrollEnabled: options.scrollEnabled,
+            focusOwner: options.focusOwner,
+            onOutput: options.onOutput,
+            onState: options.onState,
+            onConnectAttempt: options.onConnectAttempt,
+          });
+        } catch (error) {
+          release();
+          throw error;
+        }
+        if (input.signal.aborted) {
+          release();
+          throw new Error("Surface generation is aborted");
+        }
+        const handle = ownerHandle;
+        if (!handle) {
+          release();
+          throw new Error("Terminal acquisition did not produce a handle");
+        }
         return {
           updateAdmission: (inputEnabled, resizeEnabled, scrollEnabled) => {
             if (!released) {
-              ownerHandle.updateAdmission(inputEnabled, resizeEnabled, scrollEnabled);
+              handle.updateAdmission(inputEnabled, resizeEnabled, scrollEnabled);
             }
           },
           setFocusOwner: (wantsFocus) => {
             if (!released) {
-              ownerHandle.setFocusOwner(wantsFocus);
+              handle.setFocusOwner(wantsFocus);
             }
           },
           reportSize: (size) => {
             if (!released) {
-              ownerHandle.reportSize(size);
+              handle.reportSize(size);
             }
           },
           sendInput: (data, transport) =>
-            released ? false : ownerHandle.sendInput(data, transport),
-          sendScroll: (lines) => (released ? false : ownerHandle.sendScroll(lines)),
+            released ? false : handle.sendInput(data, transport),
+          sendScroll: (lines) => (released ? false : handle.sendScroll(lines)),
           requestReconnect: () => {
             if (!released) {
-              ownerHandle.requestReconnect();
+              handle.requestReconnect();
             }
           },
           release,

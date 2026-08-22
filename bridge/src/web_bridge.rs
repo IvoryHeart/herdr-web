@@ -5,7 +5,7 @@ use std::io::{self, ErrorKind, Write};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -168,7 +168,7 @@ struct Capabilities {
     herdr_version: String,
     terminal_protocol: u32,
     configured_label: Option<String>,
-    features: &'static [&'static str],
+    features: &'static [String],
     commands: &'static [&'static str],
     web_compat: u32,
     agent_activity: AgentActivityCapability,
@@ -176,6 +176,12 @@ struct Capabilities {
     launcher_presets: LauncherPresetsCapability,
     notes: NotesCapability,
     observability: ObservabilityCapability,
+}
+
+#[derive(Debug, Deserialize)]
+struct BridgeCapabilityManifest {
+    version: u32,
+    features: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1496,22 +1502,21 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "pane.move",
 ];
 
-const CAPABILITY_FEATURES: &[&str] = &[
-    "snapshot",
-    "structural_events",
-    "shared_selection",
-    "agent_activity",
-    "agent_pins",
-    "launcher_presets",
-    "notes",
-    "uploads",
-    "terminal_attach",
-    "terminal_input",
-    "terminal_resize",
-    "terminal_scroll",
-    "terminal_shared_fanout",
-    "observability_extension",
-];
+fn capability_features() -> &'static [String] {
+    static FEATURES: OnceLock<Vec<String>> = OnceLock::new();
+    FEATURES
+        .get_or_init(|| {
+            let manifest: BridgeCapabilityManifest =
+                serde_json::from_str(include_str!("../../contracts/bridge-capabilities.json"))
+                    .expect("bridge capability manifest must be valid JSON");
+            assert_eq!(
+                manifest.version, 1,
+                "unsupported bridge capability manifest"
+            );
+            manifest.features
+        })
+        .as_slice()
+}
 
 fn ensure_allowed_request(headers: &HeaderMap, policy: &RequestPolicy) -> Result<(), BridgeError> {
     if request_allowed(headers, policy) {
@@ -3111,7 +3116,7 @@ async fn capabilities_handler(
         herdr_version: state.herdr_version.clone(),
         terminal_protocol: state.terminal_protocol,
         configured_label: state.configured_label.clone(),
-        features: CAPABILITY_FEATURES,
+        features: capability_features(),
         commands: ALLOWED_COMMANDS,
         web_compat: WEB_COMPAT_VERSION,
         agent_activity: AgentActivityCapability { version: 1 },
@@ -4855,6 +4860,14 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request as HttpRequest;
     use tower::ServiceExt;
+
+    #[test]
+    fn capabilities_use_the_language_neutral_feature_manifest() {
+        let manifest: BridgeCapabilityManifest =
+            serde_json::from_str(include_str!("../../contracts/bridge-capabilities.json")).unwrap();
+        assert_eq!(manifest.version, 1);
+        assert_eq!(capability_features(), manifest.features.as_slice());
+    }
 
     #[tokio::test]
     async fn static_world_entry_routes_receive_revalidation_cache_policy() {

@@ -9,20 +9,27 @@
   compatibility check, deterministic assembly validation, typed serialized
   lifecycle kernel, and least-purpose `SurfaceHostV1` terminal/command/
   capability/navigation adapter.
-- **Focused evidence:** `surfaceContract.test.ts` — 20 tests pass; the
+- **Focused evidence:** `surfaceContract.test.ts` — 22 tests pass; the
   coverage includes API match/mismatch, malformed and duplicate assemblies,
   compile-time generic rejection, load/context/factory/disposer races, stale
   generations including rejected stale loads, independent kernels, settings
   lifecycle, qualified identities, canonical direct/host owner sharing,
-  abort-closed authority, semantic commands, and narrow terminal handles
-  backed by `terminalSessionOwners`.
+  abort-closed authority including synchronous acquisition abort, semantic
+  commands, and narrow terminal handles backed by `terminalSessionOwners`.
 - **Public entry:** `web/src/surfaces.ts` is the documented contract facade.
   It is exercised as a conformance seam; the current App still mounts through
   `surfaceRegistry` and has not been cut over.
+- **Review follow-up evidence:** `contracts/bridge-capabilities.json` is the
+  language-neutral feature manifest consumed by the Rust capabilities endpoint
+  and TypeScript validator; nominal surface/settings tokens reject both forged
+  runtime values and compile-time structural fabrication; and
+  `scripts/surface-api.test.mjs` compiles the emitted facade declarations as an
+  external consumer while checking that private owner, renderer, bridge, and
+  lifecycle modules do not leak through the public declaration.
 - **Upstream evidence:** the dated immutable audit is
   [`upstream-v050-audit-2026-08-22.md`](upstream-v050-audit-2026-08-22.md).
-- **Validation evidence:** focused contract `20/20`; full web `60/60` files,
-  `455/455` tests; retained terminal/focus/IME/accessibility/output suite
+- **Validation evidence:** focused contract `22/22`; full web `60/60` files,
+  `457/457` tests; public declaration consumer `1/1`; retained terminal/focus/IME/accessibility/output suite
   `10/10` files, `69/69` tests; E2E `44 passed`, `2 skipped`; security and
   independence audits passed; `npm run check` passed. The existing CI-only
   Office resize skip remains unchanged and is tracked as

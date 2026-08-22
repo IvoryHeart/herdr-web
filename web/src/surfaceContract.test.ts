@@ -8,17 +8,21 @@ import {
   ProductSettingsContribution,
   SurfaceHostV1,
   SurfaceCommand,
+  ProductSettingsContributionToken,
   SurfaceRegistration,
+  SurfaceRegistrationToken,
   SurfaceRuntimeView,
   assertFoundationSurfaceApiVersion,
   createProductAssembly,
+  createProductSettingsLifecycleFromToken,
   createSurfaceHostV1,
   defineProductSettingsContribution,
   defineSurface,
   validateProductAssembly,
   validateSurfaceDefinition,
 } from "./surfaceContract";
-import { createOpaqueProductSettingsLifecycle, LifecycleKernel } from "./surfaceLifecycle";
+import { LifecycleKernel } from "./surfaceLifecycle";
+import bridgeCapabilityManifest from "../../contracts/bridge-capabilities.json";
 import type { BridgeRuntime } from "./bridge";
 import { terminalSessionOwners } from "./terminalSessionOwner";
 
@@ -93,6 +97,40 @@ describe("Spec 011 public surface contract", () => {
         surfaces: [spaces, duplicateRoute],
       }),
     ).toThrow(/duplicate surface route.*spaces.*office/iu);
+    expect(() =>
+      validateProductAssembly({
+        surfaceApiVersion: 1,
+        surfaces: [{ definition: spaces.definition }],
+      }),
+    ).toThrow(/invalid surface registration token/iu);
+    expect(() =>
+      validateProductAssembly({
+        surfaceApiVersion: 1,
+        surfaces: [spaces],
+        productSettings: { id: "forged", label: "Forged" },
+      }),
+    ).toThrow(/invalid product settings contribution token/iu);
+
+    // @ts-expect-error A public token must carry the inaccessible nominal brand.
+    const forgedSurfaceToken: SurfaceRegistrationToken = { definition: spaces.definition };
+    // @ts-expect-error A public token must carry the inaccessible nominal brand.
+    const forgedSettingsToken: ProductSettingsContributionToken = {
+      id: "forged",
+      label: "Forged",
+    };
+    void forgedSurfaceToken;
+    void forgedSettingsToken;
+  });
+
+  it("validates required features from the shared bridge capability manifest", () => {
+    const definition = validateSurfaceDefinition({
+      id: "manifest-consumer",
+      label: "Manifest consumer",
+      route: "/manifest-consumer",
+      semanticIcon: "manifest",
+      requiredBridgeFeatures: bridgeCapabilityManifest.features,
+    });
+    expect(definition.requiredBridgeFeatures).toEqual(bridgeCapabilityManifest.features);
   });
 
   it("keeps a validated initial Spaces route and Office route", () => {
@@ -250,9 +288,39 @@ describe("Spec 011 public surface contract", () => {
       { identity: host.runtimes[0].identity, kind: "terminal", nativeTargetId: "terminal-1" },
       options,
     );
+    const socket = FakeWebSocket.instances[0];
     expect(FakeWebSocket.instances).toHaveLength(1);
     surface.release();
+    expect(socket.closeCalls).toBe(0);
     direct.release();
+    expect(socket.closeCalls).toBe(1);
+  });
+
+  it("releases a handle when acquisition callbacks abort synchronously", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const controller = new AbortController();
+    const host = createSurfaceHostV1({
+      signal: controller.signal,
+      runtimes: [{ runtime: runtime("bridge-a", "generation-a", ["terminal_attach"]), wsUrl }],
+      navigation: {
+        currentSurfaceId: "spaces",
+        goTo: () => {},
+        subscribe: () => () => {},
+      },
+      commandOwner: noopCommandOwner,
+    });
+    const target = {
+      identity: host.runtimes[0].identity,
+      kind: "terminal" as const,
+      nativeTargetId: "terminal-1",
+    };
+    const options = terminalOptions();
+    options.onState = () => controller.abort();
+    expect(() => host.terminals.acquire(target, options)).toThrow(/aborted/iu);
+    expect(terminalSessionOwners.size).toBe(0);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].closeCalls).toBe(1);
   });
 
   it("fails closed on generation abort and releases a terminal exactly once", async () => {
@@ -579,11 +647,8 @@ describe("typed surface lifecycle kernel", () => {
         order.push("dispose");
       },
     } satisfies ProductSettingsContribution<AlphaContext>;
-    defineProductSettingsContribution(contributionDefinition);
-    const lifecycle = createOpaqueProductSettingsLifecycle(
-      contributionDefinition,
-      lifecycleOptions(),
-    );
+    const contribution = defineProductSettingsContribution(contributionDefinition);
+    const lifecycle = createProductSettingsLifecycleFromToken(contribution, lifecycleOptions());
     const mounted = await lifecycle.mount();
     expect(mounted.status).toBe("mounted");
     expect(order).toEqual(["load", "create"]);
@@ -617,8 +682,8 @@ describe("typed surface lifecycle kernel", () => {
         throw new Error("settings cleanup report");
       },
     } satisfies ProductSettingsContribution<AlphaContext>;
-    defineProductSettingsContribution(contributionDefinition);
-    const lifecycle = createOpaqueProductSettingsLifecycle(contributionDefinition, {
+    const contribution = defineProductSettingsContribution(contributionDefinition);
+    const lifecycle = createProductSettingsLifecycleFromToken(contribution, {
       createHost: (signal) => testHost(signal),
       onError: (_error, info) => {
         expect(resources.size).toBe(0);
