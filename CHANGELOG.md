@@ -11,7 +11,7 @@
   generation-safe lifecycle cleanup, qualified command/terminal validation, a
   Foundation-only conformance assembly, and exact packed-artifact boundary
   checks. Repository extraction remains a separate Spec 016 operation.
-  [PR #70](https://github.com/kcosr/herdr-web/pull/70)
+  [PR #19](https://github.com/IvoryHeart/herdr-web/pull/19)
 
 - Added the Herdr World downstream identity, Apache-2.0 licensing boundary, contributor and
   security policy, component provenance inventory, and fail-closed source-release compliance
