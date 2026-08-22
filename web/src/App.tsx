@@ -36,6 +36,7 @@ import {
 } from "react";
 import type {
   CSSProperties,
+  ComponentType,
   Dispatch,
   FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -146,6 +147,7 @@ import { useCoreNavigation } from "./CoreNavigation";
 import { useFederatedRuntime } from "./federatedRuntime";
 import { useHostRegistry } from "./hostRegistry";
 import { officeDebug } from "./officeDebug";
+import { loadOpaqueProductSettings } from "@herdr-world/foundation/surfaces";
 import {
   fetchRuntimeSnapshot,
   hostConnectionState,
@@ -168,7 +170,7 @@ import {
 } from "./terminalAccessibleText";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import type { TerminalSessionDescriptor } from "./terminalSessions";
-import { coreSurfaceRegistry } from "./surfaceRegistry";
+import { productAssembly, productSurfaceRegistry } from "./productAssembly";
 import { SurfaceSlotBoundary } from "./SurfaceSlotBoundary";
 import type { WorldSurfaceContext } from "./world/WorldSurface";
 import {
@@ -180,7 +182,6 @@ import type { OfficeHandoffRequest } from "./world/herdrOfficeHandoff";
 import { projectHerdrOffice } from "./world/herdrOfficeProjection";
 import type { OfficeAgent } from "./world/herdrOfficeProjection";
 import { WorldConversationBubble } from "./world/WorldConversationBubble";
-import { WorldSettingsDialog } from "./world/WorldSettingsDialog";
 import {
   hasStoredWorldSettings,
   readWorldLongRoomTitleMode,
@@ -252,6 +253,15 @@ import {
 import type { WorkspaceReorderDirection } from "./workspaceReorder";
 
 const NoteMarkdownPreview = lazy(() => import("./NoteMarkdownPreview"));
+const WorldSettings = lazy(async () => {
+  const loaded = await loadOpaqueProductSettings(productAssembly.productSettings!);
+  return {
+    default: loaded.default as ComponentType<{
+      context: unknown;
+      onClose: () => void;
+    }>,
+  };
+});
 
 type LoadState = "loading" | "ready" | "error";
 type Scope = "space" | "all";
@@ -1595,7 +1605,7 @@ export function App() {
       }
       const state = connectionStates[runtime.id];
       if (
-        coreSurfaceRegistry.supports("spaces", runtime.capabilities) &&
+        productSurfaceRegistry.supports("spaces", runtime.capabilities) &&
         state?.connectionKey === runtime.generationKey &&
         state.snapshot
       ) {
@@ -1637,7 +1647,7 @@ export function App() {
         const currentState = state?.connectionKey === runtime.generationKey ? state : null;
         const loadState = currentState?.loadState ?? (runtime.canConnect ? "loading" : "ready");
         const snapshot = currentState?.snapshot ?? null;
-        const surfaceSupported = coreSurfaceRegistry.supports(
+        const surfaceSupported = productSurfaceRegistry.supports(
           activeSurface.id,
           runtime.capabilities,
         );
@@ -1660,7 +1670,7 @@ export function App() {
           ),
           surfaceError: surfaceSupported
             ? null
-            : `Missing ${coreSurfaceRegistry
+            : `Missing ${productSurfaceRegistry
                 .missingCapabilities(activeSurface.id, runtime.capabilities)
                 .join(", ")} capability`,
         };
@@ -5058,7 +5068,7 @@ export function App() {
     ],
   );
   const WorldSurface =
-    activeSurface.id === "world" ? coreSurfaceRegistry.component("world") : null;
+    activeSurface.id === "world" ? productSurfaceRegistry.component("world") : null;
   const canCreateWorldSeat = (roomKey: string) => {
     const room = worldProjection.rooms.find(({ key }) => key === roomKey);
     if (!room) {
@@ -5930,7 +5940,12 @@ export function App() {
       ) : null}
 
       {worldSettingsOpen ? (
-        <WorldSettingsDialog onClose={closeWorldSettings} onSaved={markWorldSettingsSaved} />
+        <Suspense fallback={<div className="surface-loading" role="status">Loading Office settings…</div>}>
+          <WorldSettings
+            context={{ onSaved: markWorldSettingsSaved }}
+            onClose={closeWorldSettings}
+          />
+        </Suspense>
       ) : null}
 
       {error ? (

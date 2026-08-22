@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { SurfaceComponentProps } from "../surfaceRegistry";
 import { PixelOfficeCanvas } from "./PixelOfficeCanvas";
 import type {
   OfficeConversationAnchors,
@@ -82,7 +81,7 @@ export type WorldConversationBubblePanel = {
   content: ReactNode;
 };
 
-const FALLBACK_CONTEXT: WorldSurfaceContext = {
+export const FALLBACK_CONTEXT: WorldSurfaceContext = {
   projection: {
     version: 1,
     generatedAt: 0,
@@ -165,7 +164,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onCloseRoom: () => {},
 };
 
-export default function WorldSurface({ context }: SurfaceComponentProps) {
+export default function WorldSurface({ context }: { context?: WorldSurfaceContext }) {
   const worldContext = isWorldSurfaceContext(context) ? context : FALLBACK_CONTEXT;
   const onActivateAgent = (key: string) => {
     const agent = worldContext.projection.roster.find(

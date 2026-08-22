@@ -8,9 +8,14 @@
     "herdr_commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
     "terminal_protocol": 20,
     "foundation_repository": "current combined checkout; physical Foundation extraction is Spec 016",
-    "foundation_version": "recorded-at-build-time",
-    "surface_api_version": null,
-    "web_compat": "protocol-20 current bridge compatibility; record exact response in the release manifest"
+    "foundation_package": "@herdr-world/foundation",
+    "foundation_version": "0.1.0",
+    "foundation_artifact": "dist-packages/herdr-world-foundation-0.1.0.tgz",
+    "foundation_artifact_sha512": "sha512-7Rh4Cc12kHYG46ePyxTOZV/o8jy3SyFB8Mh6mH2m1QX8qMEd646GF4xgXvCQXCOUUEBPJOwUvz6hRdU1jVN+0Q==",
+    "foundation_content_integrity": "sha512-tLu2EM0AeOqw/iyDdC5b6m1nyeaXUwsMkQFPHcBUbl6cuV4Umgxmq1qi+ewEXOLj4o3zqb2DmyogF+EgHyVNxw==",
+    "bridge_api_version": 1,
+    "surface_api_version": 1,
+    "web_compat": 1
   },
   "artifacts": {
     "source-archive": {
