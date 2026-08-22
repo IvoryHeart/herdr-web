@@ -1,9 +1,9 @@
 # Spec 011 characterization and future acceptance matrix
 
 - **Phase:** shared terminal owner implementation
-- **Base:** `c330b733cfc487b4f80cde2b5b461aa4520471e0`
+- **Base:** `cbd9a0c406806f3fbb5fe9b783b2e52082f688da` (merged PR #21)
 - **Scope:** current `herdr-web` production behavior before Foundation extraction
-- **Status:** the future host-owned gates below are not implemented by this PR
+- **Status:** the shared terminal-owner gates below are implemented and evidenced by this PR; the later package/repository seam remains deferred
 
 This document records the evidence boundary for the current Spec 011 phase. The
 executable tests exercise the current `TerminalView`, Foundation-owned shared
@@ -29,13 +29,14 @@ future gates below are implemented.
 
 ## Future host-owned acceptance matrix
 
-Every row is a blocking gate for the later Foundation/World implementation. A
-row marked “future” is intentionally not claimed as passing in this PR.
+Every row is a blocking gate for the later Foundation/World implementation.
+Rows marked “Implemented” record executable evidence established in this
+shared-owner phase; the public package/repository seam remains future work.
 
 | Future gate | Required scenario | Passing evidence | Status in this PR |
 | --- | --- | --- | --- |
 | Shared ownership | One host-owned terminal transport is shared by Spaces and Office. | Both views acquire handles from one owner; no surface constructs a raw terminal socket. | Implemented — `terminalSessionOwner.test.ts`, `TerminalView.characterization.test.tsx`. |
-| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. | Implemented — bounded frame replay and live ordering are tested in `terminalSessionOwner.test.ts`. |
+| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. If the frame or byte bound would evict the stateful ANSI prefix, the owner clears replay and performs one fresh attach-epoch resync instead of exposing a raw suffix. | Implemented — ordered replay, frame-count overflow, byte-count overflow, reconnect-epoch clearing, and stale-socket isolation are tested in `terminalSessionOwner.test.ts`. |
 | Focus-owned resize | More than one view can observe one PTY. | Only the focus owner may resize; a non-owner refit cannot change the shared PTY dimensions. | Implemented — exclusive resize and deterministic transfer are tested in `terminalSessionOwner.test.ts`. |
 | Partial close | One view closes while another remains attached. | The remaining view stays attached, keeps receiving output, and retains the correct PTY size. | Implemented — Office release leaves the Spaces renderer and owner connected in `TerminalView.characterization.test.tsx`. |
 | Final release | The last view releases its handle. | The browser transport closes; no pane-close command is sent to Herdr. | Implemented — final release close count and no pane-close command are tested in `TerminalView.characterization.test.tsx`. |
@@ -47,13 +48,13 @@ row marked “future” is intentionally not claimed as passing in this PR.
 
 - The real fixture e2e coverage is the App-level route/bridge/Office evidence;
   no duplicate unit harness is added for behavior that would merely echo props
-  or call command helpers directly. The later host/context seam still needs
-  shared-owner acceptance tests, which are listed below rather than implied by
-  current independent-view coverage.
+  or call command helpers directly. The later typed host/context adapter still
+  needs its own integration evidence when the package seam is introduced.
 - The later public host/context seam must expose this owner through a narrow
   typed handle without reintroducing raw sockets or a second bridge manager.
   The current owner preserves the attach query, renderer output ordering,
   admission gates, focus protection, close policy, and cleanup behavior.
-- Live preview was not started for this PR. Ports 8787, 8788, and 5174 were
-  already occupied by existing services and were left untouched; no live
-  validation claim is made.
+- The candidate preview is running at `http://127.0.0.1:5190/` with its
+  protocol-20 bridge at `http://127.0.0.1:8790/`; the existing installations on
+  8787 and 8788 remain untouched. Manual preview validation is limited to the
+  configured daemon state and does not claim a production cutover.

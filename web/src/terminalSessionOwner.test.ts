@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  TERMINAL_SESSION_REPLAY_MAX_BYTES,
   TERMINAL_SESSION_REPLAY_MAX_FRAMES,
   TerminalSessionOwnerRegistry,
   terminalSessionOwnerKey,
@@ -83,7 +84,7 @@ afterEach(() => {
 });
 
 describe("Foundation-owned terminal session transport", () => {
-  it("uses one owner for multiple views and replays a bounded ordered suffix to late subscribers", () => {
+  it("uses one owner and replays the coherent current epoch before live output", () => {
     const firstOutput: number[] = [];
     const first = acquire({
       focusOwner: true,
@@ -92,9 +93,9 @@ describe("Foundation-owned terminal session transport", () => {
     const socket = onlySocket();
     socket.open();
 
-    for (let index = 0; index <= TERMINAL_SESSION_REPLAY_MAX_FRAMES; index += 1) {
-      socket.message(new Uint8Array([index % 256]).buffer);
-    }
+    socket.message(new Uint8Array([1]).buffer);
+    socket.message(new Uint8Array([2]).buffer);
+    socket.message(new Uint8Array([3]).buffer);
 
     const lateOutput: number[] = [];
     const late = acquire({
@@ -103,15 +104,107 @@ describe("Foundation-owned terminal session transport", () => {
     });
 
     expect(FakeWebSocket.instances).toHaveLength(1);
-    expect(lateOutput).toHaveLength(TERMINAL_SESSION_REPLAY_MAX_FRAMES);
-    expect(lateOutput[0]).toBe(1);
-    expect(lateOutput.at(-1)).toBe(0);
+    expect(lateOutput).toEqual([1, 2, 3]);
 
-    socket.message(new Uint8Array([251]).buffer);
-    expect(lateOutput.at(-1)).toBe(251);
-    expect(firstOutput).toHaveLength(TERMINAL_SESSION_REPLAY_MAX_FRAMES + 2);
+    socket.message(new Uint8Array([4]).buffer);
+    expect(lateOutput).toEqual([1, 2, 3, 4]);
+    expect(firstOutput).toEqual([1, 2, 3, 4]);
     late.release();
     first.release();
+  });
+
+  it("rejects frame-count overflow and gives late subscribers a fresh attach epoch", async () => {
+    const first = acquire({ focusOwner: true });
+    const firstSocket = onlySocket();
+    firstSocket.open();
+    for (let index = 0; index < TERMINAL_SESSION_REPLAY_MAX_FRAMES; index += 1) {
+      firstSocket.message(new Uint8Array([index % 256]).buffer);
+    }
+    firstSocket.message(new Uint8Array([255]).buffer);
+
+    const lateOutput: number[] = [];
+    const late = acquire({
+      focusOwner: false,
+      onOutput: (data) => lateOutput.push(data[0]),
+    });
+    expect(lateOutput).toEqual([]);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const replacementSocket = FakeWebSocket.instances[1];
+    replacementSocket.open();
+    replacementSocket.message(new Uint8Array([42]).buffer);
+    expect(lateOutput).toEqual([42]);
+
+    late.release();
+    first.release();
+  });
+
+  it("rejects byte-count overflow without replaying a raw ANSI suffix", async () => {
+    const first = acquire({ focusOwner: true });
+    const firstSocket = onlySocket();
+    firstSocket.open();
+    const frame = new Uint8Array(Math.floor(TERMINAL_SESSION_REPLAY_MAX_BYTES / 2) + 1);
+    firstSocket.message(frame.buffer);
+    firstSocket.message(frame.slice().buffer);
+
+    const lateOutput: number[] = [];
+    const late = acquire({
+      focusOwner: false,
+      onOutput: (data) => lateOutput.push(data[0]),
+    });
+    expect(lateOutput).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(500);
+    const replacementSocket = FakeWebSocket.instances.at(-1)!;
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    replacementSocket.open();
+    replacementSocket.message(new Uint8Array([43]).buffer);
+    expect(lateOutput).toEqual([43]);
+
+    late.release();
+    first.release();
+  });
+
+  it("clears replay between reconnect epochs and ignores output from the retired socket", async () => {
+    const output: number[] = [];
+    const first = acquire({ onOutput: (data) => output.push(data[0]) });
+    const firstSocket = onlySocket();
+    firstSocket.open();
+    firstSocket.message(new Uint8Array([1]).buffer);
+    firstSocket.serverClose();
+
+    const lateOutput: number[] = [];
+    const late = acquire({ onOutput: (data) => lateOutput.push(data[0]) });
+    expect(lateOutput).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(500);
+    const replacementSocket = FakeWebSocket.instances.at(-1)!;
+    replacementSocket.open();
+    firstSocket.message(new Uint8Array([99]).buffer);
+    replacementSocket.message(new Uint8Array([2]).buffer);
+
+    expect(output).toEqual([1, 2]);
+    expect(lateOutput).toEqual([2]);
+    late.release();
+    first.release();
+  });
+
+  it("keeps repeated reconnect failures on one bounded scheduler marker", async () => {
+    const handle = acquire();
+    let socket = onlySocket();
+    socket.open();
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      socket.serverClose();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(FakeWebSocket.instances).toHaveLength(attempt + 2);
+      socket = FakeWebSocket.instances.at(-1)!;
+      socket.open();
+    }
+
+    handle.release();
   });
 
   it("allows only the focus owner to resize and transfers authority deterministically", () => {
