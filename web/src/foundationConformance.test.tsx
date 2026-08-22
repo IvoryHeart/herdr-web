@@ -18,7 +18,8 @@ describe("Foundation conformance assembly", () => {
     document.body.append(container);
     const root = createRoot(container);
     await act(async () => root.render(<FoundationConformanceApp />));
-    expect(container.textContent).toContain("Loading Spaces");
+    expect(container.querySelector('[data-foundation-surface="spaces"]')).not.toBeNull();
+    expect(container.textContent).toContain("Foundation conformance shell");
     expect(container.textContent).not.toMatch(/Office|Pixel/iu);
     await act(async () => root.unmount());
   });

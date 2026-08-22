@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -24,7 +24,9 @@ try {
   });
   await writeFile(join(temp, "consumer.mjs"), [
     'import { FOUNDATION_SURFACE_API_VERSION, FOUNDATION_TERMINAL_PROTOCOL } from "@herdr-world/foundation/surfaces";',
+    'import { FoundationConformanceApp } from "@herdr-world/foundation/conformance";',
     'if (FOUNDATION_SURFACE_API_VERSION !== 1 || FOUNDATION_TERMINAL_PROTOCOL !== 20) process.exit(1);',
+    'if (typeof FoundationConformanceApp !== "function") process.exit(1);',
   ].join("\n"));
   await execFileAsync("node", ["consumer.mjs"], { cwd: temp });
 
@@ -59,6 +61,51 @@ try {
     }
   }
 
+  // Exercise the actual World consumer from an isolated checkout copy. The
+  // temporary package contains the exact tarball, never ../packages/foundation
+  // or an unpacked sibling source tree, and its lockfile records the tarball
+  // integrity before npm ci runs.
+  const worldCheckout = join(temp, "world-checkout");
+  const worldConsumer = join(worldCheckout, "web");
+  await cp(join(root, "web"), worldConsumer, {
+    recursive: true,
+    filter: (source) => !/(?:\/|\\)(?:node_modules|dist)(?:\/|\\|$)/u.test(source),
+  });
+  await cp(join(root, "contracts"), join(worldCheckout, "contracts"), { recursive: true });
+  await cp(tarball, join(worldConsumer, "foundation-artifact.tgz"));
+  const worldPackagePath = join(worldConsumer, "package.json");
+  const worldPackage = JSON.parse(await readFile(worldPackagePath, "utf8"));
+  worldPackage.dependencies["@herdr-world/foundation"] = "file:./foundation-artifact.tgz";
+  await writeFile(worldPackagePath, `${JSON.stringify(worldPackage, null, 2)}\n`);
+  await execFileAsync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], {
+    cwd: worldConsumer,
+  });
+  const worldLock = JSON.parse(await readFile(join(worldConsumer, "package-lock.json"), "utf8"));
+  const installedFoundation = worldLock.packages?.["node_modules/@herdr-world/foundation"];
+  if (
+    installedFoundation?.resolved !== "file:foundation-artifact.tgz" ||
+    installedFoundation.integrity !== artifact.sha512
+  ) {
+    throw new Error("World lockfile does not pin the exact Foundation tarball and integrity");
+  }
+  if (JSON.stringify(worldPackage).includes("../packages/foundation")) {
+    throw new Error("World consumer retained a Foundation sibling/source dependency");
+  }
+  await execFileAsync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], {
+    cwd: worldConsumer,
+  });
+  await execFileAsync("npm", ["run", "build"], { cwd: worldConsumer });
+  await execFileAsync("npm", ["test", "--", "--run"], { cwd: worldConsumer });
+  const worldDist = join(worldConsumer, "dist");
+  await visit(worldDist);
+  const privateDistImport = /@herdr-world\/foundation\/(?!surfaces(?:["']|$)|conformance(?:["']|$))[^"']+/u;
+  for (const path of emittedFiles) {
+    const content = await readFile(path, "utf8");
+    if (privateDistImport.test(content)) {
+      throw new Error(`World emitted graph contains a private Foundation import: ${path}`);
+    }
+  }
+
   const sourceFiles = [];
   async function visitWorld(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -68,7 +115,7 @@ try {
     }
   }
   await visitWorld(join(root, "web", "src"));
-  const privateImport = /@herdr-world\/foundation\/(?!surfaces(?:["']|$)|["'])/u;
+  const privateImport = /@herdr-world\/foundation\/(?!surfaces(?:["']|$)|conformance(?:["']|$))[^"']+/u;
   for (const path of sourceFiles) {
     const source = await readFile(path, "utf8");
     if (privateImport.test(source)) throw new Error(`private Foundation import in ${path}`);
