@@ -20,9 +20,10 @@ import type { TerminalInputTransport } from "./terminalInputTransport";
  * Late subscribers receive complete output frames from the current attach
  * epoch while the bounded replay remains a coherent prefix of that epoch. The
  * bridge protocol does not expose a serialized terminal snapshot. If either
- * bound would evict the prefix, the owner discards replay and reconnects so a
- * fresh attach can repaint the stateful ANSI stream; it never replays a raw
- * suffix from the middle of an escape or terminal-state sequence.
+ * bound would evict the prefix, the owner marks replay incomplete while
+ * continuing lossless live fanout; a late subscriber then requests one fresh
+ * attach so it never receives a raw suffix from the middle of an escape or
+ * terminal-state sequence.
  */
 export const TERMINAL_SESSION_REPLAY_MAX_BYTES = 64 * 1024;
 export const TERMINAL_SESSION_REPLAY_MAX_FRAMES = 256;
@@ -70,6 +71,7 @@ type Subscriber = {
   scrollEnabled: boolean;
   wantsFocus: boolean;
   lastSize: TerminalSize;
+  awaitingReplayResync: boolean;
   onOutput: (data: Uint8Array) => void;
   onState: (state: TerminalSessionOwnerState) => void;
   onConnectAttempt: () => void;
@@ -84,7 +86,7 @@ type ReconnectReason =
   | "visible"
   | "online"
   | "resize"
-  | "replay-overflow"
+  | "replay-resync"
   | "manual";
 
 const DEBUG_TERMINAL_RECONNECT = false;
@@ -156,6 +158,7 @@ class TerminalSessionOwner {
   #removeNativeResumeHandler: (() => void) | null = null;
   #pendingForegroundReasons = new Set<ReconnectReason>();
   #reconnectScheduledForSocket: number | null = null;
+  #replayResyncRequested = false;
   #disposed = false;
 
   constructor(options: TerminalSessionOwnerAcquireOptions, remove: () => void) {
@@ -183,6 +186,7 @@ class TerminalSessionOwner {
       scrollEnabled: options.scrollEnabled,
       wantsFocus: options.focusOwner,
       lastSize: options.initialSize,
+      awaitingReplayResync: this.#state === "attached" && !this.#replayComplete,
       onOutput: options.onOutput,
       onState: options.onState,
       onConnectAttempt: options.onConnectAttempt,
@@ -198,6 +202,7 @@ class TerminalSessionOwner {
     }
     this.#replayTo(subscriber);
     this.#startTransport();
+    this.#requestReplayResyncIfNeeded();
 
     let released = false;
     return {
@@ -356,6 +361,7 @@ class TerminalSessionOwner {
     this.#clearReplay(false);
     this.#pendingForegroundReasons.clear();
     this.#reconnectScheduledForSocket = null;
+    this.#replayResyncRequested = false;
     this.#remove();
   }
 
@@ -405,22 +411,26 @@ class TerminalSessionOwner {
       this.#socket !== socket ||
       this.#socketGeneration !== socketId ||
       this.#subscribers.size === 0 ||
-      !this.#replayComplete ||
       this.#replayEpoch !== this.#attachEpoch
     ) {
       return;
     }
     const frame = data.slice();
-    if (
-      this.#replay.length >= TERMINAL_SESSION_REPLAY_MAX_FRAMES ||
-      this.#replayBytes + frame.byteLength > TERMINAL_SESSION_REPLAY_MAX_BYTES
-    ) {
-      this.#invalidateReplayAndReconnect(socketId, socket);
-      return;
+    if (this.#replayComplete) {
+      if (
+        this.#replay.length >= TERMINAL_SESSION_REPLAY_MAX_FRAMES ||
+        this.#replayBytes + frame.byteLength > TERMINAL_SESSION_REPLAY_MAX_BYTES
+      ) {
+        this.#invalidateReplayForReconnect();
+      } else {
+        this.#replay.push(frame);
+        this.#replayBytes += frame.byteLength;
+      }
     }
-    this.#replay.push(frame);
-    this.#replayBytes += frame.byteLength;
     for (const subscriber of [...this.#subscribers.values()]) {
+      if (subscriber.awaitingReplayResync) {
+        continue;
+      }
       try {
         subscriber.onOutput(frame.slice());
       } catch (error) {
@@ -486,6 +496,10 @@ class TerminalSessionOwner {
     this.#attachEpoch += 1;
     this.#replayEpoch = this.#attachEpoch;
     this.#clearReplay(false);
+    this.#replayResyncRequested = false;
+    for (const subscriber of this.#subscribers.values()) {
+      subscriber.awaitingReplayResync = false;
+    }
     return this.#attachEpoch;
   }
 
@@ -493,15 +507,22 @@ class TerminalSessionOwner {
     this.#clearReplay(false);
   }
 
-  #invalidateReplayAndReconnect(socketId: number, socket: WebSocket) {
+  #requestReplayResyncIfNeeded() {
     if (
+      this.#replayComplete ||
+      this.#replayResyncRequested ||
       this.#disposed ||
-      this.#socket !== socket ||
-      this.#socketGeneration !== socketId
+      this.#state !== "attached"
     ) {
       return;
     }
-    this.#debug("replay-overflow", {
+    const socket = this.#socket;
+    const socketId = this.#socketGeneration;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.#replayResyncRequested = true;
+    this.#debug("replay-resync", {
       socketGeneration: socketId,
       replayBytes: this.#replayBytes,
       replayFrames: this.#replay.length,
@@ -510,7 +531,7 @@ class TerminalSessionOwner {
     this.#clearConnectTimer();
     this.#socket = null;
     socket.close();
-    this.#scheduleSocketReconnect("replay-overflow", socketId);
+    this.#scheduleSocketReconnect("replay-resync", socketId);
   }
 
   #connectSocket(reason: ReconnectReason, connectTimeoutMs: number) {

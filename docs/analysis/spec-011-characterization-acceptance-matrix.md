@@ -36,7 +36,7 @@ shared-owner phase; the public package/repository seam remains future work.
 | Future gate | Required scenario | Passing evidence | Status in this PR |
 | --- | --- | --- | --- |
 | Shared ownership | One host-owned terminal transport is shared by Spaces and Office. | Both views acquire handles from one owner; no surface constructs a raw terminal socket. | Implemented — `terminalSessionOwner.test.ts`, `TerminalView.characterization.test.tsx`. |
-| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. If the frame or byte bound would evict the stateful ANSI prefix, the owner clears replay and performs one fresh attach-epoch resync instead of exposing a raw suffix. | Implemented — ordered replay, frame-count overflow, byte-count overflow, reconnect-epoch clearing, and stale-socket isolation are tested in `terminalSessionOwner.test.ts`. |
+| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. If the frame or byte bound would evict the stateful ANSI prefix, the owner invalidates replay while preserving live fanout; the next late subscriber is gated and requests one fresh attach-epoch resync instead of receiving a raw suffix. | Implemented — ordered replay, lossless frame/byte overflow fanout, oversized repaint, one late-subscriber resync, reconnect-epoch clearing, and stale-socket isolation are tested in `terminalSessionOwner.test.ts`. |
 | Focus-owned resize | More than one view can observe one PTY. | Only the focus owner may resize; a non-owner refit cannot change the shared PTY dimensions. | Implemented — exclusive resize and deterministic transfer are tested in `terminalSessionOwner.test.ts`. |
 | Partial close | One view closes while another remains attached. | The remaining view stays attached, keeps receiving output, and retains the correct PTY size. | Implemented — Office release leaves the Spaces renderer and owner connected in `TerminalView.characterization.test.tsx`. |
 | Final release | The last view releases its handle. | The browser transport closes; no pane-close command is sent to Herdr. | Implemented — final release close count and no pane-close command are tested in `TerminalView.characterization.test.tsx`. |
@@ -53,7 +53,8 @@ shared-owner phase; the public package/repository seam remains future work.
 - The later public host/context seam must expose this owner through a narrow
   typed handle without reintroducing raw sockets or a second bridge manager.
   The current owner preserves the attach query, renderer output ordering,
-  admission gates, focus protection, close policy, and cleanup behavior.
+  admission gates, focus protection, close policy, cleanup behavior, and
+  lossless live fanout when bounded late-subscriber replay becomes incomplete.
 - The candidate preview is running at `http://127.0.0.1:5190/` with its
   protocol-20 bridge at `http://127.0.0.1:8790/`; the existing installations on
   8787 and 8788 remain untouched. Manual preview validation is limited to the
