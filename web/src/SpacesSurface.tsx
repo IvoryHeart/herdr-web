@@ -10,7 +10,9 @@ export default function SpacesSurface() {
   const { connectionStates } = useFederatedRuntime();
   const [selectedPaneKey, setSelectedPaneKey] = useState<string | null>(null);
   const runtimes = bridge.enabledRuntimes;
-  const selectedRuntime = runtimes[0] ?? null;
+  const selectedRuntime = runtimes.find((runtime) =>
+    selectedPaneKey?.startsWith(`${runtime.id}:`),
+  ) ?? runtimes[0] ?? null;
   const selectedState = selectedRuntime ? connectionStates[selectedRuntime.id] : null;
   const snapshot = selectedState?.snapshot ?? null;
   const selectedPane = useMemo(

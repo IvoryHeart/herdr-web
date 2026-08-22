@@ -8,9 +8,10 @@
 
 - Added the versioned Foundation-to-World surface seam from approved Spec 011:
   `@herdr-world/foundation/surfaces`, typed Office/settings registrations,
-  generation-safe lifecycle cleanup, qualified command/terminal validation, a
-  Foundation-only conformance assembly, and exact packed-artifact boundary
-  checks. Repository extraction remains a separate Spec 016 operation.
+  generation-safe lifecycle cleanup, qualified host-routed Office commands and
+  navigation, host-owned conversation terminal leases, a multi-runtime
+  Foundation conformance assembly, and exact packed-artifact boundary checks.
+  Repository extraction remains a separate Spec 016 operation.
   [PR #19](https://github.com/IvoryHeart/herdr-web/pull/19)
 
 - Added the Herdr World downstream identity, Apache-2.0 licensing boundary, contributor and

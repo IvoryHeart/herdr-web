@@ -113,12 +113,19 @@ export type QualifiedSurfaceTarget = {
   nativeTargetId: string;
 };
 
+export type SurfaceWorkspace = {
+  readonly target: QualifiedSurfaceTarget;
+  readonly label: string;
+  readonly terminalTarget?: QualifiedSurfaceTarget;
+};
+
 export type SurfaceBridgeRuntime = {
   bridgeId: string;
   label: string;
   generationKey: string;
   available: boolean;
   features: readonly string[];
+  readonly workspaces?: readonly SurfaceWorkspace[];
 };
 
 export type SurfaceHostEvent =
