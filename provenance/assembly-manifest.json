@@ -11,11 +11,12 @@
     "foundation_package": "@herdr-world/foundation",
     "foundation_version": "0.1.0",
     "foundation_artifact": "dist-packages/herdr-world-foundation-0.1.0.tgz",
-    "foundation_artifact_sha512": "sha512-7Rh4Cc12kHYG46ePyxTOZV/o8jy3SyFB8Mh6mH2m1QX8qMEd646GF4xgXvCQXCOUUEBPJOwUvz6hRdU1jVN+0Q==",
-    "foundation_content_integrity": "sha512-tLu2EM0AeOqw/iyDdC5b6m1nyeaXUwsMkQFPHcBUbl6cuV4Umgxmq1qi+ewEXOLj4o3zqb2DmyogF+EgHyVNxw==",
+    "foundation_artifact_sha512": "sha512-ubwlOCe0ifa3tyLn29oUWxuLG8+ub+QjHmQWDqJrJWUBFOCK3wma+t6uGBBxDl4qsJpoPxDNt2hsjF3hELoJmA==",
+    "foundation_content_integrity": "sha512-qGKl2iStVJuBLE5vcqPCJgn0u8CYe5udm6QCUUissyFyqycrEh2SlE0qctg2mEVIxtxZ3c1cK4Y3DKapQVFoAg==",
     "bridge_api_version": 1,
     "surface_api_version": 1,
-    "web_compat": 1
+    "web_compat": 1,
+    "foundation_supported_herdr": ">=0.8.2"
   },
   "artifacts": {
     "source-archive": {

@@ -1,7 +1,7 @@
 {
   "package": "@herdr-world/foundation",
   "packageVersion": "0.1.0",
-  "integrity": "sha512-tLu2EM0AeOqw/iyDdC5b6m1nyeaXUwsMkQFPHcBUbl6cuV4Umgxmq1qi+ewEXOLj4o3zqb2DmyogF+EgHyVNxw==",
+  "integrity": "sha512-qGKl2iStVJuBLE5vcqPCJgn0u8CYe5udm6QCUUissyFyqycrEh2SlE0qctg2mEVIxtxZ3c1cK4Y3DKapQVFoAg==",
   "surfaceApi": 1,
   "bridgeApi": 1,
   "web_compat": 1,

@@ -36,6 +36,9 @@ const REQUIRED_POLICY_FILES = [
   "provenance/office-owner-attestation.md",
   "vendor/herdr-compat/VENDOR-MANIFEST.toml",
   "web/public/world/LICENSE-PixiJS.txt",
+  "packages/foundation/LICENSE",
+  "packages/foundation/NOTICE",
+  "packages/foundation/foundation-manifest.json",
 ];
 
 const REQUIRED_LICENSES = new Set([
@@ -52,6 +55,7 @@ const EXPECTED_LICENSE_HASHES = new Map([
   ["LICENSES/Apache-2.0-Claw-Empire.txt", "480ecbe5c33eee6b3bf1e98ca6bda6d03376ee4839de38bbbefa16b87d047c17"],
   ["LICENSES/OFL-1.1.txt", "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f"],
   ["web/public/world/LICENSE-PixiJS.txt", "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473"],
+  ["packages/foundation/LICENSE", "baecc58fe53feec8997db4a804d5801ecc2ba554d94914cf466d71699b28adb0"],
 ]);
 
 const SECRET_PATTERN =
@@ -134,6 +138,10 @@ function sha256(filename) {
   return createHash("sha256").update(readFileSync(filename)).digest("hex");
 }
 
+function sha512Base64(filename) {
+  return `sha512-${createHash("sha512").update(readFileSync(filename)).digest("base64")}`;
+}
+
 function assertSha(value, label) {
   if (!/^[0-9a-f]{64}$/.test(value ?? "")) fail(`${label} must be a lowercase SHA-256 hex digest`);
 }
@@ -147,6 +155,53 @@ function assertFile(root, relativePath) {
 function assertSafeArtifactPath(relativePath, label) {
   if (!relativePath || relativePath.startsWith("/") || relativePath.includes("\\") || relativePath.split("/").includes("..")) {
     fail(`${label} contains an unsafe path: ${relativePath}`);
+  }
+}
+
+function validateFoundationPackage(root, assembly) {
+  const packageJson = readJson(root, "packages/foundation/package.json");
+  const manifest = readJson(root, "packages/foundation/foundation-manifest.json");
+  const compatibility = assembly.compatibility ?? {};
+  if (packageJson.name !== "@herdr-world/foundation" || manifest.package !== packageJson.name) {
+    fail("Foundation package name is inconsistent across package metadata");
+  }
+  if (packageJson.version !== manifest.packageVersion || compatibility.foundation_version !== packageJson.version) {
+    fail("Foundation package version is inconsistent with the assembly record");
+  }
+  for (const [field, expected] of [
+    ["surfaceApi", compatibility.surface_api_version],
+    ["bridgeApi", compatibility.bridge_api_version],
+    ["web_compat", compatibility.web_compat],
+    ["terminalProtocol", compatibility.terminal_protocol],
+  ]) {
+    if (manifest[field] !== expected) fail(`Foundation manifest ${field} is inconsistent with provenance`);
+  }
+  if (manifest.supportedHerdr !== compatibility.foundation_supported_herdr) {
+    fail("Foundation supported Herdr version is inconsistent with provenance");
+  }
+  for (const peer of ["react", "react-dom"]) {
+    if (!packageJson.peerDependencies?.[peer]) fail(`Foundation must declare ${peer} as a peer dependency`);
+  }
+
+  const metadataPath = join(root, "dist-packages", "foundation-artifact.json");
+  if (!existsSync(metadataPath)) return;
+  const artifact = readJson(root, "dist-packages/foundation-artifact.json");
+  const artifactPath = pathFor(root, artifact.filename);
+  assertFile(root, artifact.filename);
+  if (artifact.sha512 !== sha512Base64(artifactPath)) fail("Foundation artifact hash does not match its metadata");
+  const expected = {
+    package: packageJson.name,
+    packageVersion: packageJson.version,
+    sha512: compatibility.foundation_artifact_sha512,
+    integrity: compatibility.foundation_content_integrity,
+    surfaceApi: compatibility.surface_api_version,
+    bridgeApi: compatibility.bridge_api_version,
+    web_compat: compatibility.web_compat,
+    supportedHerdr: compatibility.foundation_supported_herdr,
+    terminalProtocol: compatibility.terminal_protocol,
+  };
+  for (const [field, value] of Object.entries(expected)) {
+    if (artifact[field] !== value) fail(`Foundation artifact metadata mismatch: ${field}`);
   }
 }
 
@@ -259,7 +314,7 @@ function validateComponents(root) {
     }
   }
   if (recordedLicenseHashes.size !== EXPECTED_LICENSE_HASHES.size) fail("license hash inventory contains unexpected material");
-  for (const id of ["herdr-web-derived-generic", "herdr-runtime", "herdr-compatibility-slice", "claw-empire-sprites", "pixijs", "geist-font", "pixel-agents-reference", "historical-office-owner-attested"]) {
+  for (const id of ["herdr-web-derived-generic", "herdr-runtime", "herdr-compatibility-slice", "claw-empire-sprites", "pixijs", "geist-font", "pixel-agents-reference", "historical-office-owner-attested", "herdr-world-foundation-package"]) {
     if (!byId.has(id)) fail(`component inventory is missing ${id}`);
   }
   for (const component of components.components) {
@@ -310,6 +365,7 @@ function validateComponents(root) {
   if (assembly.schema_version !== 1 || !assembly.artifacts?.["source-archive"] || !assembly.artifacts?.["desktop-tarball"]) {
     fail("assembly manifest is incomplete");
   }
+  validateFoundationPackage(root, assembly);
   validateAssemblyContract(assembly, "source", trackedFiles(root));
   if (compatibility.herdr?.terminal_protocol !== 20 || compatibility.herdr?.commit !== "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c") {
     fail("protocol-20 Herdr compatibility record is missing or changed");

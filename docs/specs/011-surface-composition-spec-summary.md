@@ -5,7 +5,7 @@
 - **Surface API:** `1`
 - **Foundation package:** `@herdr-world/foundation@0.1.0`
 - **Foundation artifact:** produced by `npm run foundation:pack`
-- **Artifact SHA-512:** `sha512-7Rh4Cc12kHYG46ePyxTOZV/o8jy3SyFB8Mh6mH2m1QX8qMEd646GF4xgXvCQXCOUUEBPJOwUvz6hRdU1jVN+0Q==`
+- **Artifact SHA-512:** `sha512-ubwlOCe0ifa3tyLn29oUWxuLG8+ub+QjHmQWDqJrJWUBFOCK3wma+t6uGBBxDl4qsJpoPxDNt2hsjF3hELoJmA==`
 - **Physical extraction:** explicitly deferred to Spec 016
 
 ## Delivered behavior
@@ -42,6 +42,10 @@
 - `npm run test:foundation-boundary`: exact packed-consumer and emitted-output
   audit.
 - `npm run foundation:pack`: package metadata and SHA-512 artifact record.
+- `npm run check`: vendor, packed Foundation compliance, lint, Vitest, Rust tests,
+  release-compliance tests, TypeScript/Vite build, and bridge build all passed.
+- `npm run test:e2e`: 45 passed, 2 documented skips; the Foundation conformance
+  browser test and existing World characterization suite passed.
 - Existing browser suite remains the characterization source for current
   protocol-20 Spaces/Office behavior and the two documented skips.
 

@@ -17,7 +17,8 @@
     {"path": "LICENSES/Apache-2.0-Herdr.txt", "sha256": "54ef03798b1a7b29808fbfe12bfad11ad9f0ecd96d111bdd21b8ed7629b59758", "component": "herdr-runtime"},
     {"path": "LICENSES/Apache-2.0-Claw-Empire.txt", "sha256": "480ecbe5c33eee6b3bf1e98ca6bda6d03376ee4839de38bbbefa16b87d047c17", "component": "claw-empire-sprites"},
     {"path": "LICENSES/OFL-1.1.txt", "sha256": "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f", "component": "geist-font"},
-    {"path": "web/public/world/LICENSE-PixiJS.txt", "sha256": "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473", "component": "pixijs"}
+    {"path": "web/public/world/LICENSE-PixiJS.txt", "sha256": "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473", "component": "pixijs"},
+    {"path": "packages/foundation/LICENSE", "sha256": "baecc58fe53feec8997db4a804d5801ecc2ba554d94914cf466d71699b28adb0", "component": "herdr-world-foundation-package"}
   ],
   "upstream_relationships": [
     {
@@ -80,6 +81,18 @@
         "playwright.config.ts"
       ],
       "local_modifications": "The current checkout contains downstream changes interleaved with this inherited tree. The future Foundation extraction must replay generic concerns by commit; this P1 record does not claim that mixed files are solely World-authored."
+    },
+    {
+      "id": "herdr-world-foundation-package",
+      "class": "original",
+      "repository": "https://github.com/IvoryHeart/herdr-web",
+      "immutable_revision": "spec-011-foundation-v0.1.0",
+      "version": "0.1.0",
+      "license": "MIT",
+      "copyright_notice": "Copyright (c) 2026 Herdr World Foundation contributors",
+      "notice": "packages/foundation/NOTICE and repository component manifests",
+      "destination_globs": ["packages/foundation/**"],
+      "local_modifications": "Versioned public Foundation surface contract, lifecycle, host validation, terminal fanout, and package metadata introduced by approved Spec 011."
     },
     {
       "id": "herdr-compatibility-slice",
@@ -190,7 +203,8 @@
     {"pattern": "docs/world-assets.md", "component_id": "herdr-world-original", "classification": "provenance-documentation"},
     {"pattern": "bridge/**", "component_id": "herdr-web-derived-generic", "classification": "inherited-or-adapted-mixed-tree"},
     {"pattern": "web/src/**", "component_id": "herdr-web-derived-generic", "classification": "inherited-or-adapted-mixed-tree"},
-    {"pattern": "android/**", "component_id": "herdr-web-derived-generic", "classification": "inherited-or-adapted-mixed-tree"}
+    {"pattern": "android/**", "component_id": "herdr-web-derived-generic", "classification": "inherited-or-adapted-mixed-tree"},
+    {"pattern": "packages/foundation/**", "component_id": "herdr-world-foundation-package", "classification": "versioned-foundation-package"}
   ],
   "release_required_material": [
     "LICENSE",
@@ -201,6 +215,9 @@
     "LICENSES/Apache-2.0-Claw-Empire.txt",
     "LICENSES/OFL-1.1.txt",
     "web/public/world/LICENSE-PixiJS.txt",
+    "packages/foundation/LICENSE",
+    "packages/foundation/NOTICE",
+    "packages/foundation/foundation-manifest.json",
     "vendor/herdr-compat/VENDOR-MANIFEST.toml",
     "provenance/components.json",
     "provenance/office-owner-attestation.md",
