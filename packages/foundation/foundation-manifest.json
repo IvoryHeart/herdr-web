@@ -1,0 +1,12 @@
+{
+  "package": "@herdr-world/foundation",
+  "packageVersion": "0.1.0",
+  "integrity": "sha512-tLu2EM0AeOqw/iyDdC5b6m1nyeaXUwsMkQFPHcBUbl6cuV4Umgxmq1qi+ewEXOLj4o3zqb2DmyogF+EgHyVNxw==",
+  "surfaceApi": 1,
+  "bridgeApi": 1,
+  "web_compat": 1,
+  "supportedHerdr": ">=0.8.2",
+  "terminalProtocol": 20,
+  "artifact": "generated-by-npm-pack",
+  "source": "herdr-world-foundation"
+}

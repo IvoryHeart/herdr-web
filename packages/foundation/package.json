@@ -1,0 +1,34 @@
+{
+  "name": "@herdr-world/foundation",
+  "version": "0.1.0",
+  "description": "Herdr World Foundation browser host and versioned surface contract",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "foundation-manifest.json",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./surfaces": {
+      "types": "./dist/surfaces.d.ts",
+      "import": "./dist/surfaces.js"
+    },
+    "./foundation-manifest.json": "./foundation-manifest.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  }
+}
