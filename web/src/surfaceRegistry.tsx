@@ -9,6 +9,7 @@ import type {
   OpaqueSurfaceRegistration,
   SurfaceDefinition as FoundationSurfaceDefinition,
 } from "@herdr-world/foundation/surfaces";
+import SpacesSurface from "./SpacesSurface";
 
 export type SurfaceHostScope = "single-host" | "multi-host";
 export type SurfaceSlot = "sidebar" | "stage";
@@ -154,6 +155,6 @@ export const coreSurfaceRegistry = new SurfaceRegistry([
     hostScope: "multi-host",
     requiredCapabilities: ["snapshot", "terminal_attach"],
     requiredBridgeFeatures: ["snapshot", "terminal_attach"],
-    load: () => import("./SpacesSurface"),
+    load: async () => ({ default: SpacesSurface }),
   },
 ]);

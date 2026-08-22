@@ -19,6 +19,10 @@
       "types": "./dist/surfaces.d.ts",
       "import": "./dist/surfaces.js"
     },
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "import": "./dist/conformance.js"
+    },
     "./foundation-manifest.json": "./foundation-manifest.json"
   },
   "main": "./dist/index.js",
