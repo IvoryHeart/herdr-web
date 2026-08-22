@@ -15,4 +15,17 @@ export default defineConfig({
       },
     },
   },
+  resolve: {
+    // The Foundation package is linked from the integration checkout during
+    // development; keep its React peer on the web app's singleton instance.
+    dedupe: ["react", "react-dom"],
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        foundationConformance: "foundation-conformance.html",
+      },
+    },
+  },
 });

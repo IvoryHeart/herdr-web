@@ -3,6 +3,7 @@ import {
   defineProductSettings,
   defineSurface,
 } from "@herdr-world/foundation/surfaces";
+import type { SurfaceHostV1 } from "@herdr-world/foundation/surfaces";
 import { WorldSettingsDialog } from "./WorldSettingsDialog";
 import WorldSurface, { FALLBACK_CONTEXT } from "./WorldSurface";
 import type { WorldSurfaceContext } from "./WorldSurface";
@@ -17,7 +18,26 @@ export const officeDefinition = {
   requiredBridgeFeatures: ["snapshot"] as const,
 };
 
-export const officeRegistration = defineSurface<WorldSurfaceContext>({
+/**
+ * The registration owns this binding. App updates the current World-owned
+ * projection/callback view, while Foundation owns the binding's generation,
+ * host, load, and disposal lifecycle.
+ */
+export type OfficeSurfaceContext = {
+  readonly host: SurfaceHostV1;
+  current: WorldSurfaceContext;
+};
+
+export function isOfficeSurfaceContext(value: unknown): value is OfficeSurfaceContext {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "host" in value &&
+      "current" in value,
+  );
+}
+
+export const officeRegistration = defineSurface<OfficeSurfaceContext>({
   definition: {
     id: officeDefinition.id,
     label: officeDefinition.label,
@@ -25,27 +45,45 @@ export const officeRegistration = defineSurface<WorldSurfaceContext>({
     semanticIcon: officeDefinition.semanticIcon,
     requiredBridgeFeatures: officeDefinition.requiredBridgeFeatures,
   },
-  createContext: () => FALLBACK_CONTEXT,
+  createContext: (host) => ({ host, current: FALLBACK_CONTEXT }),
   load: async () => ({
-    default: ({ context }: { context: WorldSurfaceContext }) =>
-      createElement(WorldSurface, { context }),
+    default: ({ context }: { context: OfficeSurfaceContext }) =>
+      createElement(WorldSurface, { context: context.current }),
   }),
-  dispose: () => undefined,
+  dispose: (context) => {
+    context.current = FALLBACK_CONTEXT;
+  },
 });
 
 export type WorldSettingsContext = {
   onSaved?: () => void;
 };
 
-export const officeSettingsContribution = defineProductSettings<WorldSettingsContext>({
+export type OfficeSettingsContext = {
+  readonly host: SurfaceHostV1;
+  current: WorldSettingsContext;
+};
+
+export function isOfficeSettingsContext(value: unknown): value is OfficeSettingsContext {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "host" in value &&
+      "current" in value,
+  );
+}
+
+export const officeSettingsContribution = defineProductSettings<OfficeSettingsContext>({
   id: "world-settings",
   label: "Office settings",
-  createContext: () => ({}),
+  createContext: (host) => ({ host, current: {} }),
   load: async () => ({
-    default: ({ context, onClose }: { context: WorldSettingsContext; onClose: () => void }) =>
-      createElement(WorldSettingsDialog, { onClose, onSaved: context.onSaved }),
+    default: ({ context, onClose }: { context: OfficeSettingsContext; onClose: () => void }) =>
+      createElement(WorldSettingsDialog, { onClose, onSaved: context.current.onSaved }),
   }),
-  dispose: () => undefined,
+  dispose: (context) => {
+    context.current = {};
+  },
 });
 
 /** World-owned contributions; Foundation has no import path back to this module. */

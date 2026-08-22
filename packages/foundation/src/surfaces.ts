@@ -153,6 +153,7 @@ export type TerminalHandleFactory = (
  */
 export class SharedTerminalHandlePool {
   readonly #entries = new Map<string, { owner: TerminalHandle; references: number }>();
+  readonly #pending = new Map<string, Promise<{ owner: TerminalHandle; references: number }>>();
 
   async acquire(target: QualifiedSurfaceTarget, factory: TerminalHandleFactory) {
     const validated = validateQualifiedSurfaceTarget(target);
@@ -162,13 +163,43 @@ export class SharedTerminalHandlePool {
     const key = terminalTargetKey(validated);
     let entry = this.#entries.get(key);
     if (!entry) {
-      entry = { owner: await factory(validated), references: 0 };
-      this.#entries.set(key, entry);
+      let pending = this.#pending.get(key);
+      if (!pending) {
+        pending = Promise.resolve()
+          .then(() => factory(validated))
+          .then((owner) => {
+            const acquired = { owner, references: 0 };
+            this.#entries.set(key, acquired);
+            return acquired;
+        });
+        this.#pending.set(key, pending);
+        void pending.then(
+          () => {
+            if (this.#pending.get(key) === pending) {
+              this.#pending.delete(key);
+            }
+          },
+          () => {
+            if (this.#pending.get(key) === pending) {
+              this.#pending.delete(key);
+            }
+          },
+        );
+      }
+      entry = await pending;
     }
     entry.references += 1;
     let released = false;
-    return {
-      ...entry.owner,
+    const owner = entry.owner;
+    return Object.freeze({
+      key: owner.key,
+      target: owner.target,
+      attach: (...args: Parameters<TerminalHandle["attach"]>) => owner.attach(...args),
+      input: (...args: Parameters<TerminalHandle["input"]>) => owner.input(...args),
+      resize: (...args: Parameters<TerminalHandle["resize"]>) => owner.resize(...args),
+      scroll: (...args: Parameters<TerminalHandle["scroll"]>) => owner.scroll(...args),
+      focus: (...args: Parameters<TerminalHandle["focus"]>) => owner.focus(...args),
+      detach: (...args: Parameters<TerminalHandle["detach"]>) => owner.detach(...args),
       release: async () => {
         if (released) {
           return;
@@ -184,7 +215,7 @@ export class SharedTerminalHandlePool {
           await current.owner.release();
         }
       },
-    } satisfies TerminalHandle;
+    }) satisfies TerminalHandle;
   }
 
   get size() {

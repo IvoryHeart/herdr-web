@@ -26,6 +26,7 @@ import {
 import {
   Fragment,
   Suspense,
+  createElement,
   lazy,
   useCallback,
   useEffect,
@@ -147,7 +148,20 @@ import { useCoreNavigation } from "./CoreNavigation";
 import { useFederatedRuntime } from "./federatedRuntime";
 import { useHostRegistry } from "./hostRegistry";
 import { officeDebug } from "./officeDebug";
-import { loadOpaqueProductSettings } from "@herdr-world/foundation/surfaces";
+import {
+  SharedTerminalHandlePool,
+  createSettingsLifecycle,
+  createSurfaceLifecycle,
+} from "@herdr-world/foundation/surfaces";
+import type {
+  QualifiedSurfaceTarget,
+  SurfaceBridgeRuntime,
+  SurfaceCommandRequest,
+  SurfaceHostEvent,
+  SurfaceHostV1,
+  SurfaceLifecycleSnapshot,
+  TerminalHandle,
+} from "@herdr-world/foundation/surfaces";
 import {
   fetchRuntimeSnapshot,
   hostConnectionState,
@@ -170,7 +184,14 @@ import {
 } from "./terminalAccessibleText";
 import { terminalSessionDescriptor } from "./terminalSessions";
 import type { TerminalSessionDescriptor } from "./terminalSessions";
-import { productAssembly, productSurfaceRegistry } from "./productAssembly";
+import {
+  officeRegistration,
+  officeSettingsContribution,
+  isOfficeSettingsContext,
+  isOfficeSurfaceContext,
+} from "./world/assembly";
+import { productSurfaceRegistry } from "./productAssembly";
+import { createSurfaceTerminalHandle } from "./surfaceTerminal";
 import { SurfaceSlotBoundary } from "./SurfaceSlotBoundary";
 import type { WorldSurfaceContext } from "./world/WorldSurface";
 import {
@@ -253,16 +274,6 @@ import {
 import type { WorkspaceReorderDirection } from "./workspaceReorder";
 
 const NoteMarkdownPreview = lazy(() => import("./NoteMarkdownPreview"));
-const WorldSettings = lazy(async () => {
-  const loaded = await loadOpaqueProductSettings(productAssembly.productSettings!);
-  return {
-    default: loaded.default as ComponentType<{
-      context: unknown;
-      onClose: () => void;
-    }>,
-  };
-});
-
 type LoadState = "loading" | "ready" | "error";
 type Scope = "space" | "all";
 type HostScope = "selected" | "all";
@@ -452,6 +463,13 @@ type SpaceDragState = {
 };
 type ScopedLaunchTarget = LaunchTarget & {
   bridgeId: BridgeId;
+};
+type OfficeSurfaceHostState = {
+  runtimes: () => readonly SurfaceBridgeRuntime[];
+  retry: (bridgeId?: string) => void;
+  dispatch: (request: SurfaceCommandRequest) => Promise<Readonly<Record<string, unknown>>>;
+  navigate: (target: QualifiedSurfaceTarget) => void;
+  acquireTerminal: (target: QualifiedSurfaceTarget) => Promise<TerminalHandle>;
 };
 export type BridgeConnectionView = {
   runtime: BridgeRuntime;
@@ -1310,6 +1328,12 @@ export function App() {
   const backendSettingsReturnFocusRef = useRef<HTMLElement | null>(null);
   const worldSettingsAppliedRef = useRef(new Map<string, string>());
   const worldSettingsSyncRef = useRef(new Map<string, Promise<void>>());
+  const officeSurfaceLifecycleRef = useRef<ReturnType<typeof createSurfaceLifecycle> | null>(null);
+  const officeSettingsLifecycleRef = useRef<ReturnType<typeof createSettingsLifecycle> | null>(null);
+  const [officeSurfaceSnapshot, setOfficeSurfaceSnapshot] =
+    useState<SurfaceLifecycleSnapshot | null>(null);
+  const [officeSettingsSnapshot, setOfficeSettingsSnapshot] =
+    useState<SurfaceLifecycleSnapshot | null>(null);
   const openBackendSettings = useCallback(() => {
     backendSettingsReturnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1331,6 +1355,7 @@ export function App() {
   }, []);
   const closeWorldSettings = useCallback(() => {
     setWorldSettingsOpen(false);
+    void officeSettingsLifecycleRef.current?.close().catch(() => {});
   }, []);
   const markWorldSettingsSaved = useCallback(() => {
     setWorldObservabilityRevision((revision) => revision + 1);
@@ -3450,6 +3475,260 @@ export function App() {
     requestTerminalFocus();
   };
 
+  const surfaceHostStateRef = useRef<OfficeSurfaceHostState | null>(null);
+  const surfaceHostListenersRef = useRef(new Set<(event: SurfaceHostEvent) => void>());
+  const surfaceTerminalPool = useMemo(() => new SharedTerminalHandlePool(), []);
+  const surfaceHost = useMemo<Omit<SurfaceHostV1, "signal">>(() => ({
+    runtimes: () => surfaceHostStateRef.current?.runtimes() ?? [],
+    subscribe: (listener) => {
+      surfaceHostListenersRef.current.add(listener);
+      return () => surfaceHostListenersRef.current.delete(listener);
+    },
+    retry: (bridgeId) => surfaceHostStateRef.current?.retry(bridgeId),
+    dispatch: (request) => {
+      const state = surfaceHostStateRef.current;
+      return state
+        ? state.dispatch(request)
+        : Promise.reject(new Error("Surface host is not ready"));
+    },
+    navigate: (target) => surfaceHostStateRef.current?.navigate(target),
+    acquireTerminal: (target) => {
+      const state = surfaceHostStateRef.current;
+      return state
+        ? state.acquireTerminal(target)
+        : Promise.reject(new Error("Surface host is not ready"));
+    },
+  }), []);
+
+  const dispatchSurfaceCommand = async (request: SurfaceCommandRequest) => {
+    const runtime = bridge.getRuntime(request.target.bridgeId);
+    if (!runtime || !runtimeIsAdmitted(runtime.id)) {
+      throw new Error("Bridge is not ready");
+    }
+    const routed = routeRuntimeTarget(
+      runtime.id,
+      request.target.kind,
+      request.target.nativeTargetId,
+      request.command,
+    );
+    const commands = createCommands(routed.httpUrl);
+    const params = request.params ?? {};
+    const stringParam = (name: string) =>
+      typeof params[name] === "string" ? params[name] as string : undefined;
+    let result: Readonly<Record<string, unknown>>;
+    switch (request.command) {
+      case "workspace.create":
+        result = await commands.createWorkspace(stringParam("label"));
+        break;
+      case "workspace.rename":
+        result = await commands.renameWorkspace(request.target.nativeTargetId, stringParam("label") ?? null);
+        break;
+      case "workspace.close":
+        result = await commands.closeWorkspace(request.target.nativeTargetId);
+        break;
+      case "workspace.focus":
+        result = await commands.focusWorkspace(request.target.nativeTargetId);
+        break;
+      case "workspace.move_block": {
+        const workspaceIds = stringParam("workspace_ids")?.split(",").filter(Boolean) ?? [
+          request.target.nativeTargetId,
+        ];
+        result = await commands.moveWorkspaceBlock(
+          workspaceIds,
+          stringParam("before_workspace_id") ?? null,
+        );
+        break;
+      }
+      case "tab.create":
+        result = await commands.createTab(request.target.nativeTargetId, stringParam("label"));
+        break;
+      case "tab.rename":
+        result = await commands.renameTab(request.target.nativeTargetId, stringParam("label") ?? null);
+        break;
+      case "tab.close":
+        result = await commands.closeTab(request.target.nativeTargetId);
+        break;
+      case "tab.focus":
+        result = await commands.focusTab(request.target.nativeTargetId);
+        break;
+      case "pane.rename":
+        result = await commands.renamePane(request.target.nativeTargetId, stringParam("label") ?? "");
+        break;
+      case "pane.close":
+        result = await commands.closePane(request.target.nativeTargetId);
+        break;
+      case "pane.split":
+        result = await commands.splitPane(
+          request.target.nativeTargetId,
+          stringParam("direction") === "down" ? "down" : "right",
+        );
+        break;
+      case "pane.focus_direction":
+        result = await commands.focusPaneDirection(
+          request.target.nativeTargetId,
+          (stringParam("direction") ?? "right") as PaneFocusDirection,
+        );
+        break;
+      case "pane.move":
+        if (stringParam("destination") === "new_workspace") {
+          result = await commands.movePaneToNewWorkspace(
+            request.target.nativeTargetId,
+            stringParam("label"),
+          );
+        } else {
+          result = await commands.movePaneToNewTab(
+            request.target.nativeTargetId,
+            stringParam("workspace_id") ?? "",
+            stringParam("label"),
+          );
+        }
+        break;
+      default:
+        throw new Error(`Unsupported surface command: ${request.command}`);
+    }
+    void refreshBridgeSnapshot(runtime, true);
+    return result;
+  };
+
+  const navigateSurfaceTarget = (target: QualifiedSurfaceTarget) => {
+    const runtime = bridge.getRuntime(target.bridgeId);
+    if (!runtime) {
+      return;
+    }
+    const snapshot = snapshotForBridge(target.bridgeId);
+    if (target.kind === "workspace") {
+      selectSpace(target.bridgeId, target.nativeTargetId);
+    } else if (target.kind === "tab") {
+      selectTab(target.bridgeId, target.nativeTargetId);
+    } else if (target.kind === "pane" || target.kind === "terminal") {
+      const pane = snapshot?.panes.find((item) =>
+        target.kind === "pane"
+          ? item.pane_id === target.nativeTargetId
+          : item.terminal_id === target.nativeTargetId,
+      );
+      if (pane) {
+        focusPane(target.bridgeId, pane);
+      }
+    } else {
+      setSelectedBridgeId(target.bridgeId);
+      setWorldSelectedKey(target.nativeTargetId);
+    }
+    for (const listener of surfaceHostListenersRef.current) {
+      listener({ type: "selection-changed", target });
+    }
+  };
+
+  const acquireSurfaceTerminal = async (target: QualifiedSurfaceTarget) => {
+    const runtime = bridge.getRuntime(target.bridgeId);
+    if (
+      !runtime ||
+      !runtimeAdmissionReady(
+        runtime,
+        connectionStates[runtime.id],
+        ["snapshot", "terminal_attach"],
+      )
+    ) {
+      throw new Error("Terminal is unavailable on this bridge");
+    }
+    return surfaceTerminalPool.acquire(
+      target,
+      async (qualifiedTarget) => createSurfaceTerminalHandle(runtime, qualifiedTarget),
+    );
+  };
+
+  surfaceHostStateRef.current = {
+    runtimes: () => bridge.enabledRuntimes.map((runtime) => ({
+      bridgeId: runtime.id,
+      label: runtime.label,
+      generationKey: runtime.generationKey,
+      available: runtime.canConnect && runtime.capabilityState === "ready",
+      features: runtime.capabilities?.features ?? [],
+    })),
+    retry: (bridgeId) => {
+      if (bridgeId) {
+        bridge.retryBridgeProbe(bridgeId);
+      } else {
+        for (const runtime of bridge.enabledRuntimes) {
+          bridge.retryBridgeProbe(runtime.id);
+        }
+      }
+    },
+    dispatch: dispatchSurfaceCommand,
+    navigate: navigateSurfaceTarget,
+    acquireTerminal: acquireSurfaceTerminal,
+  };
+
+  useEffect(() => {
+    for (const runtime of bridge.enabledRuntimes) {
+      for (const listener of surfaceHostListenersRef.current) {
+        listener({ type: "runtime-changed", bridgeId: runtime.id });
+      }
+    }
+  }, [bridge.enabledRuntimes, connectionStates]);
+
+  const officeSurfaceLifecycle = useMemo(
+    () => createSurfaceLifecycle(officeRegistration, { host: surfaceHost }),
+    [surfaceHost],
+  );
+  const officeSettingsLifecycle = useMemo(
+    () => createSettingsLifecycle(officeSettingsContribution, { host: surfaceHost }),
+    [surfaceHost],
+  );
+  officeSurfaceLifecycleRef.current = officeSurfaceLifecycle;
+  officeSettingsLifecycleRef.current = officeSettingsLifecycle;
+
+  useEffect(() => {
+    let current = true;
+    const lifecycle = officeSurfaceLifecycle;
+    if (activeSurface.id !== "world") {
+      void lifecycle.close().catch(() => {});
+      setOfficeSurfaceSnapshot(lifecycle.snapshot);
+      return () => {
+        current = false;
+      };
+    }
+    setOfficeSurfaceSnapshot(lifecycle.snapshot);
+    void lifecycle.open().then((snapshot) => {
+      if (current) {
+        setOfficeSurfaceSnapshot(snapshot);
+      }
+    });
+    return () => {
+      current = false;
+      void lifecycle.close().then(() => {
+        if (current) {
+          setOfficeSurfaceSnapshot(lifecycle.snapshot);
+        }
+      }).catch(() => {});
+    };
+  }, [activeSurface.id, officeSurfaceLifecycle]);
+
+  useEffect(() => {
+    let current = true;
+    const lifecycle = officeSettingsLifecycle;
+    if (!worldSettingsOpen) {
+      void lifecycle.close().catch(() => {});
+      setOfficeSettingsSnapshot(lifecycle.snapshot);
+      return () => {
+        current = false;
+      };
+    }
+    setOfficeSettingsSnapshot(lifecycle.snapshot);
+    void lifecycle.open().then((snapshot) => {
+      if (current) {
+        setOfficeSettingsSnapshot(snapshot);
+      }
+    });
+    return () => {
+      current = false;
+      void lifecycle.close().then(() => {
+        if (current) {
+          setOfficeSettingsSnapshot(lifecycle.snapshot);
+        }
+      }).catch(() => {});
+    };
+  }, [officeSettingsLifecycle, worldSettingsOpen]);
+
   const openWorldTargetInSpaces = (request: OfficeHandoffRequest) => {
     cancelWorldCanvasSelection();
     const runtime = bridge.getRuntime(request.profileId);
@@ -5067,8 +5346,6 @@ export function App() {
       worldConversations,
     ],
   );
-  const WorldSurface =
-    activeSurface.id === "world" ? productSurfaceRegistry.component("world") : null;
   const canCreateWorldSeat = (roomKey: string) => {
     const room = worldProjection.rooms.find(({ key }) => key === roomKey);
     if (!room) {
@@ -5228,19 +5505,57 @@ export function App() {
     canCloseRoom: (roomKey) => canManageWorldRoom(roomKey, "workspace.close"),
     onCloseRoom: openWorldRoomClose,
   };
-  const worldStage = WorldSurface ? (
-    <SurfaceSlotBoundary label="Pixel Office" resetKey={activeSurface.id}>
-      <Suspense
-        fallback={
-          <div className="surface-loading surface-loading-stage" role="status">
-            Loading Pixel Office…
-          </div>
-        }
-      >
-        <WorldSurface slot="stage" context={worldSurfaceContext} />
+  // The lifecycle is the authoritative snapshot while the route is active.
+  // Reading it directly prevents a previous ready generation from briefly
+  // remounting before the route effect begins its replacement generation.
+  const renderedOfficeSurfaceSnapshot =
+    activeSurface.id === "world"
+      ? officeSurfaceLifecycle.snapshot
+      : officeSurfaceSnapshot ?? officeSurfaceLifecycle.snapshot;
+  const officeContext = renderedOfficeSurfaceSnapshot.context;
+  if (isOfficeSurfaceContext(officeContext)) {
+    officeContext.current = worldSurfaceContext;
+  }
+  const officeComponent = renderedOfficeSurfaceSnapshot.component;
+  const retryOfficeSurface = () => {
+    void officeSurfaceLifecycle.retry().then(setOfficeSurfaceSnapshot);
+  };
+  const worldStage = renderedOfficeSurfaceSnapshot.status === "error" ? (
+    <div className="surface-error" role="alert">
+      <h2>Pixel Office unavailable</h2>
+      <p>
+        {renderedOfficeSurfaceSnapshot.error instanceof Error
+          ? renderedOfficeSurfaceSnapshot.error.message
+          : "The Office surface failed to load."}
+      </p>
+      <button type="button" onClick={retryOfficeSurface}>Retry Office</button>
+    </div>
+  ) : officeComponent && officeContext ? (
+    <SurfaceSlotBoundary
+      label="Pixel Office"
+      resetKey={`${activeSurface.id}:${renderedOfficeSurfaceSnapshot.generation}`}
+    >
+      <Suspense fallback={<div className="surface-loading surface-loading-stage" role="status">Loading Pixel Office…</div>}>
+        {createElement(officeComponent as ComponentType<{ context: unknown }>, { context: officeContext })}
       </Suspense>
     </SurfaceSlotBoundary>
-  ) : null;
+  ) : (
+    <div className="surface-loading surface-loading-stage" role="status">
+      Loading Pixel Office…
+    </div>
+  );
+  const renderedOfficeSettingsSnapshot =
+    worldSettingsOpen
+      ? officeSettingsLifecycle.snapshot
+      : officeSettingsSnapshot ?? officeSettingsLifecycle.snapshot;
+  const officeSettingsContext = renderedOfficeSettingsSnapshot.context;
+  if (isOfficeSettingsContext(officeSettingsContext)) {
+    officeSettingsContext.current = { onSaved: markWorldSettingsSaved };
+  }
+  const officeSettingsComponent = renderedOfficeSettingsSnapshot.component;
+  const retryOfficeSettings = () => {
+    void officeSettingsLifecycle.retry().then(setOfficeSettingsSnapshot);
+  };
   const appStyle = {
     "--sidebar-w": `${sidebarWidth}px`,
     "--notes-w": `${notesPanelWidth}px`,
@@ -5939,13 +6254,24 @@ export function App() {
         />
       ) : null}
 
-      {worldSettingsOpen ? (
+      {worldSettingsOpen && renderedOfficeSettingsSnapshot.status === "error" ? (
+        <div className="surface-error" role="alert">
+          <h2>Office settings unavailable</h2>
+          <p>The settings contribution failed to load.</p>
+          <button type="button" onClick={retryOfficeSettings}>Retry settings</button>
+        </div>
+      ) : worldSettingsOpen && officeSettingsComponent && officeSettingsContext ? (
         <Suspense fallback={<div className="surface-loading" role="status">Loading Office settings…</div>}>
-          <WorldSettings
-            context={{ onSaved: markWorldSettingsSaved }}
-            onClose={closeWorldSettings}
-          />
+          {createElement(officeSettingsComponent as ComponentType<{
+            context: unknown;
+            onClose: () => void;
+          }>, {
+            context: officeSettingsContext,
+            onClose: closeWorldSettings,
+          })}
         </Suspense>
+      ) : worldSettingsOpen ? (
+        <div className="surface-loading" role="status">Loading Office settings…</div>
       ) : null}
 
       {error ? (

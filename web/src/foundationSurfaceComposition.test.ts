@@ -293,4 +293,51 @@ describe("Foundation surface contract", () => {
     expect(release).toHaveBeenCalledTimes(1);
     expect(pool.size).toBe(0);
   });
+
+  it("deduplicates concurrent terminal acquisition and delegates class methods", async () => {
+    const pool = new SharedTerminalHandlePool();
+    const release = vi.fn();
+    const attach = vi.fn();
+    class TerminalOwner {
+      readonly key = "bridge-a:terminal-a";
+      readonly target = {
+        bridgeId: "bridge-a",
+        kind: "terminal" as const,
+        nativeTargetId: "terminal-a",
+      };
+      attach() {
+        attach();
+      }
+      input() {}
+      resize() {}
+      scroll() {}
+      focus() {}
+      detach() {}
+      release() {
+        release();
+      }
+    }
+    let resolveFactory!: (owner: TerminalOwner) => void;
+    const factory = vi.fn(() => new Promise<TerminalOwner>((resolve) => {
+      resolveFactory = resolve;
+    }));
+    const target = {
+      bridgeId: "bridge-a",
+      kind: "terminal" as const,
+      nativeTargetId: "terminal-a",
+    };
+    const firstPromise = pool.acquire(target, factory);
+    const secondPromise = pool.acquire(target, factory);
+    await Promise.resolve();
+    expect(factory).toHaveBeenCalledTimes(1);
+    resolveFactory(new TerminalOwner());
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    first.attach();
+    second.attach();
+    expect(attach).toHaveBeenCalledTimes(2);
+    await first.release();
+    expect(release).not.toHaveBeenCalled();
+    await second.release();
+    expect(release).toHaveBeenCalledTimes(1);
+  });
 });
