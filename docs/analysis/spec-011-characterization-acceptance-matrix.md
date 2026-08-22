@@ -1,14 +1,15 @@
 # Spec 011 characterization and future acceptance matrix
 
-- **Phase:** characterization only
-- **Base:** `c330b733cfc487b4f80cde2b5b461aa4520471e0`
+- **Phase:** shared terminal owner implementation
+- **Base:** `cbd9a0c406806f3fbb5fe9b783b2e52082f688da` (merged PR #21)
 - **Scope:** current `herdr-web` production behavior before Foundation extraction
-- **Status:** the future host-owned gates below are not implemented by this PR
+- **Status:** the shared terminal-owner gates below are implemented and evidenced by this PR; the later package/repository seam remains deferred
 
-This document records the evidence boundary for the first Spec 011 PR. The
-executable tests exercise the current `TerminalView`, bridge command helpers,
-surface registry, and qualified Office handoff paths. They do not add a new
-terminal owner, shared transport, package boundary, or production cutover.
+This document records the evidence boundary for the current Spec 011 phase. The
+executable tests exercise the current `TerminalView`, Foundation-owned shared
+transport, bridge command helpers, surface registry, and qualified Office
+handoff paths. The package boundary, second repository, and production cutover
+remain deferred.
 
 ## Current characterization evidence
 
@@ -28,32 +29,33 @@ future gates below are implemented.
 
 ## Future host-owned acceptance matrix
 
-Every row is a blocking gate for the later Foundation/World implementation. A
-row marked “future” is intentionally not claimed as passing in this PR.
+Every row is a blocking gate for the later Foundation/World implementation.
+Rows marked “Implemented” record executable evidence established in this
+shared-owner phase; the public package/repository seam remains future work.
 
 | Future gate | Required scenario | Passing evidence | Status in this PR |
 | --- | --- | --- | --- |
-| Shared ownership | One host-owned terminal transport is shared by Spaces and Office. | Both views acquire handles from one owner; no surface constructs a raw terminal socket. | Future — no shared owner added. |
-| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. | Future — current views attach independently. |
-| Focus-owned resize | More than one view can observe one PTY. | Only the focus owner may resize; a non-owner refit cannot change the shared PTY dimensions. | Future — current views each send their own resize. |
-| Partial close | One view closes while another remains attached. | The remaining view stays attached, keeps receiving output, and retains the correct PTY size. | Future — current view cleanup is characterized only. |
-| Final release | The last view releases its handle. | The browser transport closes; no pane-close command is sent to Herdr. | Future — no shared release count exists. |
-| Single-owner reconnect | A shared transport disconnects and reconnects. | Exactly one owner schedules recovery and restores every subscribed renderer without duplicate sockets or stale writes. | Future — current reconnect tests cover one `TerminalView` owner per socket. |
-| Protocol parity | Shared transport behavior is migrated. | Output coalescing, JSON/binary input, close reasons, connect timeout, foreground recovery, and retry policy match the characterization baseline. | Future — baseline is recorded above. |
-| Qualified multi-bridge identity | Two hosts expose `(bridge-a, terminal-1)` and `(bridge-b, terminal-1)`. | They remain separate owners and renderer subscriptions; a handoff to bridge B cannot attach bridge A’s terminal. | Future shared-owner proof — current qualified identity tests pass. |
+| Shared ownership | One host-owned terminal transport is shared by Spaces and Office. | Both views acquire handles from one owner; no surface constructs a raw terminal socket. | Implemented — `terminalSessionOwner.test.ts`, `TerminalView.characterization.test.tsx`. |
+| Late subscriber state | A second view opens after initial output. | It receives the current terminal state before or with subsequent output, without replaying stale data from another owner. If the frame or byte bound would evict the stateful ANSI prefix, the owner invalidates replay while preserving live fanout; the next late subscriber is gated and requests one fresh attach-epoch resync instead of receiving a raw suffix. | Implemented — ordered replay, lossless frame/byte overflow fanout, oversized repaint, one late-subscriber resync, reconnect-epoch clearing, and stale-socket isolation are tested in `terminalSessionOwner.test.ts`. |
+| Focus-owned resize | More than one view can observe one PTY. | Only the focus owner may resize; a non-owner refit cannot change the shared PTY dimensions. | Implemented — exclusive resize and deterministic transfer are tested in `terminalSessionOwner.test.ts`. |
+| Partial close | One view closes while another remains attached. | The remaining view stays attached, keeps receiving output, and retains the correct PTY size. | Implemented — Office release leaves the Spaces renderer and owner connected in `TerminalView.characterization.test.tsx`. |
+| Final release | The last view releases its handle. | The browser transport closes; no pane-close command is sent to Herdr. | Implemented — final release close count and no pane-close command are tested in `TerminalView.characterization.test.tsx`. |
+| Single-owner reconnect | A shared transport disconnects and reconnects. | Exactly one owner schedules recovery and restores every subscribed renderer without duplicate sockets or stale writes. | Implemented — one scheduler and all-subscriber restoration are tested in `terminalSessionOwner.test.ts`. |
+| Protocol parity | Shared transport behavior is migrated. | Output coalescing, JSON/binary input, close reasons, connect timeout, foreground recovery, and retry policy match the characterization baseline. | Implemented — merged PR #21 suite plus `terminalSessionOwner.test.ts` pass. |
+| Qualified multi-bridge identity | Two hosts expose `(bridge-a, terminal-1)` and `(bridge-b, terminal-1)`. | They remain separate owners and renderer subscriptions; a handoff to bridge B cannot attach bridge A’s terminal. | Implemented — duplicate bridge IDs and stale generation output are tested in `terminalSessionOwner.test.ts`; production isolation remains in characterization coverage. |
 
 ## Known gaps and proposed later seams
 
 - The real fixture e2e coverage is the App-level route/bridge/Office evidence;
   no duplicate unit harness is added for behavior that would merely echo props
-  or call command helpers directly. The later host/context seam still needs
-  shared-owner acceptance tests, which are listed below rather than implied by
-  current independent-view coverage.
-- The later implementation needs a host-owned terminal handle seam around the
-  current socket lifecycle. That seam must preserve the current attach query,
-  renderer output ordering, admission gates, focus protection, close policy,
-  and cleanup behavior before any duplicate `TerminalView` ownership is
-  removed.
-- Live preview was not started for this PR. Ports 8787, 8788, and 5174 were
-  already occupied by existing services and were left untouched; no live
-  validation claim is made.
+  or call command helpers directly. The later typed host/context adapter still
+  needs its own integration evidence when the package seam is introduced.
+- The later public host/context seam must expose this owner through a narrow
+  typed handle without reintroducing raw sockets or a second bridge manager.
+  The current owner preserves the attach query, renderer output ordering,
+  admission gates, focus protection, close policy, cleanup behavior, and
+  lossless live fanout when bounded late-subscriber replay becomes incomplete.
+- The candidate preview is running at `http://127.0.0.1:5190/` with its
+  protocol-20 bridge at `http://127.0.0.1:8790/`; the existing installations on
+  8787 and 8788 remain untouched. Manual preview validation is limited to the
+  configured daemon state and does not claim a production cutover.

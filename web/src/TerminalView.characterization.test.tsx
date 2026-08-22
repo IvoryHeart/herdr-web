@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, useState } from "react";
+import { act, StrictMode, useState } from "react";
 import type { ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -432,6 +432,48 @@ describe("TerminalView production lifecycle characterization", () => {
     expect(socket.sent.some((value) => String(value).includes("pane.close"))).toBe(false);
   });
 
+  it("shares one qualified transport between Spaces and Office and releases views independently", async () => {
+    const { root } = await renderSharedViews();
+    const socket = onlySocket();
+    expect(rendererInstances()).toHaveLength(2);
+    await act(async () => socket.open());
+    await act(async () => socket.message(new Uint8Array([7, 8]).buffer));
+    expect(rendererInstances().map((renderer) => renderer.writes)).toEqual([[[7, 8]], [[7, 8]]]);
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("[aria-label='Close agent conversation']")?.click();
+    });
+    expect(socket.closeCalls).toBe(0);
+    expect(rendererInstances()).toHaveLength(2);
+    await act(async () => socket.message(new Uint8Array([9]).buffer));
+    expect(rendererInstances()[0].writes).toEqual([[7, 8], [9]]);
+
+    await act(async () => root.unmount());
+    expect(socket.closeCalls).toBe(1);
+  });
+
+  it("keeps acquire and release inert under Strict Mode effect replay", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <TerminalView {...terminalProps} />
+        </StrictMode>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    await act(async () => root.unmount());
+    await act(async () => root.unmount());
+    expect(FakeWebSocket.instances.every((socket) => socket.closeCalls <= 1)).toBe(true);
+    expect(FakeWebSocket.instances.at(-1)?.closeCalls).toBe(1);
+  });
+
   it("keeps primary and split terminal views isolated by bridge and terminal identity", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -443,14 +485,16 @@ describe("TerminalView production lifecycle characterization", () => {
           <TerminalView
             {...terminalProps}
             pane={pane("terminal-same")}
-            connectionKey="bridge-a-generation:terminal-same"
+            profileId="bridge-a"
+            connectionKey="bridge-a-generation"
             wsUrl={wsUrlFor("bridge-a")}
             accessibilityLabel="Bridge A terminal"
           />
           <TerminalView
             {...terminalProps}
             pane={pane("terminal-same")}
-            connectionKey="bridge-b-generation:terminal-same"
+            profileId="bridge-b"
+            connectionKey="bridge-b-generation"
             wsUrl={wsUrlFor("bridge-b")}
             accessibilityLabel="Bridge B terminal"
           />
@@ -493,7 +537,8 @@ describe("TerminalView production lifecycle characterization", () => {
 
 const terminalProps = {
   pane: pane("terminal-a"),
-  connectionKey: "bridge-a-generation:terminal-a",
+  profileId: "bridge-a",
+  connectionKey: "bridge-a-generation",
   resumeToken: 0,
   httpUrl: (path: string) => `http://bridge-a.test${path}`,
   wsUrl: wsUrlFor("bridge-a"),
@@ -540,6 +585,65 @@ async function renderConversationBubble() {
     await Promise.resolve();
   });
   return { container, root };
+}
+
+async function renderSharedViews() {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => {
+    root.render(<SharedViewsHarness />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return { container, root };
+}
+
+function SharedViewsHarness() {
+  const [officeOpen, setOfficeOpen] = useState(true);
+  const runtime = testRuntime();
+  const session: TerminalSessionDescriptor = {
+    profileId: runtime.id,
+    connectionKey: runtime.generationKey,
+    terminalId: "terminal-a",
+    sessionKey: `${runtime.generationKey}:terminal-a`,
+    attachEnabled: true,
+    inputEnabled: true,
+    resizeEnabled: true,
+    scrollEnabled: true,
+    uploadEnabled: true,
+  };
+  return (
+    <>
+      <TerminalView {...terminalProps} selected accessibilityLabel="Spaces terminal" />
+      {officeOpen ? (
+        <WorldConversationBubble
+          agent={testAgent()}
+          targetLabel="Codex"
+          hostLabel="Bridge A"
+          pane={pane("terminal-a")}
+          runtime={runtime}
+          session={session}
+          onClose={() => setOfficeOpen(false)}
+          onOpenInSpaces={() => {}}
+          touchInput={false}
+          terminalFontSizePx={14}
+          terminalScreenReaderText={false}
+          mobileControlsScalePercent={100}
+          mobileTapTarget="command-input"
+          mobileLongPressBehavior="off"
+          mobileTouchSelectionEndpointTimeoutMs={1500}
+          mobileCommandExpandingInput={false}
+          mobileCommandEnterNewline={false}
+          terminalInputTransport="json"
+          terminalInputBatchDelayMs={0}
+          terminalOutputCoalesceMs={16}
+          agentActivityTransitions={new Map()}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function ConversationHarness() {
