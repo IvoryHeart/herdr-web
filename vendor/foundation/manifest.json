@@ -1,0 +1,2084 @@
+{
+  "schemaVersion": 1,
+  "artifactKind": "herdr-world-foundation-candidate",
+  "source": {
+    "repository": "IvoryHeart/herdr-world-foundation",
+    "commit": "a6104b683963651d60a061cfcbd91d9fdc5effde"
+  },
+  "foundation": {
+    "packageName": "@herdr-world/foundation",
+    "version": "0.1.0",
+    "npmTarball": {
+      "filename": "herdr-world-foundation-0.1.0.tgz",
+      "size": 495506,
+      "sha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
+      "integrity": "sha512-OuCHH4Wfk5p2mflZdlBRFDYrHVNuIB1Ec2+C0BfkLD8a5EFsVF5LzFBoNDFpQRrg1UX2DxgZ/ewh8mQyuxPumg=="
+    },
+    "surfaceApiVersion": 1
+  },
+  "bridge": {
+    "artifactName": "herdr-world-bridge",
+    "version": "0.1.0",
+    "platform": "linux",
+    "architecture": "x86_64",
+    "filename": "herdr-world-bridge-0.1.0-linux-x86_64",
+    "size": 7994472,
+    "sha256": "a8041e7e6d888678185c0c934f5a0f9162cb43fe84b54e8c1f468aaa6431b7fa",
+    "builtTwiceByteIdentical": true
+  },
+  "compatibility": {
+    "bridgeApiVersion": 1,
+    "webCompatVersion": 1,
+    "supportedHerdrVersion": "0.8.2",
+    "supportedHerdrMinimumVersion": "0.8.2",
+    "supportedHerdrAuditedCommit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
+    "terminalProtocol": 20
+  },
+  "packageContentInventory": [
+    {
+      "path": "LICENSE",
+      "size": 1062,
+      "sha256": "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50"
+    },
+    {
+      "path": "LICENSE-FOUNDATION-MIT",
+      "size": 1075,
+      "sha256": "3e4f86997d21d4c64a0b838011a470db2317144265f43f0ee66d209a4eace812"
+    },
+    {
+      "path": "NOTICE",
+      "size": 548,
+      "sha256": "58732b14dbdba9892c90798a93798d73a3e0b72702305ce13961d22f9b53a03d"
+    },
+    {
+      "path": "README.md",
+      "size": 3613,
+      "sha256": "cc7537581ec249a8e4a2c2f66556312b851520a421fc156da5497c770a5ce92d"
+    },
+    {
+      "path": "assets/herdr-logo-180.png",
+      "size": 5379,
+      "sha256": "2e0cad068fd770e8ba0b34828bb293569cf3996e76247e0009af7af80d76e920"
+    },
+    {
+      "path": "assets/herdr-logo-192.png",
+      "size": 5624,
+      "sha256": "ecd16414ef3da80bb6dac42f39f63b500d6566cee054323a4f02393c7b23010c"
+    },
+    {
+      "path": "assets/herdr-logo-512.png",
+      "size": 15880,
+      "sha256": "8b088592a64e130215f16cd392cbbf4c60260e265d6d9b15970e53b4c941994e"
+    },
+    {
+      "path": "assets/herdr-logo-maskable-192.png",
+      "size": 4466,
+      "sha256": "d203d1fc1d89ea2741c8bdb421855455ec83c1b26c1795323ab7ace0cbdce2b3"
+    },
+    {
+      "path": "assets/herdr-logo-maskable-512.png",
+      "size": 12568,
+      "sha256": "6f766cb0ad785331bb1f15e2479c30e3730d63ae6421b954463c5fb56e89fe54"
+    },
+    {
+      "path": "assets/herdr-logo.svg",
+      "size": 2167,
+      "sha256": "f4a8400d515fcf50112a952a5b48f5fa6e6b02b4dcb0b483ca92be39f7d7f7a1"
+    },
+    {
+      "path": "assets/manifest.json",
+      "size": 958,
+      "sha256": "35acecddbb1124b2ad954ac48a10a663aca8101950221247609041d555adbb5e"
+    },
+    {
+      "path": "compatibility.json",
+      "size": 418,
+      "sha256": "dc6edb91861fd2134c08d268b5287dcc15c7915faa150e709aedd548c052171a"
+    },
+    {
+      "path": "dist/AgentIcon.d.ts",
+      "size": 525,
+      "sha256": "0493d52b40f5259e58681dda6a91b1db21018524f2492fe1b8ae8df4c109e85f"
+    },
+    {
+      "path": "dist/App.d.ts",
+      "size": 14508,
+      "sha256": "6b57dd66e53cdf8daff88db7fb8a902528c03a75ea3441ad0f9f584a481447f3"
+    },
+    {
+      "path": "dist/BackendSettingsDialog.d.ts",
+      "size": 3667,
+      "sha256": "18a0a3ccc5ebb5a93d23017223e6e79c368a5adafcb866940361496019e335ea"
+    },
+    {
+      "path": "dist/LaunchDialog.d.ts",
+      "size": 449,
+      "sha256": "09240ededfaf3a2361740c6359199f8dffbf4a2241cf7c9b6cc6415ae466fdf3"
+    },
+    {
+      "path": "dist/NoteMarkdownPreview-DqpiotaL.js",
+      "size": 212350,
+      "sha256": "8175e8581d8aa23c2097bac467e7a943cac7d66dd7ad2f347733264212b2a5a4"
+    },
+    {
+      "path": "dist/NoteMarkdownPreview.d.ts",
+      "size": 172,
+      "sha256": "6768564f932c5c8969f8a9d6ffe3dbc81196529386d41df043b890bfae125838"
+    },
+    {
+      "path": "dist/TerminalView.d.ts",
+      "size": 4589,
+      "sha256": "8cf5ad0f9466bef3a90a8789b436ed097c9ffb56cc826194fbc44959a2e4b404"
+    },
+    {
+      "path": "dist/__vite-browser-external-2447137e-BvRk9kiK.js",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "dist/activity.d.ts",
+      "size": 935,
+      "sha256": "34892b31b5c166a246e4534b50196471ded7611ccd44bae0d1a89b72fef6f27e"
+    },
+    {
+      "path": "dist/agentActivity.d.ts",
+      "size": 1204,
+      "sha256": "eefa2014891db52d2877f4391cf9f5e2819794f4e7eee030482dcbb21de181f3"
+    },
+    {
+      "path": "dist/agentPins.d.ts",
+      "size": 1436,
+      "sha256": "ce5142dca1ba467f4237059a94a9156497a6c43a8c4dddade5139789a5614de9"
+    },
+    {
+      "path": "dist/assets.d.ts",
+      "size": 71,
+      "sha256": "6878801bfead4c32755a700ca868205eeba8ba20d2ea6377525f1eee5a49cc4a"
+    },
+    {
+      "path": "dist/bridge.d.ts",
+      "size": 4951,
+      "sha256": "4db2d1996ac9b9482770c9a875a7bc227dfc4c9b733dfb91da97204587b6f9a5"
+    },
+    {
+      "path": "dist/bridgeApi.d.ts",
+      "size": 164,
+      "sha256": "7731fe347815f35fd7ed40ee64291dadf07adc14cc2e70d83e52f2da61a35aeb"
+    },
+    {
+      "path": "dist/commands.d.ts",
+      "size": 3739,
+      "sha256": "6178dee40c91e67d860c46fc8f6d20e6f878f0a5f74b9a46b5c5177a9da3684c"
+    },
+    {
+      "path": "dist/connectionState.d.ts",
+      "size": 258,
+      "sha256": "65358edb56377c5fe909e897e4bad19ca645d6fa09427fb18d80d2a3f328e6e7"
+    },
+    {
+      "path": "dist/displayPrefs.d.ts",
+      "size": 1061,
+      "sha256": "e09c30acdf5ead31e6c3dcdcfe4c4c8972805d3d2c1af15228356cc6898af984"
+    },
+    {
+      "path": "dist/fetchWithTimeout.d.ts",
+      "size": 273,
+      "sha256": "8f4d4341152ec068ffa6d23347879253301bf293f399de6abfae3f6196950732"
+    },
+    {
+      "path": "dist/foundation.css",
+      "size": 157703,
+      "sha256": "fdb3fe5ab1dc9770548a9d0a4e64ea046b7ba2400292d9b85d80f9788a182428"
+    },
+    {
+      "path": "dist/foundationAssembly.d.ts",
+      "size": 94,
+      "sha256": "f4b3e0e66cacb95f10432b9bf361fefafffdd395072d677d8e611427644f11e3"
+    },
+    {
+      "path": "dist/foundationCharacterizationFixtures.d.ts",
+      "size": 127,
+      "sha256": "9e70e37c3d134af6685b6e981fc5e9926aaaddb5685036eaaedd1998d3697469"
+    },
+    {
+      "path": "dist/ghostty-web-0K3DfDqq.js",
+      "size": 652081,
+      "sha256": "4c0752d28a303dda47f031ab1e448a88fa2fae36ed42de2696b1f98087616bda"
+    },
+    {
+      "path": "dist/index.d.ts",
+      "size": 820,
+      "sha256": "4303b86d03499a7658dd28c49d4c6ad69918fcf5dafe073c0b0cc3931c7162df"
+    },
+    {
+      "path": "dist/index.js",
+      "size": 352890,
+      "sha256": "88f0a2cd2863148a4fecce4e8d4dfa9e7cce8892e58ca4806ab1e3435bb3ffc0"
+    },
+    {
+      "path": "dist/launch.d.ts",
+      "size": 611,
+      "sha256": "0c95fd4fd7a6de823b3649ab2e1e7cdccfa57a7c7173a14bf695df90aa48a5b9"
+    },
+    {
+      "path": "dist/launcherPresets.d.ts",
+      "size": 661,
+      "sha256": "493fdaf62a80cd065d350285c0ab6f37273a840d2af205f7e9a4b9b721663b2e"
+    },
+    {
+      "path": "dist/mobileCommandTextarea.d.ts",
+      "size": 294,
+      "sha256": "29f444b24dc8dfc0eee0231fd4b08c253f085dc4e38e75269449d60abeeacdf1"
+    },
+    {
+      "path": "dist/mobileTerminalPrefs.d.ts",
+      "size": 1386,
+      "sha256": "4e38db671bd63dce3196f41e73f8577af8e1a964f94a0425d1b00c3086020154"
+    },
+    {
+      "path": "dist/native.d.ts",
+      "size": 518,
+      "sha256": "badec14e1216abb70fd05895485c0ad62258f3359a7f7c8609d38027cd0bab7e"
+    },
+    {
+      "path": "dist/navigationPrefs.d.ts",
+      "size": 774,
+      "sha256": "2ffa49257101e0fc10b1031b0fa12d6cfa835d85be94a59aa07039a97bb89f46"
+    },
+    {
+      "path": "dist/notes.d.ts",
+      "size": 3135,
+      "sha256": "e91a4b0215d8dad7e6d8adb5c832871325fbb4e2534aeac95c7f7d455a88df2c"
+    },
+    {
+      "path": "dist/overlayFocus.d.ts",
+      "size": 590,
+      "sha256": "734cb6c4ba2272f3e1439dd0b4fa180a523989cdd3ccdcc3de0446de0fcfc6ae"
+    },
+    {
+      "path": "dist/overlays.d.ts",
+      "size": 1610,
+      "sha256": "7bd67a8b5b62fd333d6cbc25252543ce6f523f1523740cf9a6a7d22ad959aba3"
+    },
+    {
+      "path": "dist/refreshCoordinator.d.ts",
+      "size": 544,
+      "sha256": "97e09faa3d3dbf5a97d81dcbd729875161aae8df32e0882cf387785090e942f9"
+    },
+    {
+      "path": "dist/shell.d.ts",
+      "size": 130,
+      "sha256": "72693c09c5620b5967f449f098a0808ea7faf91c43cf8a8502f38f39873aedd1"
+    },
+    {
+      "path": "dist/state.d.ts",
+      "size": 2741,
+      "sha256": "e759d68b458406b90f2dc71c17000d4d23764af2e58cc80647ac78758689e2b2"
+    },
+    {
+      "path": "dist/styles-entry.d.ts",
+      "size": 23,
+      "sha256": "e1f675926cb6bfa9c39d2d2f87f0957c74aa318a09bfd67240b1b3990eab07ea"
+    },
+    {
+      "path": "dist/styles.js",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "dist/surfaceApplication.d.ts",
+      "size": 181,
+      "sha256": "34496d75a4f5e485138ee7ec5d65687e82e67c95ab354d6e46c588924e9b34a7"
+    },
+    {
+      "path": "dist/surfaceContract.d.ts",
+      "size": 3537,
+      "sha256": "0a06dc7d4646de4e3ef05dcfc5031acc18a034c3f86c0c46a5d84bc1b5d9a94d"
+    },
+    {
+      "path": "dist/surfaceFactsStore.d.ts",
+      "size": 614,
+      "sha256": "11704a4bda16c70afff121be08bee7fab49090c9074b297f7c2c67a964b15d24"
+    },
+    {
+      "path": "dist/surfaceHost.d.ts",
+      "size": 483,
+      "sha256": "84abef77b3d9f1621668bd7b6e6037d406b30dceb1fe6054271b8906d0968a40"
+    },
+    {
+      "path": "dist/surfaceLifecycle.d.ts",
+      "size": 3039,
+      "sha256": "e0909fef433d9f91467164b47b869561fbc08860e7aec212078ed8ee6e7d1d71"
+    },
+    {
+      "path": "dist/surfaceOutlet.d.ts",
+      "size": 818,
+      "sha256": "4b66eb0d50b744cf2b996300852cf85f1f8ec8f96180258c7fb467ccc4db3594"
+    },
+    {
+      "path": "dist/surfaceSettings.d.ts",
+      "size": 769,
+      "sha256": "03f08a5947c749d2ba7a0e07a26b0d51dc87d7211b91a019f3542c3e29027557"
+    },
+    {
+      "path": "dist/surfaceTypes.d.ts",
+      "size": 7317,
+      "sha256": "26c00cbc9c1856fb3da413502eaf63b0f9da8347a5e05152fb3fc116d2987ec5"
+    },
+    {
+      "path": "dist/surfaces-BtQTd5lm.js",
+      "size": 38395,
+      "sha256": "fff4d046df130cd55674557e1354c8f24bd74e659567f5fa8e10a6d0ed6eaa83"
+    },
+    {
+      "path": "dist/surfaces.d.ts",
+      "size": 2275,
+      "sha256": "7e05861962873a4d452580677681f8a1a8d7099238ad1f7a997015064a9fc9e9"
+    },
+    {
+      "path": "dist/surfaces.js",
+      "size": 330,
+      "sha256": "33904fbb09d3156711a41436470e627bb70638322bb399cdb30f324a81709994"
+    },
+    {
+      "path": "dist/terminalAccessibleText.d.ts",
+      "size": 1801,
+      "sha256": "2d59ba7445f21e19bf6779c2870b8d6a79ae29366e4983fa891d1053097a6c6d"
+    },
+    {
+      "path": "dist/terminalAttachFocus.d.ts",
+      "size": 403,
+      "sha256": "7f06b36f237b6cca38a7688e3b29e9ed848245f432fcaff62503d8745988b944"
+    },
+    {
+      "path": "dist/terminalConnectionStatus.d.ts",
+      "size": 1121,
+      "sha256": "228499c1057058bf8cf355b3b864a8abf8cf7d5e7b7cd89094b3fe90f0b885a4"
+    },
+    {
+      "path": "dist/terminalEndpointBubblePosition.d.ts",
+      "size": 660,
+      "sha256": "be7afcb168988715c40ad322f21627d79b04ded309c65140db6fb752bce69a2f"
+    },
+    {
+      "path": "dist/terminalImeFocus.d.ts",
+      "size": 368,
+      "sha256": "19577c730ddae9ac52093a9f685458bf2575760ccdfbe3b95cb96bf5fe51b131"
+    },
+    {
+      "path": "dist/terminalImeInput.d.ts",
+      "size": 3236,
+      "sha256": "3eacc697ecc1f947827283b0cd4d9f1c772f4903d8df9206d64fec935e083679"
+    },
+    {
+      "path": "dist/terminalInputTransport.d.ts",
+      "size": 1077,
+      "sha256": "96822d4bd6ac8a056dd593fe5424857a99aa1ab49bb4d00d5c368e7e8421b9a1"
+    },
+    {
+      "path": "dist/terminalLoupeCursorGeometry.d.ts",
+      "size": 596,
+      "sha256": "3df737133ea5df078cffad3fe80490f3884d9039d141f1bdf5cf0deb581033cb"
+    },
+    {
+      "path": "dist/terminalOutputCoalescing.d.ts",
+      "size": 239,
+      "sha256": "3a3de7987b20b12cc7ba2b20e467619e98d71086124b92d806c69571b7cdd616"
+    },
+    {
+      "path": "dist/terminalOutputEncoding.d.ts",
+      "size": 515,
+      "sha256": "43a5f416223c927fd07d2969ff68a510a8f5212e990cf61682ca8f03875b0892"
+    },
+    {
+      "path": "dist/terminalPrefs.d.ts",
+      "size": 236,
+      "sha256": "e58ed3777d4acfc857e065768472a6710ebd62d02c85e427898a4a54601476b7"
+    },
+    {
+      "path": "dist/terminalReconnectPolicy.d.ts",
+      "size": 942,
+      "sha256": "8e983bba08b3f35d02581c2d93ff926282a16f6c2bec06158e3aa4f24182ccd8"
+    },
+    {
+      "path": "dist/terminalRenderer.d.ts",
+      "size": 2374,
+      "sha256": "2136462b8c269c7f2de8104e0acb21aca1320e7ec722199030bf2e3ec1dc5ec5"
+    },
+    {
+      "path": "dist/terminalSelection.d.ts",
+      "size": 938,
+      "sha256": "75bd8680dd2ed934af35df4207e98676e0e6f204f748bfcc21d3174a00840128"
+    },
+    {
+      "path": "dist/terminalSessionOwner.d.ts",
+      "size": 2477,
+      "sha256": "998ffe10f95535b601e186da296101a526f06566020650632f4c420010ea0e6b"
+    },
+    {
+      "path": "dist/terminalTapFocus.d.ts",
+      "size": 282,
+      "sha256": "96299010b35ab1cd1093bc9a73c7808ad350b7d26f069406b46c70af37c7914c"
+    },
+    {
+      "path": "dist/terminalTouchSelection.d.ts",
+      "size": 2213,
+      "sha256": "98ce772a1e39cd169862a0e52f7660e7ac014d8cca4b829e3038d1e82c129069"
+    },
+    {
+      "path": "dist/types.d.ts",
+      "size": 2329,
+      "sha256": "48c19cd7002c4cbb7b08a6eb4b5b7d400a36cf52c588c35ebdbfca59a0f67788"
+    },
+    {
+      "path": "dist/web-CsveM0FJ.js",
+      "size": 1056,
+      "sha256": "fdb24b0260e19bd8526ddf76f1031e5544ca43711dc9fcc69fe098c376f0e34f"
+    },
+    {
+      "path": "dist/web-JyJ0n4sJ.js",
+      "size": 1549,
+      "sha256": "221fd8db81a40f71c9cbe899a75d2d6ca2baa4a9283f2becf8aa98c56854a5fa"
+    },
+    {
+      "path": "dist/workspaceReorder.d.ts",
+      "size": 953,
+      "sha256": "dd35f774fff3ef3ff6a4259fc645c6bcdbdef781af12a8f0423466afa21b5340"
+    },
+    {
+      "path": "package.json",
+      "size": 1926,
+      "sha256": "a344caf44d5606c39822c02c34a5cdd163033d17dee1e5a912215024b7b69436"
+    }
+  ],
+  "dependencyInventory": {
+    "npmProduction": "inventory/npm-production.json",
+    "cargo": "inventory/cargo.json",
+    "licenseNotices": "inventory/dependency-notices.json"
+  },
+  "provenance": {
+    "bundleLocator": [
+      "provenance/",
+      "licenses/"
+    ],
+    "digest": "475febc7a31ee1ad1d6aa65c5e143fba8095ff566a097a8104dbbacbf193715c",
+    "members": [
+      {
+        "relativePath": "licenses/NOTICE.txt",
+        "sha256": "0a0e034711531012ee8dee83e33c26e0378971e32a6aff48111b3a2006ae59ed"
+      },
+      {
+        "relativePath": "licenses/cargo/adler2-2.0.1.txt",
+        "sha256": "861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17"
+      },
+      {
+        "relativePath": "licenses/cargo/aho-corasick-1.1.4.txt",
+        "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+      },
+      {
+        "relativePath": "licenses/cargo/allocator-api2-0.2.21.txt",
+        "sha256": "20fe7b00e904ed690e3b9fd6073784d3fc428141dbd10b81c01fd143d0797f58"
+      },
+      {
+        "relativePath": "licenses/cargo/anyhow-1.0.102.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/approx-0.5.1.txt",
+        "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+      },
+      {
+        "relativePath": "licenses/cargo/async-compression-0.4.42.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/atomic-0.6.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/atomic-waker-1.1.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/autocfg-1.5.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/axum-0.8.9.txt",
+        "sha256": "6a13bc24a100a6812f053879ec51b126b103af7cda6dbf48c4188722da44da9f"
+      },
+      {
+        "relativePath": "licenses/cargo/axum-core-0.5.6.txt",
+        "sha256": "008c87afcd2e626eaf564093250bed06dd7efb5732113264bba3dda8f1c556a1"
+      },
+      {
+        "relativePath": "licenses/cargo/base64-0.22.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/bincode-2.0.1.txt",
+        "sha256": "90d7e062634054e6866d3c81e6a2b3058a840e6af733e98e80bdfe1a7dec6912"
+      },
+      {
+        "relativePath": "licenses/cargo/bincode_derive-2.0.1.txt",
+        "sha256": "90d7e062634054e6866d3c81e6a2b3058a840e6af733e98e80bdfe1a7dec6912"
+      },
+      {
+        "relativePath": "licenses/cargo/bit-set-0.5.3.txt",
+        "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+      },
+      {
+        "relativePath": "licenses/cargo/bit-vec-0.6.3.txt",
+        "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+      },
+      {
+        "relativePath": "licenses/cargo/bitflags-1.3.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/bitflags-2.13.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/block-buffer-0.10.4.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/bumpalo-3.20.3.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/by_address-1.2.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/bytemuck-1.25.0.txt",
+        "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb"
+      },
+      {
+        "relativePath": "licenses/cargo/bytes-1.11.1.txt",
+        "sha256": "45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42"
+      },
+      {
+        "relativePath": "licenses/cargo/castaway-0.2.4.txt",
+        "sha256": "f98e09091d5ae02b2f2ec1ead4f7f28c4c44d1cb98b078739ba67091637e170c"
+      },
+      {
+        "relativePath": "licenses/cargo/cfg-if-1.0.4.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/cfg_aliases-0.2.1.txt",
+        "sha256": "31b94860253d8ec7b4529f51901044d3b459d6292d996504a36b1bae3a36a812"
+      },
+      {
+        "relativePath": "licenses/cargo/compact_str-0.9.1.txt",
+        "sha256": "0d52feec79589df30138dad3800323fe5686b764b73347330a2dfef8ac83efe8"
+      },
+      {
+        "relativePath": "licenses/cargo/compression-codecs-0.4.38.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/compression-core-0.4.32.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/convert_case-0.10.0.txt",
+        "sha256": "aed7b1758e35afa0cd0fde059d61950747ca11cd0e5e169cb21c11608daed772"
+      },
+      {
+        "relativePath": "licenses/cargo/cpufeatures-0.2.17.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/crc32fast-1.5.0.txt",
+        "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+      },
+      {
+        "relativePath": "licenses/cargo/critical-section-1.2.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/crossterm-0.29.0.txt",
+        "sha256": "aca4760f2a5eba9ce9d4448fe7cd3fcf98245a8315ede59ebd0c6085dd542e61"
+      },
+      {
+        "relativePath": "licenses/cargo/crossterm_winapi-0.9.1.txt",
+        "sha256": "aca4760f2a5eba9ce9d4448fe7cd3fcf98245a8315ede59ebd0c6085dd542e61"
+      },
+      {
+        "relativePath": "licenses/cargo/crypto-common-0.1.7.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/csscolorparser-0.6.2.txt",
+        "sha256": "5169af8004342d42c99e44aa3fbce3efd1068221cb2145e051a4b54672754bc6"
+      },
+      {
+        "relativePath": "licenses/cargo/darling-0.23.0.txt",
+        "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
+      },
+      {
+        "relativePath": "licenses/cargo/darling_core-0.23.0.txt",
+        "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
+      },
+      {
+        "relativePath": "licenses/cargo/darling_macro-0.23.0.txt",
+        "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
+      },
+      {
+        "relativePath": "licenses/cargo/data-encoding-2.11.0.txt",
+        "sha256": "b68ad1a3367b825447089e1f8d6829b97f47a89eb78d2f4ebaef4672f5606186"
+      },
+      {
+        "relativePath": "licenses/cargo/deltae-0.3.2.txt",
+        "sha256": "581056b179603e8191b5d6e54e543abfecc13591b39c0d60ec8593d7013568ee"
+      },
+      {
+        "relativePath": "licenses/cargo/deranged-0.5.8.txt",
+        "sha256": "edd65bdd88957a205c47d53fa499eed8865a70320f0f03f6391668cb304ea376"
+      },
+      {
+        "relativePath": "licenses/cargo/derive_more-2.1.1.txt",
+        "sha256": "8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5"
+      },
+      {
+        "relativePath": "licenses/cargo/derive_more-impl-2.1.1.txt",
+        "sha256": "8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5"
+      },
+      {
+        "relativePath": "licenses/cargo/digest-0.10.7.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/doctest-file-1.1.1.txt",
+        "sha256": "00515b2bb13879db00e9483244b1bb80d7af9237c58e4de30af52a761d8d2524"
+      },
+      {
+        "relativePath": "licenses/cargo/document-features-0.2.12.txt",
+        "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff"
+      },
+      {
+        "relativePath": "licenses/cargo/dyn-clone-1.0.20.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/either-1.16.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/equivalent-1.0.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/errno-0.3.14.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/euclid-0.22.14.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/fancy-regex-0.11.0.txt",
+        "sha256": "3bc70e239e91272782006c638fc0452a714d384224f11f0923036b7be07cf9b5"
+      },
+      {
+        "relativePath": "licenses/cargo/fast-srgb8-1.0.0.txt",
+        "sha256": "a8a76b5fd1f1e53246d8d12dac4e6bed981f93b1f94d63f4edbf9a367b83cfc4"
+      },
+      {
+        "relativePath": "licenses/cargo/fdeflate-0.3.7.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/filedescriptor-0.8.3.txt",
+        "sha256": "191c46fcf52061382b1c51a70311eb9081381cc158e5899f3739473a9432185b"
+      },
+      {
+        "relativePath": "licenses/cargo/finl_unicode-1.4.0.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/fixedbitset-0.4.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/flate2-1.1.9.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/fnv-1.0.7.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/foldhash-0.1.5.txt",
+        "sha256": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744"
+      },
+      {
+        "relativePath": "licenses/cargo/foldhash-0.2.0.txt",
+        "sha256": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744"
+      },
+      {
+        "relativePath": "licenses/cargo/form_urlencoded-1.2.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-channel-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-core-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-macro-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-sink-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-task-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/futures-util-0.3.32.txt",
+        "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427"
+      },
+      {
+        "relativePath": "licenses/cargo/generic-array-0.14.7.txt",
+        "sha256": "c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583"
+      },
+      {
+        "relativePath": "licenses/cargo/getrandom-0.3.4.txt",
+        "sha256": "aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf"
+      },
+      {
+        "relativePath": "licenses/cargo/getrandom-0.4.2.txt",
+        "sha256": "aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf"
+      },
+      {
+        "relativePath": "licenses/cargo/hashbrown-0.15.5.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/hashbrown-0.16.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/hashbrown-0.17.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/heck-0.5.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/herdr-world-bridge-0.1.0.txt",
+        "sha256": "bbe20f8b98ada6f711c577baf18b3c6ee7ad3383126693a9592824ef2d09121a"
+      },
+      {
+        "relativePath": "licenses/cargo/herdr-world-compat-0.1.0.txt",
+        "sha256": "edcd6ee311a2248f8f6a69a326c18aa0ba8acaaee183f6b2ca877ebf266014e6"
+      },
+      {
+        "relativePath": "licenses/cargo/hex-0.4.3.txt",
+        "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+      },
+      {
+        "relativePath": "licenses/cargo/http-1.4.2.txt",
+        "sha256": "8bb1b50b0e5c9399ae33bd35fab2769010fa6c14e8860c729a52295d84896b7a"
+      },
+      {
+        "relativePath": "licenses/cargo/http-body-1.0.1.txt",
+        "sha256": "cddabf8adc6ccd6c3e68f5d71eac9fae3094116623cf23a46af0a5fd6b8ee813"
+      },
+      {
+        "relativePath": "licenses/cargo/http-body-util-0.1.3.txt",
+        "sha256": "b843fb7430efdf9732c834b6814beda44fccf3f0ddf7c9e030b39da17f6b159c"
+      },
+      {
+        "relativePath": "licenses/cargo/http-range-header-0.4.2.txt",
+        "sha256": "ed72515b08d7ce8a497e7cb8418a0c93f5b0a119349db4f3b8a0dcf6cb76951a"
+      },
+      {
+        "relativePath": "licenses/cargo/httparse-1.10.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/httpdate-1.0.3.txt",
+        "sha256": "4d10fe5f3aa176b05b229a248866bad70b834c173f1252a814ff4748d8a13837"
+      },
+      {
+        "relativePath": "licenses/cargo/hyper-1.10.1.txt",
+        "sha256": "2d01890414494742ba4a509fcec8efa40f6d8be22cbd72be7cff08d6fda4ec89"
+      },
+      {
+        "relativePath": "licenses/cargo/hyper-util-0.1.20.txt",
+        "sha256": "9e0a97848ea543aef745c98e84fde696a9a3e0735538f6daefdd3cb1942effc1"
+      },
+      {
+        "relativePath": "licenses/cargo/id-arena-2.3.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/ident_case-1.0.1.txt",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      },
+      {
+        "relativePath": "licenses/cargo/indexmap-2.14.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/indoc-2.0.7.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/instability-0.3.12.txt",
+        "sha256": "0352320d9929e862c1f07b59caacc3cd1bbacfec0ad4136bf4c89d4ca8939781"
+      },
+      {
+        "relativePath": "licenses/cargo/interprocess-2.4.2.txt",
+        "sha256": "8fab50bdd851f4e8282c3d1a2c8e3490d7b664e4b90cc44dd15d37be8c8d473a"
+      },
+      {
+        "relativePath": "licenses/cargo/itertools-0.14.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/itoa-1.0.18.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/js-sys-0.3.102.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/kasuari-0.4.12.txt",
+        "sha256": "000b4962e6b27176a0ff89cce4be555b16472cafb5671eb2804a8fdac6854793"
+      },
+      {
+        "relativePath": "licenses/cargo/lab-0.11.0.txt",
+        "sha256": "22c404ba4f8503eeef72b1cc644b95c2e40b9b974dfc3552aebfff8a26b07463"
+      },
+      {
+        "relativePath": "licenses/cargo/lazy_static-1.5.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/leb128fmt-0.1.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/libc-0.2.186.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/libm-0.2.16.txt",
+        "sha256": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+      },
+      {
+        "relativePath": "licenses/cargo/line-clipping-0.3.7.txt",
+        "sha256": "86f2767527a034d6b9cb8bd98676925e58ed75bf805d234dc2a71a54150cbad1"
+      },
+      {
+        "relativePath": "licenses/cargo/linux-raw-sys-0.12.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/litrs-1.0.0.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/lock_api-0.4.14.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/log-0.4.32.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/lru-0.18.0.txt",
+        "sha256": "061dc50af2cd9340703daf61978af3200cf681b12ea67a323c33ba109a23a45e"
+      },
+      {
+        "relativePath": "licenses/cargo/mac_address-1.1.8.txt",
+        "sha256": "c93a7014a32c88c71551bd6fb4cae8cc9445c237d7e4a0774d4fc5e06089dbd9"
+      },
+      {
+        "relativePath": "licenses/cargo/matchers-0.2.0.txt",
+        "sha256": "a47129d738752a6ae52247fea645b42cb320d19e9327f1eb2d1a7f99d9455ad3"
+      },
+      {
+        "relativePath": "licenses/cargo/matchit-0.8.4.txt",
+        "sha256": "de701d0618d694feb1af90f02181a1763d9b0bdeb70a3a592781e529077dba65"
+      },
+      {
+        "relativePath": "licenses/cargo/memchr-2.8.2.txt",
+        "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+      },
+      {
+        "relativePath": "licenses/cargo/memmem-0.1.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/memoffset-0.9.1.txt",
+        "sha256": "3234ac55816264ee7b6c7ee27efd61cf0a1fe775806870e3d9b4c41ea73c5cb1"
+      },
+      {
+        "relativePath": "licenses/cargo/mime-0.3.17.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/mime_guess-2.0.5.txt",
+        "sha256": "816000f9c28f7005d931c77636eb79fa7020071eb0f6e6a995515dfccd3559cb"
+      },
+      {
+        "relativePath": "licenses/cargo/minimal-lexical-0.2.1.txt",
+        "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+      },
+      {
+        "relativePath": "licenses/cargo/miniz_oxide-0.8.9.txt",
+        "sha256": "4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b"
+      },
+      {
+        "relativePath": "licenses/cargo/mio-1.2.1.txt",
+        "sha256": "07919255c7e04793d8ea760d6c2ce32d19f9ff02bdbdde3ce90b1e1880929a9b"
+      },
+      {
+        "relativePath": "licenses/cargo/nix-0.29.0.txt",
+        "sha256": "66e3ee1fa7f909ad3c612d556f2a0cdabcd809ad6e66f3b0605015ac64841b70"
+      },
+      {
+        "relativePath": "licenses/cargo/nom-7.1.3.txt",
+        "sha256": "4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0"
+      },
+      {
+        "relativePath": "licenses/cargo/nu-ansi-term-0.50.3.txt",
+        "sha256": "284465860407420254e39be4e1bdcaaf2e7f2d18e06f9bab75bc75341a5d8501"
+      },
+      {
+        "relativePath": "licenses/cargo/num-conv-0.2.2.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/num-derive-0.4.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/num-traits-0.2.19.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/num_threads-0.1.7.txt",
+        "sha256": "c69b72788ec261765e460532016b4bb78372f238e449b5e70e3268ec1e18fd15"
+      },
+      {
+        "relativePath": "licenses/cargo/once_cell-1.21.4.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/ordered-float-4.6.0.txt",
+        "sha256": "f7715d38a3fa1b4ac97c5729740752505a39cb92ee83ab5b102aeb5eaa7cdea4"
+      },
+      {
+        "relativePath": "licenses/cargo/palette-0.7.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/palette_derive-0.7.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/parking_lot-0.12.5.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/parking_lot_core-0.9.12.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/percent-encoding-2.3.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/pest-2.8.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/pest_derive-2.8.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/pest_generator-2.8.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/pest_meta-2.8.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/phf-0.11.3.txt",
+        "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
+      },
+      {
+        "relativePath": "licenses/cargo/phf_codegen-0.11.3.txt",
+        "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
+      },
+      {
+        "relativePath": "licenses/cargo/phf_generator-0.11.3.txt",
+        "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
+      },
+      {
+        "relativePath": "licenses/cargo/phf_macros-0.11.3.txt",
+        "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
+      },
+      {
+        "relativePath": "licenses/cargo/phf_shared-0.11.3.txt",
+        "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
+      },
+      {
+        "relativePath": "licenses/cargo/pin-project-lite-0.2.17.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/png-0.17.16.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/portable-atomic-1.13.1.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/powerfmt-0.2.0.txt",
+        "sha256": "155420c6403d4e0fca34105e3c03fdd6939b64c393c7ec6f95f5b72c5474eab0"
+      },
+      {
+        "relativePath": "licenses/cargo/ppv-lite86-0.2.21.txt",
+        "sha256": "0218327e7a480793ffdd4eb792379a9709e5c135c7ba267f709d6f6d4d70af0a"
+      },
+      {
+        "relativePath": "licenses/cargo/prettyplease-0.2.37.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/proc-macro2-1.0.106.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/quote-1.0.45.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/r-efi-5.3.0.txt",
+        "sha256": "69b097bfc70f2f8fdf6410232aa7f6d3f9db5ceb16e47e64dfc6cada6a39d296"
+      },
+      {
+        "relativePath": "licenses/cargo/r-efi-6.0.0.txt",
+        "sha256": "3c55cc8c224db3b7ec94e404bb8d4b755d1ae7a49178560ee64c3a87f82145f5"
+      },
+      {
+        "relativePath": "licenses/cargo/rand-0.8.6.txt",
+        "sha256": "35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab"
+      },
+      {
+        "relativePath": "licenses/cargo/rand-0.9.4.txt",
+        "sha256": "35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab"
+      },
+      {
+        "relativePath": "licenses/cargo/rand_chacha-0.9.0.txt",
+        "sha256": "35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab"
+      },
+      {
+        "relativePath": "licenses/cargo/rand_core-0.6.4.txt",
+        "sha256": "6df43f6f4b5d4587f3d8d71e45532c688fd168afa5fe89d571cb32fa09c4ef51"
+      },
+      {
+        "relativePath": "licenses/cargo/rand_core-0.9.5.txt",
+        "sha256": "6df43f6f4b5d4587f3d8d71e45532c688fd168afa5fe89d571cb32fa09c4ef51"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-0.30.1.txt",
+        "sha256": "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-core-0.1.1.txt",
+        "sha256": "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-crossterm-0.1.1.txt",
+        "sha256": "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-macros-0.7.1.txt",
+        "sha256": "e43659b17e780ed7dab2636dd9e0d6ca272faad9d116b575e25e346b0b0206e3"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-termwiz-0.1.1.txt",
+        "sha256": "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5"
+      },
+      {
+        "relativePath": "licenses/cargo/ratatui-widgets-0.3.1.txt",
+        "sha256": "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5"
+      },
+      {
+        "relativePath": "licenses/cargo/recvmsg-1.0.0.txt",
+        "sha256": "612938d4e581d578f2377fdaa2978ff9b79e2dd978f6b1ea45418af475258bbb"
+      },
+      {
+        "relativePath": "licenses/cargo/redox_syscall-0.5.18.txt",
+        "sha256": "efcfee7981ff72431fffb06925cad00a23dce079ed4354f61030ad5abdb78829"
+      },
+      {
+        "relativePath": "licenses/cargo/ref-cast-1.0.25.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/ref-cast-impl-1.0.25.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/regex-1.12.4.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/regex-automata-0.4.14.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/regex-syntax-0.8.11.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/rustc_version-0.4.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/rustix-1.1.4.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/rustversion-1.0.22.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/ryu-1.0.23.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/schemars-1.2.1.txt",
+        "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
+      },
+      {
+        "relativePath": "licenses/cargo/schemars_derive-1.2.1.txt",
+        "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
+      },
+      {
+        "relativePath": "licenses/cargo/scopeguard-1.2.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/semver-1.0.28.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde-1.0.228.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_core-1.0.228.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_derive-1.0.228.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_derive_internals-0.29.1.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_json-1.0.150.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_path_to_error-0.1.20.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/serde_urlencoded-0.7.1.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/sha1-0.10.6.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/sha2-0.10.9.txt",
+        "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      },
+      {
+        "relativePath": "licenses/cargo/sharded-slab-0.1.7.txt",
+        "sha256": "eafbfa606bc005ed7fd2f623d65af17ffe4ef7c017221ac14405bf4140771ea9"
+      },
+      {
+        "relativePath": "licenses/cargo/signal-hook-0.3.18.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/signal-hook-mio-0.2.5.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/signal-hook-registry-1.4.8.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/simd-adler32-0.3.9.txt",
+        "sha256": "42a35170233e83e18856792e748de4c1ce4a63b2afce9a370c89ef3fe23f9f2d"
+      },
+      {
+        "relativePath": "licenses/cargo/siphasher-1.0.3.txt",
+        "sha256": "c962ee4d1d05ddc138b202b2540219ebc57893fcf97b364852094a9a94ce1365"
+      },
+      {
+        "relativePath": "licenses/cargo/slab-0.4.12.txt",
+        "sha256": "8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18"
+      },
+      {
+        "relativePath": "licenses/cargo/smallvec-1.15.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/socket2-0.6.4.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/static_assertions-1.1.0.txt",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "relativePath": "licenses/cargo/strsim-0.11.1.txt",
+        "sha256": "1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd"
+      },
+      {
+        "relativePath": "licenses/cargo/strum-0.28.0.txt",
+        "sha256": "8bce3b45e49ecd1461f223b46de133d8f62cd39f745cfdaf81bee554b908bd42"
+      },
+      {
+        "relativePath": "licenses/cargo/strum_macros-0.28.0.txt",
+        "sha256": "8bce3b45e49ecd1461f223b46de133d8f62cd39f745cfdaf81bee554b908bd42"
+      },
+      {
+        "relativePath": "licenses/cargo/syn-1.0.109.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/syn-2.0.117.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/sync_wrapper-1.0.2.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/terminfo-0.9.0.txt",
+        "sha256": "cb48c148fb5c4903aac7905101492a3fb5acc252b98f0cceb8137dfcfa2f5956"
+      },
+      {
+        "relativePath": "licenses/cargo/termios-0.3.3.txt",
+        "sha256": "871afd9d691846de71e0b83812ba9c7ff00bc7b3ad102dedcaa109f2246d52ad"
+      },
+      {
+        "relativePath": "licenses/cargo/termwiz-0.23.3.txt",
+        "sha256": "191c46fcf52061382b1c51a70311eb9081381cc158e5899f3739473a9432185b"
+      },
+      {
+        "relativePath": "licenses/cargo/thiserror-1.0.69.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/thiserror-2.0.18.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/thiserror-impl-1.0.69.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/thiserror-impl-2.0.18.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/thread_local-1.1.9.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/time-0.3.49.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/time-core-0.1.9.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "relativePath": "licenses/cargo/tokio-1.52.3.txt",
+        "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552"
+      },
+      {
+        "relativePath": "licenses/cargo/tokio-macros-2.7.0.txt",
+        "sha256": "0b83dc40cba89b9922bb84b0a9c7d2768ce37c1d7e138b7424fd4549915778c9"
+      },
+      {
+        "relativePath": "licenses/cargo/tokio-tungstenite-0.29.0.txt",
+        "sha256": "fdd55e2b2da854b0fbdc1e607df7c2ba1e1ebf91ecb77c515511ebeef972bc8f"
+      },
+      {
+        "relativePath": "licenses/cargo/tokio-util-0.7.18.txt",
+        "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552"
+      },
+      {
+        "relativePath": "licenses/cargo/tower-0.5.3.txt",
+        "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
+      },
+      {
+        "relativePath": "licenses/cargo/tower-http-0.6.11.txt",
+        "sha256": "5049cf464977eff4b4fcfa7988d84e74116956a3eb9d5f1d451b3f828f945233"
+      },
+      {
+        "relativePath": "licenses/cargo/tower-layer-0.3.3.txt",
+        "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
+      },
+      {
+        "relativePath": "licenses/cargo/tower-service-0.3.3.txt",
+        "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
+      },
+      {
+        "relativePath": "licenses/cargo/tracing-0.1.44.txt",
+        "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      },
+      {
+        "relativePath": "licenses/cargo/tracing-attributes-0.1.31.txt",
+        "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      },
+      {
+        "relativePath": "licenses/cargo/tracing-core-0.1.36.txt",
+        "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      },
+      {
+        "relativePath": "licenses/cargo/tracing-log-0.2.0.txt",
+        "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      },
+      {
+        "relativePath": "licenses/cargo/tracing-subscriber-0.3.23.txt",
+        "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      },
+      {
+        "relativePath": "licenses/cargo/tungstenite-0.29.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/typenum-1.20.1.txt",
+        "sha256": "db11fec9946737df39ca3898d9cd8c10ec6f6c3a884a6802b0ad0b81b4e8f23a"
+      },
+      {
+        "relativePath": "licenses/cargo/ucd-trie-0.1.7.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unicase-2.9.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unicode-ident-1.0.24.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/unicode-segmentation-1.13.3.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unicode-truncate-2.0.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unicode-width-0.2.2.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unicode-xid-0.2.6.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/unty-0.0.4.txt",
+        "sha256": "fa84f04c495f2533ba036606acc8644b50077752f17bc2e943235459dda1c12c"
+      },
+      {
+        "relativePath": "licenses/cargo/utf8parse-0.2.2.txt",
+        "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+      },
+      {
+        "relativePath": "licenses/cargo/uuid-1.23.3.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/valuable-0.1.1.txt",
+        "sha256": "621a494c1098a15a81dc4d8761662018341b03fae0d568871c3fcfba010a1a39"
+      },
+      {
+        "relativePath": "licenses/cargo/version_check-0.9.5.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/virtue-0.0.18.txt",
+        "sha256": "ddcbb6914b62d5bebc3cb58ebe8d2738ffa9a48555469bbcbe65159979b878cf"
+      },
+      {
+        "relativePath": "licenses/cargo/vtparse-0.6.2.txt",
+        "sha256": "7b3995b77da85ff4680df60402b19656ce4ee38221d56b8cc472582c1ce73aef"
+      },
+      {
+        "relativePath": "licenses/cargo/wasi-0.11.1_wasi-snapshot-preview1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasip2-1.0.4_wasi-0.2.12.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasip3-0.4.0_wasi-0.3.0-rc-2026-01-06.txt",
+        "sha256": "0617f5cb3ffbcfd3ae4e414eabee192c723e0af87dcc24b6055a6583b7f40dec"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-bindgen-0.2.125.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-bindgen-macro-0.2.125.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-bindgen-macro-support-0.2.125.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-bindgen-shared-0.2.125.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-encoder-0.244.0.txt",
+        "sha256": "7206ed0f2f409c23ab41b29c53245569fb492a52b1b667b81a28b8ca0e910823"
+      },
+      {
+        "relativePath": "licenses/cargo/wasm-metadata-0.244.0.txt",
+        "sha256": "642fd0d0a5ca2067a86d80cda39f2bc69bd4a6dfd90b44cc71d0f7bf3a325087"
+      },
+      {
+        "relativePath": "licenses/cargo/wasmparser-0.244.0.txt",
+        "sha256": "a18894f7892254a08a6d4372038abbf82bcd0d55a9cbb00d72565ed18d86e533"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-bidi-0.2.3.txt",
+        "sha256": "1dcbf7520f16d99d33d0f05e25580c3861543a0bdaa5b6dfa767eed50d015026"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-blob-leases-0.1.1.txt",
+        "sha256": "3730b72de1998b2b32ceafc00ba1c0c21a98fb2bb68ee1774fb3fbe81657b68b"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-color-types-0.3.0.txt",
+        "sha256": "7f873413b130f78c13d88122352e71784b1655abb3e998dca94582341b6a46b9"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-dynamic-0.2.1.txt",
+        "sha256": "331312c214f14dc1455a0e45e3a66f4b70bbc73916cffd525570e8cdb9d63bf4"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-dynamic-derive-0.1.1.txt",
+        "sha256": "191c46fcf52061382b1c51a70311eb9081381cc158e5899f3739473a9432185b"
+      },
+      {
+        "relativePath": "licenses/cargo/wezterm-input-types-0.1.0.txt",
+        "sha256": "1b6ab7d594dc8de7bde678432fdb81e6cb8b626a6d353805dfe3fe1fc16f6db4"
+      },
+      {
+        "relativePath": "licenses/cargo/widestring-1.2.1.txt",
+        "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+      },
+      {
+        "relativePath": "licenses/cargo/winapi-0.3.9.txt",
+        "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+      },
+      {
+        "relativePath": "licenses/cargo/winapi-i686-pc-windows-gnu-0.4.0.txt",
+        "sha256": "b828cf92ae95515b05b92a5c20f6f504feeb16b3fc25b7ba0d363899be03aa1e"
+      },
+      {
+        "relativePath": "licenses/cargo/winapi-x86_64-pc-windows-gnu-0.4.0.txt",
+        "sha256": "c6250366ad14225d5e04295e089b4fc3dec30fc1e5c5e83a5a1ce001b264f939"
+      },
+      {
+        "relativePath": "licenses/cargo/windows-link-0.2.1.txt",
+        "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b"
+      },
+      {
+        "relativePath": "licenses/cargo/windows-sys-0.61.2.txt",
+        "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-bindgen-0.51.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-bindgen-0.57.1.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-bindgen-core-0.51.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-bindgen-rust-0.51.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-bindgen-rust-macro-0.51.0.txt",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-component-0.244.0.txt",
+        "sha256": "39aa95cf33d9b91aa5361f383f8f872bf86ebcb1c3a247faa66c7abac96745fb"
+      },
+      {
+        "relativePath": "licenses/cargo/wit-parser-0.244.0.txt",
+        "sha256": "5fcfef18868cbdbda278a12dc50ad320282c6fc3c56bfebc73de94ebda030ad6"
+      },
+      {
+        "relativePath": "licenses/cargo/zerocopy-0.8.52.txt",
+        "sha256": "9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3"
+      },
+      {
+        "relativePath": "licenses/cargo/zerocopy-derive-0.8.52.txt",
+        "sha256": "9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3"
+      },
+      {
+        "relativePath": "licenses/cargo/zmij-1.0.21.txt",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "relativePath": "licenses/foundation-MIT.txt",
+        "sha256": "53a2cde6a8399095d225feca14f9bd2898668869f7a8afc6b135565ddb750c50"
+      },
+      {
+        "relativePath": "licenses/foundation-original-MIT.txt",
+        "sha256": "3e4f86997d21d4c64a0b838011a470db2317144265f43f0ee66d209a4eace812"
+      },
+      {
+        "relativePath": "licenses/herdr-APACHE-2.0.txt",
+        "sha256": "dcf09a39e4a8d7914b3473ca185991d129df639be2a5238b7dd544d79052546f"
+      },
+      {
+        "relativePath": "licenses/npm/at-babel-runtime.txt",
+        "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      {
+        "relativePath": "licenses/npm/at-capacitor-app.txt",
+        "sha256": "e8f989836e88732576472006444b65fd3d7d3c2455becdaaa4d82cd0dd43110f"
+      },
+      {
+        "relativePath": "licenses/npm/at-capacitor-core.txt",
+        "sha256": "9c6ebf3e5ab832ba4d5af38f340978e1fedbfee6e3d23662dfdb8917a9d864dd"
+      },
+      {
+        "relativePath": "licenses/npm/at-capacitor-keyboard.txt",
+        "sha256": "e8f989836e88732576472006444b65fd3d7d3c2455becdaaa4d82cd0dd43110f"
+      },
+      {
+        "relativePath": "licenses/npm/at-capacitor-preferences.txt",
+        "sha256": "e8f989836e88732576472006444b65fd3d7d3c2455becdaaa4d82cd0dd43110f"
+      },
+      {
+        "relativePath": "licenses/npm/at-fontsource-variable-geist.txt",
+        "sha256": "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-debug.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-estree-jsx.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-estree.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-hast.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-mdast.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-ms.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-react.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-types-unist.txt",
+        "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      {
+        "relativePath": "licenses/npm/at-uiw-color-convert.txt",
+        "sha256": "463cfabb9c7d5a3c61663576e84fd334d80337cd1bb8e22aaf7ea2a165ee86a7"
+      },
+      {
+        "relativePath": "licenses/npm/at-uiw-react-color-wheel.txt",
+        "sha256": "375c39435c59bf268d6105ece7b513a9f145a24d922c239a785082ec1b471d48"
+      },
+      {
+        "relativePath": "licenses/npm/at-uiw-react-drag-event-interactive.txt",
+        "sha256": "975c4911a6f9f7419b71b9dc62c1b273184f6b3b785a2d5613af12dc68868775"
+      },
+      {
+        "relativePath": "licenses/npm/at-ungap-structured-clone.txt",
+        "sha256": "dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf"
+      },
+      {
+        "relativePath": "licenses/npm/bail.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/ccount.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/character-entities-html4.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/character-entities-legacy.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/character-entities.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/character-reference-invalid.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/comma-separated-tokens.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/csstype.txt",
+        "sha256": "11d55bd4541c75ee7879547ac49089c489163dae49551389713c3d026cab383e"
+      },
+      {
+        "relativePath": "licenses/npm/debug.txt",
+        "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95"
+      },
+      {
+        "relativePath": "licenses/npm/decode-named-character-reference.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/dequal.txt",
+        "sha256": "306fa513e39b23a6e8747520de761809d206b99800ef41907b530226574c59ae"
+      },
+      {
+        "relativePath": "licenses/npm/devlop.txt",
+        "sha256": "6f296a5eccc1dc96714bb94ebaa9cac25b0a1467d74cc5263ac4d0646ab01f62"
+      },
+      {
+        "relativePath": "licenses/npm/escape-string-regexp.txt",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      },
+      {
+        "relativePath": "licenses/npm/estree-util-is-identifier-name.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/extend.txt",
+        "sha256": "97af7428f93afbab9bf79cd09254da1357161794f4255eb1b4599f04dd2d2e7c"
+      },
+      {
+        "relativePath": "licenses/npm/ghostty-web.txt",
+        "sha256": "5eccd0eeca906db6d661b64dd05e1d4a4b2e49d37d43bbcfd2c8cce4d7832920"
+      },
+      {
+        "relativePath": "licenses/npm/hast-util-to-jsx-runtime.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/hast-util-whitespace.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/html-url-attributes.txt",
+        "sha256": "e18cf5173e928f808f0cd208097fee8fbec9d28fc0255213938e4c559e29ff58"
+      },
+      {
+        "relativePath": "licenses/npm/inline-style-parser.txt",
+        "sha256": "395c95f20598da653ff1eb1cb9d74947c7fac689697147f1d192fd0242a0e635"
+      },
+      {
+        "relativePath": "licenses/npm/is-alphabetical.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/is-alphanumerical.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/is-decimal.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/is-hexadecimal.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/is-plain-obj.txt",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      },
+      {
+        "relativePath": "licenses/npm/longest-streak.txt",
+        "sha256": "9f084fac69d8cf1e6ce983ba5a3499c7695ed74a26ec625c38f0fd19fddd5e10"
+      },
+      {
+        "relativePath": "licenses/npm/lucide-react.txt",
+        "sha256": "3c57143f22dac950efebf84002e360bba5458c7b90fe583b0667aaaef1a7256e"
+      },
+      {
+        "relativePath": "licenses/npm/markdown-table.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-find-and-replace.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-from-markdown.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm-autolink-literal.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm-footnote.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm-strikethrough.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm-table.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm-task-list-item.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-gfm.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-mdx-expression.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-mdx-jsx.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-mdxjs-esm.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-phrasing.txt",
+        "sha256": "b6d1a4e1831b177acc96f22a817d4f0f4c18419355badc3125754445fc69e3a7"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-to-hast.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-to-markdown.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/mdast-util-to-string.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-core-commonmark.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-autolink-literal.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-footnote.txt",
+        "sha256": "807a88522a850092aece49486207c17c313c4d5708ac276524840fe1caa0b0fa"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-strikethrough.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-table.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-tagfilter.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm-task-list-item.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-extension-gfm.txt",
+        "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-factory-destination.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-factory-label.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-factory-space.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-factory-title.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-factory-whitespace.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-character.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-chunked.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-classify-character.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-combine-extensions.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-decode-numeric-character-reference.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-decode-string.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-encode.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-html-tag-name.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-normalize-identifier.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-resolve-all.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-sanitize-uri.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-subtokenize.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-symbol.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark-util-types.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/micromark.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/ms.txt",
+        "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801"
+      },
+      {
+        "relativePath": "licenses/npm/parse-entities.txt",
+        "sha256": "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b"
+      },
+      {
+        "relativePath": "licenses/npm/property-information.txt",
+        "sha256": "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b"
+      },
+      {
+        "relativePath": "licenses/npm/react-dom.txt",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "relativePath": "licenses/npm/react-markdown.txt",
+        "sha256": "f6196c64e144f9a6fa9154c3a80bc8b89615a9567934b83a8951879f06ba2aef"
+      },
+      {
+        "relativePath": "licenses/npm/react.txt",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "relativePath": "licenses/npm/remark-gfm.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/remark-parse.txt",
+        "sha256": "413654b0a78b98661dce96d2aff2e4d075603d220b8483e28b1aa010ccc138b4"
+      },
+      {
+        "relativePath": "licenses/npm/remark-rehype.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/remark-stringify.txt",
+        "sha256": "413654b0a78b98661dce96d2aff2e4d075603d220b8483e28b1aa010ccc138b4"
+      },
+      {
+        "relativePath": "licenses/npm/scheduler.txt",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "relativePath": "licenses/npm/space-separated-tokens.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/stringify-entities.txt",
+        "sha256": "9f084fac69d8cf1e6ce983ba5a3499c7695ed74a26ec625c38f0fd19fddd5e10"
+      },
+      {
+        "relativePath": "licenses/npm/style-to-js.txt",
+        "sha256": "bbb380e5c1a717079378d6ea4d33c8a5a81655d4612b749f882e34e46712aab5"
+      },
+      {
+        "relativePath": "licenses/npm/style-to-object.txt",
+        "sha256": "896c9fd6b5fc48ac31800b9d29a6e3ffcb0c2d534ed077ebfa5c2fa388cc38b7"
+      },
+      {
+        "relativePath": "licenses/npm/trim-lines.txt",
+        "sha256": "9f084fac69d8cf1e6ce983ba5a3499c7695ed74a26ec625c38f0fd19fddd5e10"
+      },
+      {
+        "relativePath": "licenses/npm/trough.txt",
+        "sha256": "6c03fd41cfd7c92d8aa8a2fa521b94b2683f059123281dcf921ddea9216b6254"
+      },
+      {
+        "relativePath": "licenses/npm/tslib.txt",
+        "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
+      },
+      {
+        "relativePath": "licenses/npm/unified.txt",
+        "sha256": "05811400116ed61f1a7693b78fe8ca6598c155a12f3978e609db4df648a4cb3d"
+      },
+      {
+        "relativePath": "licenses/npm/unist-util-is.txt",
+        "sha256": "82974dbf2639d13edab95c32ed9cb6c0867ede272cd2e07ce47ce8548fe55c05"
+      },
+      {
+        "relativePath": "licenses/npm/unist-util-position.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/unist-util-stringify-position.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/unist-util-visit-parents.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "licenses/npm/unist-util-visit.txt",
+        "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf"
+      },
+      {
+        "relativePath": "licenses/npm/vfile-message.txt",
+        "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
+      },
+      {
+        "relativePath": "licenses/npm/vfile.txt",
+        "sha256": "05811400116ed61f1a7693b78fe8ca6598c155a12f3978e609db4df648a4cb3d"
+      },
+      {
+        "relativePath": "licenses/npm/zwitch.txt",
+        "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      {
+        "relativePath": "provenance/README.md",
+        "sha256": "fc38086063fcdc3453cf77de4fc4fce1339f634cbc5398c03da92ee4ed388d58"
+      },
+      {
+        "relativePath": "provenance/components.json",
+        "sha256": "ddfd13d4bd7567119420a5026748f4ef05d1e7fc8a2188c23ff36e0cbc74ae1e"
+      },
+      {
+        "relativePath": "provenance/herdr-web.md",
+        "sha256": "a5017747d17498ed715002c1f74b1579fa963146c50ecc1aaadd0a48139c2113"
+      },
+      {
+        "relativePath": "provenance/herdr-world-compat.md",
+        "sha256": "a566a66bbebb46ffa5807137c8a5f82a1f94ce83b727a198cab0802842f4d96b"
+      }
+    ]
+  },
+  "reproducibility": {
+    "packageBuiltTwiceFromCleanOutputDirectories": true,
+    "firstTarballSha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
+    "secondTarballSha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699"
+  },
+  "checksums": {
+    "package": "herdr-world-foundation-0.1.0.tgz.sha256",
+    "packageIntegrity": "herdr-world-foundation-0.1.0.tgz.integrity",
+    "bridge": "herdr-world-bridge-0.1.0-linux-x86_64.sha256",
+    "manifest": "manifest.json.sha256",
+    "all": "SHA256SUMS"
+  },
+  "buildTools": {
+    "node": "22.23.2",
+    "npm": "10.9.8",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "vite": "8.2.2",
+    "typescript": "5.9.3"
+  }
+}

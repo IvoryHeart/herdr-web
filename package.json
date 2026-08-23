@@ -9,6 +9,9 @@
     "dev:web": "npm run dev --prefix web",
     "dev:bridge": "scripts/run-bridge.sh",
     "test:surface-api": "node --test scripts/surface-api.test.mjs",
+    "foundation:verify": "node scripts/verify-foundation-artifact.mjs",
+    "test:foundation-boundary": "node --test scripts/foundation-boundary.test.mjs",
+    "test:foundation-artifact": "node --test scripts/foundation-artifact-negative.test.mjs",
     "build:web": "npm run build --prefix web",
     "test:dev": "node --test scripts/dev.test.mjs",
     "test:web": "npm run test --prefix web",
@@ -31,7 +34,7 @@
     "build": "npm run build:web && npm run bridge:build",
     "test": "npm run test:dev && npm run test:web && npm run bridge:test",
     "lint": "npm run lint:web && npm run bridge:fmt",
-    "check": "npm run vendor:check && npm run release:compliance && npm run lint && npm run test && npm run test:surface-api && npm run test:release-compliance && npm run build",
+    "check": "npm run foundation:verify && npm run vendor:check && npm run release:compliance && npm run lint && npm run test && npm run test:surface-api && npm run test:foundation-boundary && npm run test:foundation-artifact && npm run test:release-compliance && npm run build",
     "check:acceptance": "npm run check && npm run test:e2e && npm run test:security && npm run test:independence"
   },
   "devDependencies": {

@@ -11,6 +11,7 @@
     "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@herdr-world/foundation": "file:../vendor/foundation/herdr-world-foundation-0.1.0.tgz",
     "@babel/runtime": "^7.29.7",
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.4.0",

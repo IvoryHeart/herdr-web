@@ -1,11 +1,7 @@
-import "@fontsource-variable/geist/wght.css";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { AppShell } from "./AppShell";
-import { startNativeControls } from "./native";
+import { mountFoundationBrowser } from "@herdr-world/foundation";
+import "@herdr-world/foundation/styles.css";
+import { worldProductAssembly } from "./world/worldAssembly";
 import "./styles.css";
-
-startNativeControls();
 
 const root = document.getElementById("root");
 
@@ -13,8 +9,4 @@ if (!root) {
   throw new Error("missing root element");
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <AppShell />
-  </StrictMode>,
-);
+mountFoundationBrowser(root, worldProductAssembly);

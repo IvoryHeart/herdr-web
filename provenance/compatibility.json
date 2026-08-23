@@ -1,6 +1,21 @@
 {
   "schema_version": 1,
-  "release": "source-first pre-extraction baseline",
+  "release": "World package cutover against Foundation v0.1.0-rc.1",
+  "foundation": {
+    "repository": "https://github.com/IvoryHeart/herdr-world-foundation",
+    "package": "@herdr-world/foundation",
+    "version": "0.1.0",
+    "source_commit": "a6104b683963651d60a061cfcbd91d9fdc5effde",
+    "tag": "v0.1.0-rc.1",
+    "release_url": "https://github.com/IvoryHeart/herdr-world-foundation/releases/tag/v0.1.0-rc.1",
+    "package_sha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
+    "package_integrity": "sha512-OuCHH4Wfk5p2mflZdlBRFDYrHVNuIB1Ec2+C0BfkLD8a5EFsVF5LzFBoNDFpQRrg1UX2DxgZ/ewh8mQyuxPumg==",
+    "bridge_version": "0.1.0",
+    "bridge_sha256": "a8041e7e6d888678185c0c934f5a0f9162cb43fe84b54e8c1f468aaa6431b7fa",
+    "surface_api": 1,
+    "bridge_api": 1,
+    "web_compat": 1
+  },
   "herdr": {
     "repository": "https://github.com/herdrdev/herdr",
     "release": "v0.8.2",

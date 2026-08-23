@@ -1,16 +1,24 @@
 {
   "schema_version": 1,
   "project": "herdr-world",
-  "purpose": "Declarative release assembly boundary for the current pre-extraction World checkout.",
+  "purpose": "Declarative release assembly boundary for World consuming the immutable Foundation v0.1.0 candidate.",
   "source_commit": "recorded-at-build-time",
   "compatibility": {
     "herdr_release": "v0.8.2",
     "herdr_commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
     "terminal_protocol": 20,
-    "foundation_repository": "current combined checkout; physical Foundation extraction is Spec 016",
-    "foundation_version": "recorded-at-build-time",
-    "surface_api_version": null,
-    "web_compat": "protocol-20 current bridge compatibility; record exact response in the release manifest"
+    "foundation_repository": "IvoryHeart/herdr-world-foundation",
+    "foundation_version": "0.1.0",
+    "foundation_source_commit": "a6104b683963651d60a061cfcbd91d9fdc5effde",
+    "foundation_release_tag": "v0.1.0-rc.1",
+    "foundation_release_url": "https://github.com/IvoryHeart/herdr-world-foundation/releases/tag/v0.1.0-rc.1",
+    "foundation_package_sha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
+    "foundation_package_integrity": "sha512-OuCHH4Wfk5p2mflZdlBRFDYrHVNuIB1Ec2+C0BfkLD8a5EFsVF5LzFBoNDFpQRrg1UX2DxgZ/ewh8mQyuxPumg==",
+    "foundation_bridge_version": "0.1.0",
+    "foundation_bridge_sha256": "a8041e7e6d888678185c0c934f5a0f9162cb43fe84b54e8c1f468aaa6431b7fa",
+    "surface_api_version": 1,
+    "bridge_api": 1,
+    "web_compat": 1
   },
   "artifacts": {
     "source-archive": {
