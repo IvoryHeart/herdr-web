@@ -7,6 +7,9 @@ import WorldSurface from "./WorldSurface";
 import type { WorldCommandDialog, WorldSurfaceContext } from "./WorldSurface";
 import { projectHerdrOffice } from "./herdrOfficeProjection";
 import type { HerdrOfficeSourceHost } from "./herdrOfficeProjection";
+import {
+  officeAgentFoundationHandoffRequest,
+} from "./worldFoundationHandoff";
 import type { WorldFoundationHandoffRequest } from "./worldFoundationHandoff";
 import {
   readWorldCompletionSeenKeys,
@@ -69,17 +72,7 @@ export function createWorldOfficeContext(host: SurfaceHostV1): WorldOfficeStore 
               writeOpenConversationKeys(openConversationKeys);
               refresh();
             }}
-            onOpenInSpaces={() => {
-              host.navigation.goTo("spaces");
-              void host.commands.dispatch({
-                type: "focusPane",
-                target: {
-                  identity: runtime.identity,
-                  kind: "pane",
-                  nativeTargetId: entry.agent.currentPaneRef.nativeTargetId,
-                },
-              });
-            }}
+            onOpenInSpaces={() => void openInSpaces(officeAgentFoundationHandoffRequest(entry.agent))}
             activityAt={activityTransitions.get(agentActivityKey(
               entry.agent.hostKey,
               entry.agent.currentPaneRef.nativeTargetId,
