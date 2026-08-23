@@ -23,7 +23,7 @@ web/src/main.tsx
 ```
 
 The checked build (`npm run build --prefix web`) produced the Foundation host
-and World assembly in `web/dist/assets/main-CkJwiBQh.js` (910,700 bytes), the
+and World assembly in `web/dist/assets/main-Dg2ncxeA.js` (910,560 bytes), the
 Foundation terminal chunk in `ghostty-web-0K3DfDqq-CdDHdjG2.js` (636,569
 bytes), and the combined stylesheet in `main-B0RgYzSQ.css` (171,605 bytes).
 It emits both `web/dist/index.html` and `web/dist/world/index.html`; the latter

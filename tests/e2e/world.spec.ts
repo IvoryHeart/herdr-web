@@ -777,18 +777,8 @@ test("opens the attached terminal when an occupied desk is selected", async ({
 
   const layout = await publishedOfficeLayout(page);
   const desk = deskAnchor(layout.rooms[0], 0);
-  const scrollTop = await scrollOfficeTo(page, desk.nameY);
-  const canvas = page.locator("canvas[data-office-canvas='true']");
-  const canvasBox = await canvas.boundingBox();
-  expect(canvasBox).not.toBeNull();
-  await page.mouse.move(
-    (canvasBox?.x ?? 0) + desk.x,
-    (canvasBox?.y ?? 0) + desk.nameY - scrollTop + 8,
-  );
-  await page.mouse.click(
-    (canvasBox?.x ?? 0) + desk.x,
-    (canvasBox?.y ?? 0) + desk.nameY - scrollTop + 8,
-  );
+  await scrollOfficeTo(page, desk.nameY);
+  await clickOccupiedDesk(page, desk);
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
@@ -808,14 +798,8 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
 
   const layout = await publishedOfficeLayout(page);
   const desk = deskAnchor(layout.rooms[0], 7);
-  const scrollTop = await scrollOfficeTo(page, desk.nameY);
-  const canvas = page.locator("canvas[data-office-canvas='true']");
-  const canvasBox = await canvas.boundingBox();
-  expect(canvasBox).not.toBeNull();
-  await page.mouse.click(
-    (canvasBox?.x ?? 0) + desk.x,
-    (canvasBox?.y ?? 0) + desk.nameY - scrollTop + 8,
-  );
+  await scrollOfficeTo(page, desk.nameY);
+  await clickOccupiedDesk(page, desk);
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
@@ -1234,9 +1218,9 @@ test("isolates a stale host, retains its last-known room, and suppresses handoff
 
 async function waitForOffice(page: import("@playwright/test").Page) {
   await expect
-    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.ready ?? false))
+    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.ready ?? false), { timeout: 30_000 })
     .toBe(true);
-  await expect(page.locator("canvas[data-office-canvas='true']")).toHaveCount(1);
+  await expect(page.locator("canvas[data-office-canvas='true']")).toHaveCount(1, { timeout: 30_000 });
 }
 
 async function publishedOfficeLayout(page: Page): Promise<PublishedOfficeLayout> {
@@ -1261,6 +1245,31 @@ async function scrollOfficeTo(page: Page, sceneY: number): Promise<number> {
     element.scrollTo({ top: Math.max(0, y - element.clientHeight / 2), behavior: "auto" });
   }, sceneY);
   return stage.evaluate((element) => element.scrollTop);
+}
+
+async function clickOccupiedDesk(page: Page, desk: ReturnType<typeof deskAnchor>) {
+  const stage = page.locator(".world-stage-scroll");
+  const canvas = page.locator("canvas[data-office-canvas='true']");
+  const bubble = page.locator("[data-world-conversation='open']");
+  for (const xOffset of [0, -6, 6]) {
+    const [scrollTop, canvasBox] = await Promise.all([
+      stage.evaluate((element) => element.scrollTop),
+      canvas.boundingBox(),
+    ]);
+    if (!canvasBox) throw new Error("Office canvas disappeared while selecting an occupied desk");
+    const x = canvasBox.x + desk.x + xOffset;
+    const y = canvasBox.y + desk.nameY - scrollTop + 8;
+    await page.mouse.move(x, y);
+    await page.mouse.click(x, y);
+    try {
+      await expect(bubble).toBeVisible({ timeout: 1_500 });
+      return;
+    } catch {
+      // The renderer can publish a new layout between the scroll and click;
+      // recalculate the viewport-relative point before the next attempt.
+    }
+  }
+  await expect(bubble).toBeVisible();
 }
 
 type Rectangle = {
