@@ -100,8 +100,20 @@ export function WorldFoundationConversation({
           {activityAt === null ? " · No transition data available" : ` · ${new Date(activityAt).toLocaleTimeString()}`}
         </span>
         <div className="world-conversation-actions">
-          <button className="icon-btn" type="button" aria-label="Open full terminal in Spaces" onClick={onOpenInSpaces}>↗</button>
-          <button className="icon-btn" type="button" aria-label="Close agent conversation" onClick={onClose}>×</button>
+          <button
+            className="icon-btn"
+            type="button"
+            aria-label="Open full terminal in Spaces"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onOpenInSpaces}
+          >↗</button>
+          <button
+            className="icon-btn"
+            type="button"
+            aria-label="Close agent conversation"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onClose}
+          >×</button>
         </div>
       </header>
       <div className="world-conversation-terminal terminal-stage" ref={terminalRef} data-terminal-translucent="true" onWheel={(event) => {

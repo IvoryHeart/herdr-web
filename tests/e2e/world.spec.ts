@@ -1055,6 +1055,7 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await page.locator(".world-office-agent").filter({ hasText: "Agent 02" }).click();
   await page.getByRole("dialog", { name: "Agent 02" }).getByRole("button", { name: "Close agent conversation" }).click();
   await page.getByRole("dialog", { name: "Agent 10" }).getByRole("button", { name: "Close agent conversation" }).click();
+  await expect(page.locator("[data-world-conversation='open']")).toHaveCount(0);
   await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   const layout = await publishedOfficeLayout(page);
   const anchor = standingAnchor(layout.rooms[0], 1);

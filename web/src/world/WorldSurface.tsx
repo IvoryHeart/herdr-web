@@ -589,14 +589,14 @@ function WorldStage({
     if (context.compact || event.button !== 0) {
       return;
     }
-    focusConversation(id);
     const target = event.target instanceof Element ? event.target : null;
     const resizeHandle = target?.closest("[data-world-conversation-resize='true']");
     const header = target?.closest(".world-conversation-header");
-    if (!resizeHandle && !header) {
+    if (!resizeHandle && target?.closest("button, a, input, textarea, select")) {
       return;
     }
-    if (header && target?.closest("button, a, input, textarea, select")) {
+    focusConversation(id);
+    if (!resizeHandle && !header) {
       return;
     }
     const geometry = conversationGeometryRef.current[id] ?? measuredConversationGeometry(id);
