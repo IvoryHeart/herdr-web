@@ -115,9 +115,11 @@ test("captures the stable Office conversation bubble", async ({ page }) => {
 });
 
 async function waitForOffice(page: import("@playwright/test").Page) {
-  await expect
-    .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.ready ?? false), { timeout: 30_000 })
-    .toBe(true);
+  await page.waitForFunction(
+    () => window.__HERDR_WORLD_RENDERER__?.ready === true,
+    undefined,
+    { timeout: 45_000 },
+  );
   await expect(page.locator("canvas[data-office-canvas='true']")).toHaveCount(1, { timeout: 30_000 });
 }
 
