@@ -147,6 +147,7 @@ function context(): WorldSurfaceContext {
     selectedKey: null,
     completionSeenKeys: new Set(),
     onSelect: vi.fn(),
+    onOpenConversation: vi.fn(),
     compact: false,
     onBackToSidebar: vi.fn(),
     onToggleSidebar: vi.fn(),

@@ -55,7 +55,8 @@ test("refreshes the selected surface and keeps the joined multi-bridge view admi
 
   await hostGroup.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.getByRole("button", { name: /Codex B/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Codex C/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Codex C/ })).toHaveCount(0);
+  await expect(page.getByText(/Protocol C.*not compatible/)).toBeVisible();
   await page.getByRole("button", { name: "Foundation surface: Office", exact: true }).click();
   await expect(page.locator(".world-canvas-host[data-renderer='pixi']")).toBeVisible();
 

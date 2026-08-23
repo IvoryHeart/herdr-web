@@ -54,6 +54,7 @@ export type WorldSurfaceContext = {
   selectedKey: string | null;
   completionSeenKeys: ReadonlySet<string>;
   onSelect: (key: string | null) => void;
+  onOpenConversation: (key: string) => void;
   compact: boolean;
   onBackToSidebar: () => void;
   onToggleSidebar: () => void;
@@ -73,6 +74,15 @@ export type WorldSurfaceContext = {
   onRenameRoom: (roomKey: string) => void;
   canCloseRoom: (roomKey: string) => boolean;
   onCloseRoom: (roomKey: string) => void;
+  commandDialog?: WorldCommandDialog | null;
+  onCancelCommandDialog?: () => void;
+  onSubmitCommandDialog?: (value: string) => void;
+};
+
+export type WorldCommandDialog = {
+  kind: "newSeat" | "createRoom" | "renameRoom" | "closeRoom";
+  roomKey?: string;
+  roomLabel?: string;
 };
 
 export type WorldConversationBubblePanel = {
@@ -144,6 +154,7 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   },
   completionSeenKeys: new Set(),
   onSelect: () => {},
+  onOpenConversation: () => {},
   compact: false,
   onBackToSidebar: () => {},
   onToggleSidebar: () => {},
@@ -163,6 +174,9 @@ const FALLBACK_CONTEXT: WorldSurfaceContext = {
   onRenameRoom: () => {},
   canCloseRoom: () => false,
   onCloseRoom: () => {},
+  commandDialog: null,
+  onCancelCommandDialog: () => {},
+  onSubmitCommandDialog: () => {},
 };
 
 export default function WorldSurface({ context }: SurfaceComponentProps) {
@@ -175,6 +189,9 @@ export default function WorldSurface({ context }: SurfaceComponentProps) {
       return;
     }
     worldContext.onSelect(key);
+    if (agent.stale || !agent.canOpenInSpaces) {
+      return;
+    }
     worldContext.onOpenInSpaces(officeAgentFoundationHandoffRequest(agent));
   };
   const onActivateRoom = (key: string) => {
@@ -183,6 +200,9 @@ export default function WorldSurface({ context }: SurfaceComponentProps) {
       return;
     }
     worldContext.onSelect(key);
+    if (room.stale || !room.canOpenInSpaces) {
+      return;
+    }
     worldContext.onOpenInSpaces(officeRoomFoundationHandoffRequest(room));
   };
   return (
@@ -784,6 +804,25 @@ function WorldStage({
           <RotateCcw size={16} />
         </button>
       </header>
+      <nav className="world-office-roster" aria-label="Office agent roster">
+        {projection.roster.map(({ agent }) => (
+          <button
+            key={agent.key}
+            className="world-office-agent"
+            type="button"
+            aria-pressed={context.selectedKey === agent.key}
+            data-status={agent.stale ? "stale" : agent.semanticStatus}
+            onClick={() => {
+              context.onSelect(agent.key);
+              context.onOpenConversation?.(agent.key);
+            }}
+            onDoubleClick={() => onActivateAgent(agent.key)}
+          >
+            <span>{agent.displayLabel}</span>
+            <small>{agent.stateLabels[agent.semanticStatus] ?? agent.semanticStatus}</small>
+          </button>
+        ))}
+      </nav>
       <div
         ref={scrollRef}
         className="world-stage-scroll"
@@ -802,6 +841,7 @@ function WorldStage({
             targetKey: panel.targetKey,
           }))}
           onSelect={context.onSelect}
+          onOpenConversation={context.onOpenConversation}
           onActivateAgent={onActivateAgent}
           onActivateRoom={onActivateRoom}
           canCreateSeat={context.canCreateSeat}
@@ -824,6 +864,7 @@ function WorldStage({
             top={agentBarRect?.y}
             interactive={agentBarReady}
             onSelect={context.onSelect}
+            onOpenConversation={context.onOpenConversation ?? (() => {})}
             onActivateAgent={onActivateAgent}
           />
           {officeLayout ? (
@@ -899,6 +940,80 @@ function WorldStage({
           </div>
         );
       })}
+      {context.commandDialog ? (
+        <WorldCommandDialogView
+          key={`${context.commandDialog.kind}:${context.commandDialog.roomKey ?? ""}`}
+          dialog={context.commandDialog}
+          onCancel={context.onCancelCommandDialog ?? (() => {})}
+          onSubmit={context.onSubmitCommandDialog ?? (() => {})}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorldCommandDialogView({
+  dialog,
+  onCancel,
+  onSubmit,
+}: {
+  dialog: WorldCommandDialog;
+  onCancel: () => void;
+  onSubmit: (value: string) => void;
+}) {
+  const [value, setValue] = useState(
+    dialog.kind === "renameRoom" ? dialog.roomLabel ?? "" : "",
+  );
+  const title = dialog.kind === "newSeat"
+    ? "New tab"
+    : dialog.kind === "createRoom"
+      ? "Create room"
+      : dialog.kind === "renameRoom"
+        ? "Rename room"
+        : "Close room";
+  if (dialog.kind === "closeRoom") {
+    return (
+      <div className="modal-backdrop" role="dialog" aria-label="Close room">
+        <div className="modal">
+          <header className="modal-header"><h2 className="modal-title">{title}</h2></header>
+          <div className="modal-content"><p>This closes the Herdr workspace and its tabs.</p></div>
+          <footer className="modal-actions">
+            <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+            <button type="button" className="btn btn-danger" onClick={() => onSubmit("")}>Close room</button>
+          </footer>
+        </div>
+      </div>
+    );
+  }
+  if (dialog.kind === "newSeat") {
+    return (
+      <div className="modal-backdrop" role="dialog" aria-label="New tab">
+        <form className="modal launch-modal" onSubmit={(event) => { event.preventDefault(); onSubmit("Shell"); }}>
+          <header className="modal-header"><h2 className="modal-title">{title}</h2></header>
+          <div className="modal-content"><p>Start a new Shell seat in {dialog.roomLabel ?? "this room"}.</p></div>
+          <footer className="modal-actions">
+            <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Create</button>
+          </footer>
+        </form>
+      </div>
+    );
+  }
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label={title}>
+      <form className="modal" onSubmit={(event) => { event.preventDefault(); onSubmit(value); }}>
+        <header className="modal-header"><h2 className="modal-title">{title}</h2></header>
+        <div className="modal-content">
+          <label className="field-label">
+            <span>Room name</span>
+            <input className="field" value={value} onChange={(event) => setValue(event.target.value)} autoFocus />
+          </label>
+        </div>
+        <footer className="modal-actions">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn btn-primary">Save</button>
+        </footer>
+      </form>
     </div>
   );
 }
@@ -1069,6 +1184,7 @@ function isWorldSurfaceContext(value: unknown): value is WorldSurfaceContext {
   const record = value as Partial<WorldSurfaceContext>;
   return (
     typeof record.onSelect === "function" &&
+    typeof record.onOpenConversation === "function" &&
     typeof record.onBackToSidebar === "function" &&
     typeof record.onToggleSidebar === "function" &&
     typeof record.onOpenInSpaces === "function" &&
@@ -1098,6 +1214,7 @@ function WorldAgentBar({
   top,
   interactive,
   onSelect,
+  onOpenConversation,
   onActivateAgent,
 }: {
   className?: string;
@@ -1109,6 +1226,7 @@ function WorldAgentBar({
   top?: number;
   interactive: boolean;
   onSelect: (key: string) => void;
+  onOpenConversation: (key: string) => void;
   onActivateAgent: (key: string) => void;
 }) {
   const idleCount = projection.barAgents.filter(({ semanticStatus }) => semanticStatus === "idle").length;
@@ -1158,7 +1276,10 @@ function WorldAgentBar({
                   data-status={status}
                   disabled={!interactive}
                   title={agent.taskSummary ?? `${agent.displayLabel} · ${statusLabel}`}
-                  onClick={() => onSelect(agent.key)}
+                  onClick={() => {
+                    onSelect(agent.key);
+                    onOpenConversation(agent.key);
+                  }}
                   onDoubleClick={() => onActivateAgent(agent.key)}
                 >
                   <img

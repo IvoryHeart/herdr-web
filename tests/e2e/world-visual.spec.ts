@@ -39,7 +39,7 @@ for (const viewport of [
       .click();
     await waitForLiveOffice(page);
     await expect(page.locator(".brand-sub")).toHaveText("3 blocked");
-    const selectedAgent = page.locator(".agent-row").filter({ hasText: "Agent 11" });
+    const selectedAgent = page.locator(".world-office-agent").filter({ hasText: "Agent 11" });
     await selectedAgent.click();
     await expect(page.locator(".world-stage-notice")).toHaveCount(0);
     await page.screenshot({
@@ -66,7 +66,9 @@ test("captures deterministic compact Office with shared sidebar at 375x812", asy
     animations: "disabled",
   });
 
-  await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
+  await page.getByRole("button", { name: "Back to Herdr sidebar" }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await page.screenshot({
     path: resolve(evidenceDir, "world-live-375x812-sidebar.png"),
@@ -83,10 +85,11 @@ test("captures the stable Office conversation bubble", async ({ page }) => {
     .getByRole("button", { name: "All", exact: true })
     .click();
   await waitForLiveOffice(page);
-  await page.locator(".agent-row").filter({ hasText: "Agent 11" }).click();
+  await page.locator(".world-office-agent").filter({ hasText: "Agent 11" }).click();
   const conversation = page.locator("[data-world-conversation='open']");
   await expect(conversation).toBeVisible();
-  await expect(conversation.locator(".terminal-overlay")).toHaveCount(0);
+  await expect(conversation.locator(".world-conversation-terminal")).toHaveCount(1);
+  await expect(conversation.locator("pre")).toContainText("terminal ready");
   await page.screenshot({
     path: resolve(conversationEvidenceDir, "office-conversation-1440x900.png"),
     animations: "disabled",
@@ -95,10 +98,14 @@ test("captures the stable Office conversation bubble", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/world");
   await waitForOffice(page);
-  await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
+  await page.getByRole("button", { name: "Back to Herdr sidebar" }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await page.locator(".agent-row").filter({ hasText: "Agent 11" }).click();
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office", exact: true }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
   await waitForOffice(page);
   await expect(page.locator("[data-world-conversation='open']")).toBeVisible();
   await page.screenshot({
@@ -115,13 +122,13 @@ async function waitForOffice(page: import("@playwright/test").Page) {
 }
 
 async function waitForFrameFixtures(page: import("@playwright/test").Page) {
-  await expect(page.getByRole("button", { name: "Remote B, compatible" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Protocol C, incompatible" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Malformed D, incompatible" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Offline E, offline" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Remote B" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Protocol C" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Malformed D" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Offline E" })).toBeAttached();
 }
 
 async function waitForLiveOffice(page: import("@playwright/test").Page) {
-  await expect(page.locator(".agent-row").filter({ hasText: "Agent 01" })).toBeAttached();
-  await expect(page.locator(".agent-row").filter({ hasText: "Agent 11" })).toBeAttached();
+  await expect(page.locator(".world-office-agent").filter({ hasText: "Agent 01" })).toBeAttached();
+  await expect(page.locator(".world-office-agent").filter({ hasText: "Agent 11" })).toBeAttached();
 }

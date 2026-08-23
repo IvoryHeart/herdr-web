@@ -60,7 +60,7 @@ test("sustains the bounded 129-room fixture within the frame and memory budgets"
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.layout?.rooms ?? 0))
     .toBe(128);
-  await expect(page.locator(".agent-row")).toHaveCount(16);
+  await expect(page.locator(".world-office-agent")).toHaveCount(16);
   await page.waitForTimeout(2_000);
 
   const start = await page.evaluate(() => ({

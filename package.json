@@ -31,7 +31,7 @@
     "android:open": "cap open android",
     "package:tarball": "scripts/package-tarball.sh",
     "package:source": "scripts/package-source.sh",
-    "build": "npm run build:web && npm run bridge:build",
+    "build": "npm run build:web && node scripts/resolve-foundation-bridge.mjs --path >/dev/null",
     "test": "npm run test:dev && npm run test:web && npm run bridge:test",
     "lint": "npm run lint:web && npm run bridge:fmt",
     "check": "npm run foundation:verify && npm run vendor:check && npm run release:compliance && npm run lint && npm run test && npm run test:surface-api && npm run test:foundation-boundary && npm run test:foundation-artifact && npm run test:release-compliance && npm run build",

@@ -152,7 +152,23 @@ async function startFixture(fixture) {
     }
     if (url.pathname === "/api/selection" && request.method === "POST") {
       const body = await readJson(request);
+      if (fixtureStates.get(fixture.id)?.snapshotMode === "offline") {
+        json(response, 503, { error: "fixture offline" });
+        return;
+      }
       logs.get(fixture.id).selections.push(body);
+      const state = fixtureStates.get(fixture.id);
+      if (typeof body.pane_id === "string") {
+        fixtureStates.set(fixture.id, { ...state, selectedPaneId: body.pane_id });
+        for (const client of fixtureSockets.get(fixture.id) ?? []) {
+          if (client.path === "/ws/ui-events" && client.socket.readyState === 1) {
+            client.socket.send(JSON.stringify({
+              type: "herdr_web.selection_changed",
+              pane_id: body.pane_id,
+            }));
+          }
+        }
+      }
       json(response, 200, { ok: true });
       return;
     }
@@ -295,6 +311,7 @@ function defaultFixtureState() {
     commands: null,
     launchCreatesSeat: false,
     launchedSeat: false,
+    selectedPaneId: null,
   };
 }
 
@@ -329,6 +346,7 @@ function setFixtureState(hostId, value) {
     commands,
     launchCreatesSeat,
     launchedSeat: current.launchedSeat,
+    selectedPaneId: current.selectedPaneId,
   });
   return true;
 }
@@ -340,22 +358,23 @@ function snapshot(fixture, stateOrVariant = "default") {
     return { workspaces: [], tabs: [], panes: [], layouts: [] };
   }
   if (variant === "large") {
-    return largeSnapshot(fixture);
+    return largeSnapshot(fixture, state);
   }
   if (variant === "idle-desk") {
-    return idleDeskSnapshot(fixture);
+    return idleDeskSnapshot(fixture, state);
   }
   if (variant === "long-title") {
     return longTitleSnapshot(fixture);
   }
   const suffix = fixture.id.at(-1).toUpperCase();
+  const selectedPaneId = state?.selectedPaneId ?? "p1";
   const result = {
     workspaces: [
       {
         workspace_id: "main",
         number: 1,
         label: "main",
-        focused: true,
+        focused: selectedPaneId === "p1",
         pane_count: 1,
         tab_count: 1,
         active_tab_id: "tab-1",
@@ -368,7 +387,7 @@ function snapshot(fixture, stateOrVariant = "default") {
         workspace_id: "main",
         number: 1,
         label: `Agent ${suffix}`,
-        focused: true,
+        focused: selectedPaneId === "p1",
         pane_count: 1,
         agent_status: fixture.id === "host-b" ? "blocked" : "working",
       },
@@ -379,7 +398,7 @@ function snapshot(fixture, stateOrVariant = "default") {
         terminal_id: "t1",
         workspace_id: "main",
         tab_id: "tab-1",
-        focused: true,
+        focused: selectedPaneId === "p1",
         cwd: `/fixture/${fixture.id}`,
         label: `Codex ${suffix}`,
         agent: "codex",
@@ -393,8 +412,26 @@ function snapshot(fixture, stateOrVariant = "default") {
       },
     ],
     layouts: [],
-    selected_pane_id: "p1",
+    selected_pane_id: selectedPaneId,
   };
+  const selectedPane = result.panes.find((pane) => pane.pane_id === selectedPaneId);
+  if (selectedPane) {
+    result.workspaces = result.workspaces.map((workspace) => ({
+      ...workspace,
+      focused: workspace.workspace_id === selectedPane.workspace_id,
+      active_tab_id: workspace.workspace_id === selectedPane.workspace_id
+        ? selectedPane.tab_id
+        : workspace.active_tab_id,
+    }));
+    result.tabs = result.tabs.map((tab) => ({
+      ...tab,
+      focused: tab.tab_id === selectedPane.tab_id,
+    }));
+    result.panes = result.panes.map((pane) => ({
+      ...pane,
+      focused: pane.pane_id === selectedPaneId,
+    }));
+  }
   if (state?.launchedSeat) {
     result.workspaces[0] = {
       ...result.workspaces[0],
@@ -439,7 +476,7 @@ function longTitleSnapshot(fixture) {
   return result;
 }
 
-function largeSnapshot(fixture) {
+function largeSnapshot(fixture, state = null) {
   const workspaceCount = fixture.id === "host-a" ? 128 : 1;
   const workspaces = Array.from({ length: workspaceCount }, (_, index) => ({
     workspace_id: `workspace-${index + 1}`,
@@ -488,11 +525,31 @@ function largeSnapshot(fixture) {
         largePane(15, "done", "workspace-1-tab-6"),
       ]
     : [];
-  return { workspaces, tabs, panes, layouts: [], selected_pane_id: panes[0]?.pane_id };
+  const selectedPaneId = state?.selectedPaneId ?? panes[0]?.pane_id;
+  const selectedPane = panes.find((pane) => pane.pane_id === selectedPaneId);
+  return {
+    workspaces: workspaces.map((workspace) => ({
+      ...workspace,
+      focused: selectedPane ? workspace.workspace_id === selectedPane.workspace_id : workspace.focused,
+      active_tab_id: selectedPane && workspace.workspace_id === selectedPane.workspace_id
+        ? selectedPane.tab_id
+        : workspace.active_tab_id,
+    })),
+    tabs: tabs.map((tab) => ({
+      ...tab,
+      focused: selectedPane ? tab.tab_id === selectedPane.tab_id : tab.focused,
+    })),
+    panes: panes.map((pane) => ({
+      ...pane,
+      focused: selectedPane ? pane.pane_id === selectedPaneId : pane.focused,
+    })),
+    layouts: [],
+    selected_pane_id: selectedPaneId,
+  };
 }
 
-function idleDeskSnapshot(fixture) {
-  const snapshot = largeSnapshot(fixture);
+function idleDeskSnapshot(fixture, state = null) {
+  const snapshot = largeSnapshot(fixture, state);
   return {
     ...snapshot,
     panes: snapshot.panes.map((pane) =>

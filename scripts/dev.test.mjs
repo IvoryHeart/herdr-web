@@ -270,7 +270,7 @@ test("SIGTERM stops both managed processes", { concurrency: false }, async () =>
   }
 });
 
-test("SIGTERM during an automatic bridge build stops the build process", { concurrency: false }, async () => {
+test("a missing verified Foundation bridge fails without building a local fallback", { concurrency: false }, async () => {
   const fixture = await makeFixture();
   let run;
   try {
@@ -279,33 +279,38 @@ test("SIGTERM during an automatic bridge build stops the build process", { concu
     await mkdir(path.join(projectRoot, "scripts"), { recursive: true });
     await mkdir(path.join(projectRoot, "web", "node_modules"), { recursive: true });
     await copyFile(DEV_SCRIPT, scriptPath);
+    await writeFile(
+      path.join(projectRoot, "scripts", "resolve-foundation-bridge.mjs"),
+      `process.stdout.write(${JSON.stringify(path.join(fixture.directory, "missing-bridge"))} + "\\n");\n`,
+    );
     const env = {
       ...process.env,
       PATH: `${path.join(fixture.directory, "bin")}${path.delimiter}${process.env.PATH}`,
-      FAKE_BUILD_HANG: "1",
-      FAKE_BUILD_LOG: fixture.buildLog,
-      FAKE_BUILD_STOP_LOG: fixture.buildStopLog,
+      HERDR_WEB_DEV_HOST: "127.0.0.1",
+      HERDR_WEB_DEV_PORT: String(await reservePort()),
     };
     delete env.HERDR_WEB_BRIDGE_BIN;
-    const child = spawn(process.execPath, [scriptPath], {
-      cwd: projectRoot,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk));
-    child.stderr.on("data", (chunk) => (output += chunk));
-    const result = new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) => resolve({ code, signal, output }));
-    });
-    run = { child, result };
+    run = (() => {
+      const child = spawn(process.execPath, [scriptPath], {
+        cwd: projectRoot,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      child.stdout.on("data", (chunk) => (output += chunk));
+      child.stderr.on("data", (chunk) => (output += chunk));
+      const result = new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal, output }));
+      });
+      return { child, result };
+    })();
 
-    await waitForFile(fixture.buildLog);
-    child.kill("SIGTERM");
-    const outcome = await result;
-    assert.equal(outcome.code, 143, outcome.output);
-    assert.match(await fileText(fixture.buildStopLog), /stopped/);
+    const outcome = await run.result;
+    assert.equal(outcome.code, 1, outcome.output);
+    assert.match(outcome.output, /verified Foundation bridge is not executable/);
+    assert.equal(await fileText(fixture.buildLog), "");
+    assert.equal(await fileText(fixture.viteLog), "");
   } finally {
     await stopRun(run);
     await rm(fixture.directory, { recursive: true, force: true });

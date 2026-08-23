@@ -8,8 +8,8 @@ import {
 describe("joined Foundation compatibility gate", () => {
   it("accepts the pinned release and package metadata", () => {
     expect(() => assertFoundationCompatibility()).not.toThrow();
-    expect(FOUNDATION_ARTIFACT.releaseTag).toBe("v0.1.0-rc.1");
-    expect(FOUNDATION_ARTIFACT.sourceCommit).toBe("a6104b683963651d60a061cfcbd91d9fdc5effde");
+    expect(FOUNDATION_ARTIFACT.releaseTag).toBe("v0.1.0-rc.5");
+    expect(FOUNDATION_ARTIFACT.sourceCommit).toBe("182c483bb9cf97f20201ffe916240aa5b48f4127");
   });
 
   it.each([

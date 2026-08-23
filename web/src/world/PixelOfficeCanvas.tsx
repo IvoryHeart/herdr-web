@@ -48,6 +48,7 @@ export function PixelOfficeCanvas({
   observability,
   conversationTargets,
   onSelect,
+  onOpenConversation,
   onActivateAgent,
   onActivateRoom,
   canCreateSeat,
@@ -67,6 +68,7 @@ export function PixelOfficeCanvas({
   observability: OfficeObservability;
   conversationTargets: readonly OfficeConversationAnchorTarget[];
   onSelect: (key: string) => void;
+  onOpenConversation?: (key: string) => void;
   onActivateAgent: (key: string) => void;
   onActivateRoom: (key: string) => void;
   canCreateSeat: (roomKey: string) => boolean;
@@ -89,6 +91,7 @@ export function PixelOfficeCanvas({
     observability,
     conversationTargets,
     onSelect,
+    onOpenConversation,
     onActivateAgent,
     onActivateRoom,
     canCreateSeat,
@@ -109,6 +112,7 @@ export function PixelOfficeCanvas({
     observability,
     conversationTargets,
     onSelect,
+    onOpenConversation,
     onActivateAgent,
     onActivateRoom,
     canCreateSeat,
@@ -219,6 +223,7 @@ export function PixelOfficeCanvas({
       latestRef.current.completionSeenKeys,
       latestRef.current.observability,
       (key) => latestRef.current.onSelect(key),
+      (key) => latestRef.current.onOpenConversation?.(key),
       (key) => latestRef.current.onActivateAgent(key),
       (key) => latestRef.current.onActivateRoom(key),
       (roomKey) => latestRef.current.canCreateSeat(roomKey),

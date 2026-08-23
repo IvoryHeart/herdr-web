@@ -3,6 +3,7 @@ import {
 } from "@herdr-world/foundation";
 import {
   createProductAssembly,
+  defineProductSettingsContribution,
   defineSurface,
   FOUNDATION_SURFACE_API_VERSION,
 } from "@herdr-world/foundation/surfaces";
@@ -11,6 +12,7 @@ import {
   createWorldOfficeContext,
   WorldFoundationSurface,
 } from "./worldFoundationSurface";
+import { WorldFoundationSettings } from "./worldFoundationSettings";
 
 assertFoundationCompatibility();
 
@@ -27,9 +29,18 @@ const officeSurface = defineSurface({
   dispose: (context) => context.dispose(),
 });
 
+const worldSettings = defineProductSettingsContribution({
+  id: "world-settings",
+  label: "World settings",
+  createContext: (host) => ({ host }),
+  load: async () => ({ default: WorldFoundationSettings }),
+  dispose: () => {},
+});
+
 export const worldProductAssembly = createProductAssembly({
   surfaceApiVersion: FOUNDATION_SURFACE_API_VERSION,
   surfaces: [...foundationConformanceAssembly.surfaces, officeSurface],
+  productSettings: worldSettings,
 });
 
 export { FOUNDATION_SURFACE_API_VERSION };

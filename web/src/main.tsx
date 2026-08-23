@@ -1,7 +1,7 @@
 import { mountFoundationBrowser } from "@herdr-world/foundation";
 import "@herdr-world/foundation/styles.css";
 import { worldProductAssembly } from "./world/worldAssembly";
-import "./styles.css";
+import "./world/world.css";
 
 const root = document.getElementById("root");
 

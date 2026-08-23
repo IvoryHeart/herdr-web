@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HERDR_BIN="${HERDR_BIN:-/tmp/herdr-upstream-v082/target/release/herdr}"
-BRIDGE_BIN="${HERDR_WEB_BRIDGE_BIN:-$ROOT/bridge/target/debug/herdr-web-bridge}"
+BRIDGE_BIN="${HERDR_WEB_BRIDGE_BIN:-}"
 STATIC_DIR="${HERDR_WEB_STATIC_DIR:-$ROOT/web/dist}"
 BRIDGE_A_PORT="${HERDR_WEB_LIVE_PORT_A:-8791}"
 BRIDGE_B_PORT="${HERDR_WEB_LIVE_PORT_B:-8792}"

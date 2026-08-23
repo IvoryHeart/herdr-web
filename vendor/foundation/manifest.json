@@ -3,16 +3,16 @@
   "artifactKind": "herdr-world-foundation-candidate",
   "source": {
     "repository": "IvoryHeart/herdr-world-foundation",
-    "commit": "a6104b683963651d60a061cfcbd91d9fdc5effde"
+    "commit": "182c483bb9cf97f20201ffe916240aa5b48f4127"
   },
   "foundation": {
     "packageName": "@herdr-world/foundation",
     "version": "0.1.0",
     "npmTarball": {
       "filename": "herdr-world-foundation-0.1.0.tgz",
-      "size": 495506,
-      "sha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
-      "integrity": "sha512-OuCHH4Wfk5p2mflZdlBRFDYrHVNuIB1Ec2+C0BfkLD8a5EFsVF5LzFBoNDFpQRrg1UX2DxgZ/ewh8mQyuxPumg=="
+      "size": 496018,
+      "sha256": "43450ccde2ab925f932fbfaa29ab8ccb097f3f650a5007b63facb7e33e98e751",
+      "integrity": "sha512-8JbRaIhc8cT554mnHPirldl03D7OtOLTnuhvdZSOHPkCn/pK1HbEiBpTNv4ATouV8/z7MEkPSJL5rXzeMM9gGA=="
     },
     "surfaceApiVersion": 1
   },
@@ -22,8 +22,8 @@
     "platform": "linux",
     "architecture": "x86_64",
     "filename": "herdr-world-bridge-0.1.0-linux-x86_64",
-    "size": 7994472,
-    "sha256": "a8041e7e6d888678185c0c934f5a0f9162cb43fe84b54e8c1f468aaa6431b7fa",
+    "size": 8018728,
+    "sha256": "8748cd78a06a10842a190c4af9f040c0e2b8f2c67b772abb6a0ac65fb267b029",
     "builtTwiceByteIdentical": true
   },
   "compatibility": {
@@ -102,8 +102,8 @@
     },
     {
       "path": "dist/App.d.ts",
-      "size": 14508,
-      "sha256": "6b57dd66e53cdf8daff88db7fb8a902528c03a75ea3441ad0f9f584a481447f3"
+      "size": 14586,
+      "sha256": "d40508fde2e0e5c6be33408746696f2cd60d07c522b5c6cd2737d28d4de350c2"
     },
     {
       "path": "dist/BackendSettingsDialog.d.ts",
@@ -167,8 +167,8 @@
     },
     {
       "path": "dist/commands.d.ts",
-      "size": 3739,
-      "sha256": "6178dee40c91e67d860c46fc8f6d20e6f878f0a5f74b9a46b5c5177a9da3684c"
+      "size": 3767,
+      "sha256": "54254cf9c870e6b22068f1c6265224fe8b5e68881145a5b4f8f66013ff2ce322"
     },
     {
       "path": "dist/connectionState.d.ts",
@@ -212,8 +212,8 @@
     },
     {
       "path": "dist/index.js",
-      "size": 352890,
-      "sha256": "88f0a2cd2863148a4fecce4e8d4dfa9e7cce8892e58ca4806ab1e3435bb3ffc0"
+      "size": 353889,
+      "sha256": "9b0cc7a3f328835972ebe894e49b8c696585a2b949f281ae9a511b14cb8ec9c5"
     },
     {
       "path": "dist/launch.d.ts",
@@ -302,8 +302,8 @@
     },
     {
       "path": "dist/surfaceHost.d.ts",
-      "size": 483,
-      "sha256": "84abef77b3d9f1621668bd7b6e6037d406b30dceb1fe6054271b8906d0968a40"
+      "size": 629,
+      "sha256": "d80f0428e6248c01bf7f09e26c865683e3206517fc9dc2b56a00ef06b518b54e"
     },
     {
       "path": "dist/surfaceLifecycle.d.ts",
@@ -322,13 +322,13 @@
     },
     {
       "path": "dist/surfaceTypes.d.ts",
-      "size": 7317,
-      "sha256": "26c00cbc9c1856fb3da413502eaf63b0f9da8347a5e05152fb3fc116d2987ec5"
+      "size": 8004,
+      "sha256": "8fb00b7e6faf9c508b14eaa1180602d333cf3415641d90edfac9f8754e4a9d78"
     },
     {
-      "path": "dist/surfaces-BtQTd5lm.js",
-      "size": 38395,
-      "sha256": "fff4d046df130cd55674557e1354c8f24bd74e659567f5fa8e10a6d0ed6eaa83"
+      "path": "dist/surfaces-D0ROa38b.js",
+      "size": 38741,
+      "sha256": "fe0d0b910c2954c9dd8c9d24ac84eae0b3e382a4bcc6f855a1c5c7657b8198b7"
     },
     {
       "path": "dist/surfaces.d.ts",
@@ -338,7 +338,7 @@
     {
       "path": "dist/surfaces.js",
       "size": 330,
-      "sha256": "33904fbb09d3156711a41436470e627bb70638322bb399cdb30f324a81709994"
+      "sha256": "b940137f038fcf7a7c0309ddbef8557a9bb536ee4356e4d576473a0a98172c92"
     },
     {
       "path": "dist/terminalAccessibleText.d.ts",
@@ -431,14 +431,14 @@
       "sha256": "48c19cd7002c4cbb7b08a6eb4b5b7d400a36cf52c588c35ebdbfca59a0f67788"
     },
     {
-      "path": "dist/web-CsveM0FJ.js",
-      "size": 1056,
-      "sha256": "fdb24b0260e19bd8526ddf76f1031e5544ca43711dc9fcc69fe098c376f0e34f"
+      "path": "dist/web-CQ4N9V6m.js",
+      "size": 1549,
+      "sha256": "7a716276f9e7cbf9add412ce0146fb079ad3453b4e92e8a5f87e1a48ecb8334c"
     },
     {
-      "path": "dist/web-JyJ0n4sJ.js",
-      "size": 1549,
-      "sha256": "221fd8db81a40f71c9cbe899a75d2d6ca2baa4a9283f2becf8aa98c56854a5fa"
+      "path": "dist/web-n3oTy_Hb.js",
+      "size": 1056,
+      "sha256": "01af41c431dd98251a3f3bf73d8c8e7ffa461d148f7b5d596b883fa8ebcd7fd3"
     },
     {
       "path": "dist/workspaceReorder.d.ts",
@@ -461,7 +461,7 @@
       "provenance/",
       "licenses/"
     ],
-    "digest": "475febc7a31ee1ad1d6aa65c5e143fba8095ff566a097a8104dbbacbf193715c",
+    "digest": "3511bba31fdec89a2b42652191d38a697a83a402eb5c7b2c40a630c452a1ae7e",
     "members": [
       {
         "relativePath": "licenses/NOTICE.txt",
@@ -2049,7 +2049,7 @@
       },
       {
         "relativePath": "provenance/components.json",
-        "sha256": "ddfd13d4bd7567119420a5026748f4ef05d1e7fc8a2188c23ff36e0cbc74ae1e"
+        "sha256": "15259ee44332b7e8cbc3e6f498709a8c9de21f1a657ccd72a39102cc4fb94283"
       },
       {
         "relativePath": "provenance/herdr-web.md",
@@ -2063,8 +2063,8 @@
   },
   "reproducibility": {
     "packageBuiltTwiceFromCleanOutputDirectories": true,
-    "firstTarballSha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699",
-    "secondTarballSha256": "aaa33b18330cf2101dae754b3facc99b529c9d4196d6098cd74d57a84954e699"
+    "firstTarballSha256": "43450ccde2ab925f932fbfaa29ab8ccb097f3f650a5007b63facb7e33e98e751",
+    "secondTarballSha256": "43450ccde2ab925f932fbfaa29ab8ccb097f3f650a5007b63facb7e33e98e751"
   },
   "checksums": {
     "package": "herdr-world-foundation-0.1.0.tgz.sha256",
@@ -2074,10 +2074,10 @@
     "all": "SHA256SUMS"
   },
   "buildTools": {
-    "node": "22.23.2",
-    "npm": "10.9.8",
-    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
-    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "node": "24.19.0",
+    "npm": "11.17.0",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
     "vite": "8.2.2",
     "typescript": "5.9.3"
   }

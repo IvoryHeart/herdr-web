@@ -4,9 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8787}"
-BRIDGE_BIN="${BRIDGE_BIN:-$ROOT/bridge/target/debug/herdr-web-bridge}"
+BRIDGE_BIN="${BRIDGE_BIN:-}"
 STATIC_DIR="${STATIC_DIR:-$ROOT/web/dist}"
 UPLOAD_DIR="${UPLOAD_DIR:-}"
+
+if [[ -z "$BRIDGE_BIN" ]]; then
+  BRIDGE_BIN="$(node "$ROOT/scripts/resolve-foundation-bridge.mjs" --path)"
+fi
 
 if [[ -z "${HERDR_SOCKET_PATH:-}" ]]; then
   if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
@@ -18,7 +22,7 @@ fi
 
 if [[ ! -x "$BRIDGE_BIN" ]]; then
   echo "bridge binary not found at $BRIDGE_BIN" >&2
-  echo "run: npm run bridge:build" >&2
+  echo "the verified Foundation candidate bridge is resolved by default; set BRIDGE_BIN only for an explicit diagnostic override" >&2
   exit 1
 fi
 

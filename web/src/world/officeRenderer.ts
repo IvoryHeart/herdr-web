@@ -195,6 +195,7 @@ export async function createOfficeRenderer(
   completionSeenKeys: ReadonlySet<string>,
   observability: OfficeObservability,
   onSelect: (key: string) => void,
+  onOpenConversation: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
   canCreateSeat: (roomKey: string) => boolean,
@@ -293,6 +294,11 @@ export async function createOfficeRenderer(
   const activateAgent = (key: string) => {
     if (!disposed) {
       onActivateAgent(key);
+    }
+  };
+  const openConversation = (key: string) => {
+    if (!disposed) {
+      onOpenConversation(key);
     }
   };
   const activateRoom = (key: string) => {
@@ -403,6 +409,7 @@ export async function createOfficeRenderer(
           textures,
           animated,
           select,
+          openConversation,
           activateAgent,
           activateRoom,
           canCreateSeat,
@@ -1471,6 +1478,7 @@ function drawRoom(
   textures: readonly Texture[],
   animated: AnimatedItem[],
   onSelect: (key: string) => void,
+  onOpenConversation: (key: string) => void,
   onActivateAgent: (key: string) => void,
   onActivateRoom: (key: string) => void,
   canCreateSeat: (roomKey: string) => boolean,
@@ -1536,6 +1544,7 @@ function drawRoom(
       textures,
       animated,
       onSelect,
+      onOpenConversation,
       onActivateAgent,
     );
   });
@@ -1671,6 +1680,7 @@ function drawTabDesk(
   textures: readonly Texture[],
   animated: AnimatedItem[],
   onSelect: (key: string) => void,
+  onOpenConversation: (key: string) => void,
   onActivateAgent: (key: string) => void,
 ) {
   const anchor = deskAnchor(rect, index);
@@ -1688,10 +1698,10 @@ function drawTabDesk(
     .fill({ color: deskSelected ? accent : 0x1c2736, alpha: 0.96 });
   tabPlate.roundRect(anchor.x - plateWidth / 2, anchor.nameY, plateWidth, 16, 4)
     .stroke({ width: deskSelected ? 2 : 1, color: accent, alpha: 0.82 });
-  makeInteractive(tabPlate, desk.key, onSelect);
+  makeInteractive(tabPlate, desk.key, onSelect, undefined, occupant ? () => onOpenConversation(occupant.key) : undefined);
   parent.addChild(tabPlate);
   tabName.position.set(anchor.x, anchor.nameY + 8);
-  makeInteractive(tabName, desk.key, onSelect);
+  makeInteractive(tabName, desk.key, onSelect, undefined, occupant ? () => onOpenConversation(occupant.key) : undefined);
   parent.addChild(tabName);
 
   const chairY = anchor.characterFeetY - OFFICE_GEOMETRY.characterHeight * 0.18;
@@ -1745,7 +1755,7 @@ function drawTabDesk(
     animated,
     deskSelected,
   );
-  makeInteractive(deskNode, desk.key, onSelect);
+  makeInteractive(deskNode, desk.key, onSelect, undefined, occupant ? () => onOpenConversation(occupant.key) : undefined);
   if (desk.completionAgentKeys.some((key) => !completionSeenKeys.has(key))) {
     drawCompletionMarker(
       parent,
@@ -2216,6 +2226,7 @@ function makeInteractive(
   key: string,
   onSelect: (key: string) => void,
   onActivate?: (key: string) => void,
+  onOpenConversation?: () => void,
 ) {
   node.label = key;
   node.eventMode = "static";
@@ -2231,6 +2242,7 @@ function makeInteractive(
       pointerSequences.delete(onSelect);
       canvasActivationCandidates.delete(onSelect);
       onSelect(key);
+      onOpenConversation?.();
       return;
     }
     const now = window.performance.now();
@@ -2238,6 +2250,7 @@ function makeInteractive(
     const isSecondClick = prior?.key === key
       && (event.detail === 2 || now - prior.at <= 500);
     onSelect(key);
+    onOpenConversation?.();
     if (isSecondClick) {
       pointerSequences.delete(onSelect);
       canvasActivationCandidates.delete(onSelect);

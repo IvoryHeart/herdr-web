@@ -6,18 +6,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WEB_DIR = path.join(ROOT, "web");
-const DEFAULT_BRIDGE_BIN = path.join(
-  ROOT,
-  "bridge",
-  "target",
-  "debug",
-  process.platform === "win32" ? "herdr-web-bridge.exe" : "herdr-web-bridge",
-);
 const DEFAULT_STATIC_DIR = path.join(WEB_DIR, "dist");
 const START_TIMEOUT_MS = 15_000;
 const SHUTDOWN_TIMEOUT_MS = 3_000;
@@ -107,6 +100,16 @@ function spawnChild(command, args, options = {}) {
     detached: process.platform !== "win32",
     ...options,
   });
+}
+
+function resolveFoundationBridge() {
+  const output = execFileSync(
+    process.execPath,
+    [path.join(ROOT, "scripts", "resolve-foundation-bridge.mjs"), "--path"],
+    { cwd: ROOT, encoding: "utf8" },
+  ).trim();
+  if (!output) throw new Error("Foundation bridge resolver returned no executable path");
+  return path.resolve(ROOT, output);
 }
 
 async function runCommand(command, args, signalPromise) {
@@ -267,7 +270,9 @@ async function main() {
     const devHost = configuredHost("HERDR_WEB_DEV_HOST", "127.0.0.1");
     const devPort = parsePort("HERDR_WEB_DEV_PORT", 5173);
     const configuredBridgeBin = process.env.HERDR_WEB_BRIDGE_BIN;
-    const bridgeBin = path.resolve(ROOT, configuredBridgeBin ?? DEFAULT_BRIDGE_BIN);
+    const bridgeBin = configuredBridgeBin
+      ? path.resolve(ROOT, configuredBridgeBin)
+      : resolveFoundationBridge();
     const staticDir = path.resolve(ROOT, process.env.HERDR_WEB_STATIC_DIR ?? DEFAULT_STATIC_DIR);
     const bridgeArgs = process.argv.slice(2);
     rejectAddressOverrides(bridgeArgs);
@@ -279,12 +284,7 @@ async function main() {
       if (configuredBridgeBin) {
         throw new Error(`HERDR_WEB_BRIDGE_BIN is not executable: ${bridgeBin}`);
       }
-      console.log("bridge binary is missing; building it first...");
-      await runCommand(
-        process.platform === "win32" ? "npm.cmd" : "npm",
-        ["run", "bridge:build"],
-        signalPromise,
-      );
+      throw new Error(`verified Foundation bridge is not executable: ${bridgeBin}`);
     }
     if (requestedSignal) throw new RequestedSignalError(requestedSignal);
     if (!(await pathIsExecutable(bridgeBin))) {

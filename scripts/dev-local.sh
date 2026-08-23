@@ -35,10 +35,6 @@ if ! bridge_ready; then
     [[ -S "$SOCKET_PATH" ]] || die "Herdr socket not found at $SOCKET_PATH; start Herdr first with: herdr"
   fi
 
-  if [[ ! -x "$ROOT/bridge/target/debug/herdr-web-bridge" ]]; then
-    echo "dev:local: bridge binary missing; building it"
-    npm run bridge:build
-  fi
   if [[ ! -d "$ROOT/web/dist" ]]; then
     echo "dev:local: web/dist missing; building web assets"
     npm run build:web

@@ -49,12 +49,12 @@ if [[ "$(dirname "$STAGE")" != "$PKG_ROOT_REAL" || "$(dirname "$ARCHIVE")" != "$
 fi
 
 npm --prefix "$ROOT" run build:web
-cargo build --release --manifest-path "$ROOT/bridge/Cargo.toml" --bin herdr-web-bridge
+FOUNDATION_BRIDGE_BIN="$(node "$ROOT/scripts/resolve-foundation-bridge.mjs" --path)"
 
 rm -rf -- "$STAGE" "$ARCHIVE" "$ARCHIVE.sha256"
 mkdir -p "$STAGE/bin" "$STAGE/share/herdr-web/web"
 
-cp "$ROOT/bridge/target/release/herdr-web-bridge" "$STAGE/bin/herdr-web-bridge"
+cp "$FOUNDATION_BRIDGE_BIN" "$STAGE/bin/herdr-web-bridge"
 cp -R "$ROOT/web/dist/." "$STAGE/share/herdr-web/web/"
 cp "$ROOT/docs/tarball-readme.md" "$STAGE/README.md"
 

@@ -2,10 +2,6 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "tests/e2e",
-  // The pre-cutover suite asserts the retired generic AppShell DOM and private
-  // command surface. Keep those fixtures in-tree for the removal tranche, but
-  // make the package-cutover gate exercise only the public Foundation contract.
-  testMatch: "**/foundation-cutover.spec.ts",
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

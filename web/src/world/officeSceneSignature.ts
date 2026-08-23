@@ -37,7 +37,6 @@ export function officeSceneSignature({
     observability: observability
       ? {
           health: observability.health,
-          observedAt: observability.observedAt,
           windowSeconds: observability.windowSeconds,
           models: observability.models,
           totalCostUsd: observability.totalCostUsd,
