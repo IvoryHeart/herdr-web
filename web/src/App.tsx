@@ -5198,6 +5198,10 @@ export function App() {
     selectedKey: worldSelectedKey,
     completionSeenKeys: worldCompletionSeenKeys,
     onSelect: selectWorldKey,
+    onOpenConversation: (key) => {
+      const agent = worldProjection.roster.find(({ agent: entry }) => entry.key === key)?.agent;
+      if (agent) selectWorldProjectedAgent(agent);
+    },
     compact: isCompactLayout,
     onBackToSidebar: closeMobileDetail,
     onToggleSidebar: () => setSidebarOpen((open) => !open),
