@@ -942,7 +942,10 @@ function WorldStage({
       })}
       {context.commandDialog ? (
         <WorldCommandDialogView
-          key={`${context.commandDialog.kind}:${context.commandDialog.roomKey ?? ""}`}
+          // Keep the dialog instance stable while Foundation refreshes facts;
+          // the room target is captured by the context callback, not by the
+          // form's React identity.
+          key={context.commandDialog.kind}
           dialog={context.commandDialog}
           onCancel={context.onCancelCommandDialog ?? (() => {})}
           onSubmit={context.onSubmitCommandDialog ?? (() => {})}
