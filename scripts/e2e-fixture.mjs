@@ -99,7 +99,11 @@ async function startFixture(fixture) {
     if (url.pathname === "/api/capabilities") {
       logs.get(fixture.id).capabilityRequests += 1;
       if (fixture.variant === "malformed") {
-        json(response, 200, { bridge_api_version: "invalid", commands: "all" });
+        json(response, 200, {
+          bridge_api_version: "invalid",
+          commands: "all",
+          web_compat: 0,
+        });
         return;
       }
       json(response, 200, capabilities(fixture, fixtureStates.get(fixture.id)));
@@ -141,18 +145,65 @@ async function startFixture(fixture) {
       if (state.launchCreatesSeat) {
         fixtureStates.set(fixture.id, { ...state, launchedSeat: true });
       }
-      json(response, 200, { pane_id: `${fixture.id}-launched`, preset_id: body.preset_id });
+      json(response, 200, {
+        pane_id: "p-launched",
+        preset_id: body.preset_id,
+        title: body.title,
+        workspace_id: body.target.workspace_id,
+        tab_id: "tab-launched",
+      });
+      return;
+    }
+    if (url.pathname === "/api/extensions/observability" && request.method === "GET") {
+      logs.get(fixture.id).extensionRequests.push({ operation: "descriptor" });
+      json(response, 200, observabilityDescriptor(fixture));
+      return;
+    }
+    if (url.pathname === "/api/extensions/observability/snapshot" && request.method === "GET") {
+      logs.get(fixture.id).extensionRequests.push({ operation: "snapshot" });
+      json(response, 200, observabilitySnapshot(fixture));
+      return;
+    }
+    if (url.pathname === "/api/extensions/observability/config" && request.method === "GET") {
+      logs.get(fixture.id).extensionRequests.push({ operation: "config-read" });
+      json(response, 200, observabilityConfiguration());
+      return;
+    }
+    if (url.pathname === "/api/extensions/observability/config" && request.method === "PUT") {
+      await readJson(request);
+      logs.get(fixture.id).extensionRequests.push({ operation: "config-update" });
+      json(response, 200, observabilityConfiguration());
       return;
     }
     if (url.pathname === "/api/command" && request.method === "POST") {
       const body = await readJson(request);
       logs.get(fixture.id).commands.push(body);
+      if (body.method === "workspace.focus") {
+        const state = fixtureStates.get(fixture.id);
+        const focusedPane = snapshot(fixture, state).panes.find((pane) =>
+          pane.workspace_id === body.params?.workspace_id,
+        );
+        if (focusedPane) {
+          broadcastSelection(fixture.id, focusedPane.pane_id);
+        }
+      }
+      if (body.method === "workspace.create") {
+        json(response, 200, {
+          workspace: { workspace_id: `${fixture.id}-created-workspace` },
+          tab: { tab_id: `${fixture.id}-created-tab` },
+          root_pane: { pane_id: `${fixture.id}-created-pane` },
+        });
+        return;
+      }
       json(response, 200, { pane_id: `${fixture.id}-created` });
       return;
     }
     if (url.pathname === "/api/selection" && request.method === "POST") {
       const body = await readJson(request);
       logs.get(fixture.id).selections.push(body);
+      if (typeof body.pane_id === "string") {
+        broadcastSelection(fixture.id, body.pane_id);
+      }
       json(response, 200, { ok: true });
       return;
     }
@@ -236,7 +287,8 @@ function capabilities(fixture, state) {
     bridge_version: "0.1.0",
     herdr_version: "0.8.2",
     terminal_protocol:
-      state.terminalProtocol ?? (fixture.variant === "incompatible" ? 19 : 20),
+      state.terminalProtocol ?? 20,
+    web_compat: state.webCompat ?? (fixture.variant === "incompatible" ? 0 : 1),
     configured_label: fixture.label,
     features:
       state.features ?? [
@@ -250,6 +302,7 @@ function capabilities(fixture, state) {
         "terminal_scroll",
         "terminal_shared_fanout",
         "uploads",
+        "observability_extension",
       ],
     commands: state.commands ?? [
       "workspace.create",
@@ -266,7 +319,6 @@ function capabilities(fixture, state) {
       "pane.focus_direction",
       "pane.move",
     ],
-    web_compat: 1,
     launcher_presets: { version: 1 },
   };
 }
@@ -283,7 +335,33 @@ function emptyLog() {
     connections: 0,
     capabilityRequests: 0,
     snapshotRequests: 0,
+    extensionRequests: [],
   };
+}
+
+function observabilityDescriptor(fixture) {
+  return {
+    extension_id: "observability",
+    contract_version: { major: 1, minor: 0 },
+    provider_id: "none",
+    capabilities: [],
+    target_scopes: [],
+    freshness: { mode: "unknown", max_age_ms: null },
+    health: fixture.variant === "compatible" ? "unavailable" : "incompatible",
+    observed_at: Date.now(),
+  };
+}
+
+function observabilitySnapshot(fixture) {
+  return {
+    sequence: 0,
+    envelopes: [],
+    descriptor: observabilityDescriptor(fixture),
+  };
+}
+
+function observabilityConfiguration() {
+  return { provider_id: "none", configured: false, endpoint: null };
 }
 
 function defaultFixtureState() {
@@ -291,6 +369,7 @@ function defaultFixtureState() {
     snapshotMode: "ready",
     snapshotVariant: "default",
     terminalProtocol: null,
+    webCompat: null,
     features: null,
     commands: null,
     launchCreatesSeat: false,
@@ -306,6 +385,7 @@ function setFixtureState(hostId, value) {
   const snapshotMode = value.snapshotMode ?? current.snapshotMode;
   const snapshotVariant = value.snapshotVariant ?? current.snapshotVariant;
   const terminalProtocol = value.terminalProtocol ?? current.terminalProtocol;
+  const webCompat = value.webCompat ?? current.webCompat;
   const features = value.features ?? current.features;
   const commands = value.commands ?? current.commands;
   const launchCreatesSeat = value.launchCreatesSeat ?? current.launchCreatesSeat;
@@ -313,6 +393,7 @@ function setFixtureState(hostId, value) {
     !["ready", "offline", "malformed"].includes(snapshotMode) ||
     !["default", "empty", "large", "idle-desk", "long-title"].includes(snapshotVariant) ||
     (terminalProtocol !== null && ![19, 20, 21].includes(terminalProtocol)) ||
+    (webCompat !== null && ![0, 1].includes(webCompat)) ||
     (features !== null &&
       (!Array.isArray(features) || features.some((feature) => typeof feature !== "string"))) ||
     (commands !== null &&
@@ -325,12 +406,24 @@ function setFixtureState(hostId, value) {
     snapshotMode,
     snapshotVariant,
     terminalProtocol,
+    webCompat,
     features,
     commands,
     launchCreatesSeat,
     launchedSeat: current.launchedSeat,
   });
   return true;
+}
+
+function broadcastSelection(hostId, paneId) {
+  for (const client of fixtureSockets.get(hostId) ?? []) {
+    if (client.path === "/ws/ui-events" && client.socket.readyState === 1) {
+      client.socket.send(JSON.stringify({
+        type: "herdr_web.selection_changed",
+        pane_id: paneId,
+      }));
+    }
+  }
 }
 
 function snapshot(fixture, stateOrVariant = "default") {
@@ -559,7 +652,7 @@ function serveStaticFile(requestPath, response) {
       : join(staticDir, "index.html");
   response.setHeader(
     "content-security-policy",
-    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' data: http://127.0.0.1:4174 ws://127.0.0.1:4174 http://127.0.0.1:4175 ws://127.0.0.1:4175 http://127.0.0.1:4176 ws://127.0.0.1:4176 http://127.0.0.1:4199 ws://127.0.0.1:4199; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' data: http://127.0.0.1:4174 ws://127.0.0.1:4174 http://127.0.0.1:4175 ws://127.0.0.1:4175 http://127.0.0.1:4176 ws://127.0.0.1:4176 http://127.0.0.1:4199 ws://127.0.0.1:4199; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
   );
   response.setHeader("x-frame-options", "DENY");
   response.setHeader("content-type", mimeType(file));

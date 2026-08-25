@@ -345,6 +345,7 @@ export async function createOfficeRenderer(
       return;
     }
     const scrollTop = scrollElement?.scrollTop ?? 0;
+    app.stage.position.y = -scrollTop;
     const viewportHeight = Math.min(
       layout.totalHeight,
       Math.max(1, scrollElement?.clientHeight ?? layout.totalHeight),
@@ -565,6 +566,9 @@ export async function createOfficeRenderer(
       return;
     }
     const ready = officeFontReady();
+    if (ready === currentFontReady) {
+      return;
+    }
     currentFontReady = ready;
     lastSceneSignature = null;
     build(lastWidth || element.clientWidth);

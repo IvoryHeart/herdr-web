@@ -12,5 +12,6 @@
 .worktrees/
 *.log
 .runtime/
+.foundation-cache/
 *.swp
 .DS_Store

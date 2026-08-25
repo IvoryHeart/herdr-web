@@ -43,10 +43,10 @@ import {
   writeWorldViewPrefs,
 } from "./worldViewPrefs";
 import {
-  officeAgentHandoffRequest,
-  officeRoomHandoffRequest,
-} from "./herdrOfficeHandoff";
-import type { OfficeHandoffRequest } from "./herdrOfficeHandoff";
+  foundationOfficeAgentHandoffRequest,
+  foundationOfficeRoomHandoffRequest,
+} from "./foundationWorldHandoff";
+import type { FoundationOfficeHandoffRequest } from "./foundationWorldHandoff";
 
 export type WorldSurfaceContext = {
   projection: HerdrOfficeProjection;
@@ -57,7 +57,7 @@ export type WorldSurfaceContext = {
   compact: boolean;
   onBackToSidebar: () => void;
   onToggleSidebar: () => void;
-  onOpenInSpaces: (request: OfficeHandoffRequest) => void;
+  onOpenInSpaces: (request: FoundationOfficeHandoffRequest) => void;
   handoffStatus: string | null;
   conversationBubbles: readonly WorldConversationBubblePanel[];
   onCloseConversation: (id: string) => void;
@@ -175,7 +175,7 @@ export default function WorldSurface({ context }: SurfaceComponentProps) {
       return;
     }
     worldContext.onSelect(key);
-    worldContext.onOpenInSpaces(officeAgentHandoffRequest(agent));
+    worldContext.onOpenInSpaces(foundationOfficeAgentHandoffRequest(agent));
   };
   const onActivateRoom = (key: string) => {
     const room = worldContext.projection.roomRoster.find((entry) => entry.key === key);
@@ -183,7 +183,7 @@ export default function WorldSurface({ context }: SurfaceComponentProps) {
       return;
     }
     worldContext.onSelect(key);
-    worldContext.onOpenInSpaces(officeRoomHandoffRequest(room));
+    worldContext.onOpenInSpaces(foundationOfficeRoomHandoffRequest(room));
   };
   return (
     <WorldStage
@@ -759,7 +759,14 @@ function WorldStage({
   })();
 
   return (
-    <div ref={shellRef} className="world-stage-shell">
+    <div
+      ref={shellRef}
+      className="world-stage-shell"
+      role="region"
+      aria-label="Pixel Office"
+      data-compact={context.compact ? "true" : "false"}
+      data-selected-key={context.selectedKey ?? undefined}
+    >
       <header className="stage-bar world-stage-bar">
         <button
           className="icon-btn"

@@ -42,6 +42,9 @@ for (const viewport of [
     const selectedAgent = page.locator(".agent-row").filter({ hasText: "Agent 11" });
     await selectedAgent.click();
     await expect(page.locator(".world-stage-notice")).toHaveCount(0);
+    const conversation = page.locator("[data-world-conversation='open']");
+    await expect(conversation).toBeVisible();
+    await expect(conversation.locator(".terminal-overlay")).toHaveCount(0);
     await page.screenshot({
       path: resolve(evidenceDir, `world-live-${viewport.width}x${viewport.height}.png`),
       animations: "disabled",
@@ -98,7 +101,7 @@ test("captures the stable Office conversation bubble", async ({ page }) => {
   await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await page.locator(".agent-row").filter({ hasText: "Agent 11" }).click();
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await waitForOffice(page);
   await expect(page.locator("[data-world-conversation='open']")).toBeVisible();
   await page.screenshot({
