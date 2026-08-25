@@ -1,9 +1,10 @@
 import "@fontsource-variable/geist/wght.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AppShell } from "./AppShell";
 import { startNativeControls } from "./native";
-import "./styles.css";
+import { WorldFoundationRoot } from "./world/worldAssembly";
+import "@herdr-world/foundation/styles.css";
+import "./world/styles.css";
 
 startNativeControls();
 
@@ -15,6 +16,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <AppShell />
+    <WorldFoundationRoot />
   </StrictMode>,
 );

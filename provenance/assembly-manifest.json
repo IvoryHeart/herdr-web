@@ -1,16 +1,106 @@
 {
   "schema_version": 1,
   "project": "herdr-world",
-  "purpose": "Declarative release assembly boundary for the current pre-extraction World checkout.",
+  "purpose": "Declarative release assembly boundary for the Foundation-backed World checkout.",
   "source_commit": "recorded-at-build-time",
+  "foundation_dependency": {
+    "release": "v0.1.0-rc.11",
+    "publication_status": "published-github-prerelease",
+    "release_url": "https://github.com/IvoryHeart/herdr-world-foundation/releases/tag/v0.1.0-rc.11",
+    "candidate_archive_url": "https://github.com/IvoryHeart/herdr-world-foundation/releases/download/v0.1.0-rc.11/herdr-world-foundation-candidate-44507575918e4f745ec35970142fafed2b89113e.tar.gz",
+    "candidate_archive_name": "herdr-world-foundation-candidate-44507575918e4f745ec35970142fafed2b89113e.tar.gz",
+    "source": {
+      "repository": "IvoryHeart/herdr-world-foundation",
+      "commit": "44507575918e4f745ec35970142fafed2b89113e"
+    },
+    "tag": {
+      "object": "addc1e3639830c2ebf9b24385ac9725e4bd51f26",
+      "peeled_commit": "44507575918e4f745ec35970142fafed2b89113e",
+      "annotated": true
+    },
+    "merged_main_ci": {
+      "run_url": "https://github.com/IvoryHeart/herdr-world-foundation/actions/runs/32897653252",
+      "artifact_name": "foundation-candidate-44507575918e4f745ec35970142fafed2b89113e",
+      "artifact_wrapper_sha256": "06511346aef7f3bdf8cf34700d4a1b505e09f4484a7b7f906d8cde08a656af3f"
+    },
+    "archive_sha256": "54c360191a442f6e19234ee246b13dfbb02c71fe9d91755fae34e86ffbfdbdd0",
+    "archive_checksum_sha256": "6ec906a1644421dba8c8728e1da0e27bd36d47697e3d77e11ea06607033fcda0",
+    "manifest_sha256": "015d5180deac6600a701fc6e9c75c5fc66cf12d4d117e65d15fde1fd9328b2ae",
+    "manifest_checksum_sha256": "c0f4921e744378afd2ae54cc15a8e49bc6615efb2760da62aa578bb3dc05ed10",
+    "sha256sums_sha256": "cb8ce27512ce0571c4434605903b6ad14a75c312923c6526397e6d5e1c219e15",
+    "candidate_provenance_digest": "57156984f33b4165370327b2a832ed04e880849011e692a65e6584b62b26f218",
+    "package": {
+      "name": "@herdr-world/foundation",
+      "version": "0.1.0",
+      "sha256": "2297869b5bbac30d8b53608b2142d59afb89d318ca4dee30228c42abf8e282c5",
+      "sri": "sha512-apuF/Bw6Z6BTglya7MOGnRevmkDUVYsETGf6mQBhNTh5MoS5ezPgIYbO+uSGjxzv5xzzvksULRMTNSZbcZ74qw==",
+      "integrity_file_sha256": "23c5d4562774dbcda3b6799a7a822ac864b820f1051b00121216a0c525f5cf2b",
+      "checksum_file_sha256": "ff016301399bc612f7bf8c9b4ddea1971f13dfa639bdce4ef7bbcabaed0b2eb8"
+    },
+    "api": {
+      "surface": 1,
+      "bridge": 1,
+      "web_compatibility": 1
+    },
+    "compatibility": {
+      "herdr": "0.8.2",
+      "herdr_audited_commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
+      "terminal_protocol": 20
+    },
+    "bridge": {
+      "sha256": "65cb7d232d1fa3079e81d7b75caf4dba4b75b2b236a935aaeb380b5aee42622c",
+      "checksum_file_sha256": "d44668c4c73fba1f835b7df6296347e24df1709e6770d2107a3dbc20583bdb83",
+      "used_by_world": false,
+      "reason": "World retains its existing observability bridge and routes."
+    },
+    "public_exports_consumed": [
+      "@herdr-world/foundation",
+      "@herdr-world/foundation/surfaces",
+      "@herdr-world/foundation/terminal",
+      "@herdr-world/foundation/styles.css"
+    ],
+    "ownership": {
+      "foundation": [
+        "conformance and Spaces surface",
+        "runtime facts, selected runtimes, commands, launchers",
+        "ManagedTerminal and terminal session ownership",
+        "extensions.request transport admission and generation safety"
+      ],
+      "world": [
+        "Office rendering and projection",
+        "World/Office artwork and assets",
+        "observability schemas, parsing, providers, settings, and UI",
+        "existing World bridge and route implementations",
+        "World storage keys and typed child routes"
+      ],
+      "foundation_excludes": [
+        "World/Office artwork",
+        "World/Office providers",
+        "World/Office observability implementation and settings"
+      ],
+      "foundation_includes": [
+        "documented generic application and PWA assets"
+      ]
+    },
+    "legacy_fallback": {
+      "retained_paths": [
+        "web/src/App.tsx",
+        "web/src/AppShell.tsx",
+        "web/src/world/WorldConversationBubble.tsx",
+        "web/src/world/WorldSettingsDialog.tsx"
+      ],
+      "production_referenced": false,
+      "removal_tranche": "A later explicitly approved tranche; legacy deletion is outside Spec 018."
+    }
+  },
   "compatibility": {
     "herdr_release": "v0.8.2",
     "herdr_commit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
     "terminal_protocol": 20,
-    "foundation_repository": "current combined checkout; physical Foundation extraction is Spec 016",
-    "foundation_version": "recorded-at-build-time",
-    "surface_api_version": null,
-    "web_compat": "protocol-20 current bridge compatibility; record exact response in the release manifest"
+    "foundation_repository": "IvoryHeart/herdr-world-foundation",
+    "foundation_version": "v0.1.0-rc.11 / @herdr-world/foundation@0.1.0",
+    "surface_api_version": 1,
+    "web_compat": "Foundation Bridge API 1 and web compatibility 1; World retains its existing bridge"
   },
   "artifacts": {
     "source-archive": {

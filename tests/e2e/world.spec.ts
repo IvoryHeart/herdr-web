@@ -29,9 +29,9 @@ test("uses one persistent frame for direct World entry, history, and view switch
   await expect(page.locator("aside.sidebar")).toHaveCount(1);
   await expect(page.locator("section.stage")).toHaveCount(1);
   await expect(page.getByRole("group", { name: "Spaces | Office" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Office", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
+  await expect(page.getByRole("button", { name: "Foundation surface: Office" })).toHaveAttribute(
+    "aria-current",
+    "page",
   );
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await expect(
@@ -53,7 +53,7 @@ test("uses one persistent frame for direct World entry, history, and view switch
 
   await frame.evaluate((element) => element.setAttribute("data-checkpoint-frame", "stable"));
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
-  await page.getByRole("button", { name: "Spaces", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Spaces" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await expect(
@@ -96,7 +96,8 @@ test("disposes the renderer across ten switches without reconnecting core observ
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
   await waitForLiveOffice(page);
   await expect.poll(() => coreSocketUrls(sockets).length).toBeGreaterThanOrEqual(6);
-  expect(terminalSocketUrls(sockets)).toEqual([]);
+  const initialTerminalSockets = terminalSocketUrls(sockets).length;
+  expect(initialTerminalSockets).toBe(0);
   const initialCoreSockets = coreSocketUrls(sockets).length;
   const initialLog = await fixtureLog(request);
   const lifecycleStartedAt = Date.now();
@@ -104,17 +105,18 @@ test("disposes the renderer across ten switches without reconnecting core observ
   const frame = page.locator(".app");
   await frame.evaluate((element) => element.setAttribute("data-lifecycle-frame", "stable"));
   for (let index = 0; index < 10; index += 1) {
-    await page.getByRole("button", { name: "Spaces", exact: true }).click();
+    await page.getByRole("button", { name: "Foundation surface: Spaces" }).click();
     await expect(page.locator("canvas[data-office-canvas='true']")).toHaveCount(0);
     await expect
       .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.activeApplications ?? 0))
       .toBe(0);
-    await page.getByRole("button", { name: "Office", exact: true }).click();
+    await page.getByRole("button", { name: "Foundation surface: Office" }).click();
     await waitForOffice(page);
     await expect(frame).toHaveAttribute("data-lifecycle-frame", "stable");
   }
 
   expect(coreSocketUrls(sockets)).toHaveLength(initialCoreSockets);
+  expect(terminalSocketUrls(sockets)).toHaveLength(initialTerminalSockets + 10);
   const terminalBeforeWorldIdle = terminalSocketUrls(sockets).length;
   await page.waitForTimeout(350);
   expect(terminalSocketUrls(sockets)).toHaveLength(terminalBeforeWorldIdle);
@@ -137,7 +139,7 @@ test("disposes the renderer across ten switches without reconnecting core observ
     ready: true,
   });
 
-  await page.getByRole("button", { name: "Spaces", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Spaces" }).click();
   await expect
     .poll(() => page.evaluate(() => window.__HERDR_WORLD_RENDERER__?.activeApplications ?? -1))
     .toBe(0);
@@ -235,7 +237,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
 
   await page.getByRole("button", { name: "Back to Herdr sidebar" }).click();
   await page.getByRole("group", { name: "Host" }).getByRole("button", { name: "All", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Office", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Foundation surface: Office" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Sidebar view" })).toBeVisible();
   await waitForLiveOffice(page);
   const room = page.locator(".space-row").first();
@@ -244,7 +246,7 @@ test("uses stage-first compact navigation and horizontal office scrolling at 375
   await page.keyboard.press("Shift+Tab");
   await expect(room).toBeFocused();
   expect(await room.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await expect(page.getByRole("button", { name: "Back to Herdr sidebar" })).toBeVisible();
 });
 
@@ -527,6 +529,19 @@ test("restores a still-live Office terminal after a page refresh", async ({ page
     page.locator("[data-world-conversation='open']").filter({ hasText: "Codex A" }),
   ).toBeVisible();
 
+  const storedTargets = await page.evaluate(() => JSON.parse(
+    sessionStorage.getItem("herdrWeb.worldConversations.v1") ?? "[]",
+  ) as Array<Record<string, unknown>>);
+  expect(storedTargets).toHaveLength(1);
+  expect(Object.keys(storedTargets[0]).sort()).toEqual([
+    "agentKey",
+    "bridgeId",
+    "generationKey",
+    "kind",
+    "paneId",
+    "targetKey",
+  ]);
+
   await page.reload();
   await waitForOffice(page);
   await expect(
@@ -720,19 +735,31 @@ test("passes Escape through to a focused Office terminal", async ({ page, reques
   }).toBe(true);
 });
 
-test("opens the conversation target in the full Spaces terminal", async ({ page }) => {
+test("focuses the exact conversation pane before opening its full Spaces terminal", async ({
+  page,
+  request,
+}) => {
   await page.goto("/world");
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
 
   const bubble = page.locator("[data-world-conversation='open']");
   await expect(bubble).toBeVisible();
+  const before = await fixtureLog(request);
   await bubble.getByRole("button", { name: "Open full terminal in Spaces" }).click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Codex A");
   await expect(page.locator("[data-world-conversation='open']")).toHaveCount(0);
   await expect(page.locator(".terminal-stage")).toBeVisible();
+  await expect.poll(async () => (await fixtureLog(request)).selections.length)
+    .toBe(before.selections.length + 1);
+  const after = await fixtureLog(request);
+  expect(after.selections.slice(before.selections.length)).toEqual([{ pane_id: "p1" }]);
+  expect(after.commands.slice(before.commands.length)).not.toContainEqual({
+    method: "workspace.focus",
+    params: { workspace_id: "main" },
+  });
 });
 
 test("opens the attached terminal when an occupied desk is selected", async ({
@@ -781,9 +808,16 @@ test("keeps a desk terminal open when its idle agent moves onto the work floor",
   const canvas = page.locator("canvas[data-office-canvas='true']");
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
+  const officeScroll = page.locator(".world-stage-scroll");
+  await officeScroll.evaluate((element, top) => {
+    element.scrollTo({ top, behavior: "auto" });
+  }, Math.max(0, desk.nameY - 240));
+  await expect.poll(() => officeScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const visibleCanvasBox = await canvas.boundingBox();
+  const visibleScrollTop = await officeScroll.evaluate((element) => element.scrollTop);
   await page.mouse.click(
-    (canvasBox?.x ?? 0) + desk.x,
-    (canvasBox?.y ?? 0) + desk.nameY + 8,
+    (visibleCanvasBox?.x ?? canvasBox?.x ?? 0) + desk.x,
+    (visibleCanvasBox?.y ?? canvasBox?.y ?? 0) + desk.nameY - visibleScrollTop + 8,
   );
 
   const bubble = page.locator("[data-world-conversation='open']");
@@ -840,6 +874,7 @@ test("does not rebuild the Pixi scene for an unchanged periodic snapshot", async
 }) => {
   await page.goto("/world");
   await waitForOffice(page);
+  await expect(page.locator(".agent-row").filter({ hasText: "Codex A" })).toBeVisible();
   const beforeLog = await fixtureLog(request);
   const before = await page.evaluate(() => {
     const diagnostics = window.__HERDR_WORLD_RENDERER__;
@@ -882,12 +917,19 @@ test("keeps single-click and empty-desk gestures read-only, then opens a canvas 
     window.requestAnimationFrame(() => resolve());
   }));
   expect(await firstRoom.getAttribute("data-active")).toBe("true");
-  expect(terminalSocketUrls(sockets)).toEqual([]);
+  const initialTerminalSockets = terminalSocketUrls(sockets).length;
+  expect(initialTerminalSockets).toBe(0);
 
   const layout = await publishedOfficeLayout(page);
   const agent = deskAnchor(layout.rooms[0], 0);
   const canvas = page.locator("canvas[data-office-canvas='true']");
-  const position = { x: agent.x, y: agent.characterFeetY - 34 };
+  const officeScroll = page.locator(".world-stage-scroll");
+  await officeScroll.evaluate((element, top) => {
+    element.scrollTo({ top, behavior: "auto" });
+  }, Math.max(0, agent.characterFeetY - 260));
+  await expect.poll(() => officeScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const visibleScrollTop = await officeScroll.evaluate((element) => element.scrollTop);
+  const position = { x: agent.x, y: agent.characterFeetY - visibleScrollTop - 34 };
 
   await canvas.dblclick({ position });
   await expect(page).toHaveURL(/\/$/);
@@ -920,10 +962,12 @@ test("uses the same double-click shortcut for an Agent Bar sprite and roster row
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 14");
 
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 13" }).click();
-  await page.getByRole("button", { name: "Close agent conversation" }).click();
+  await page.getByRole("dialog", { name: "Agent 13" })
+    .getByRole("button", { name: "Close agent conversation" })
+    .click();
   await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   await page.locator(".world-agent-bar-item").filter({ hasText: "Agent 14" }).dblclick();
   await expect(page).toHaveURL(/\/$/);
@@ -955,10 +999,9 @@ test("creates and manages rooms through capability-gated workspace actions", asy
   await page.locator("canvas[data-office-canvas='true']").click({
     position: { x: layout.rooms[0].x + 8, y: layout.rooms[0].y + 8 },
   });
-  await expect(
-    page.getByRole("button", { name: "Rename room main", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "Rename room main", exact: true }).click();
+  const renameRoom = page.getByRole("button", { name: "Rename room main", exact: true });
+  await expect(renameRoom).toBeEnabled();
+  await renameRoom.click();
   await page.locator(".modal .field").fill("Main Office");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(async () => {
@@ -1041,10 +1084,12 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".stage-title")).toHaveText("Agent 10");
 
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Agent 02" }).click();
-  await page.getByRole("button", { name: "Close agent conversation" }).click();
+  await page.getByRole("dialog", { name: "Agent 02" })
+    .getByRole("button", { name: "Close agent conversation" })
+    .click();
   await expect(page.locator(".world-stage-notice")).toHaveCount(0);
   const layout = await publishedOfficeLayout(page);
   const anchor = standingAnchor(layout.rooms[0], 1);
@@ -1053,7 +1098,6 @@ test("opens the same standing room agent from its semantic row and canvas sprite
   await stage.evaluate((element, top) => element.scrollTo({ top, behavior: "auto" }), scrollTop);
   await expect.poll(() => stage.evaluate((element) => element.scrollTop)).toBe(scrollTop);
   const canvas = page.locator("canvas[data-office-canvas='true']");
-
   await canvas.dblclick({
     position: {
       x: anchor.x,
@@ -1087,11 +1131,24 @@ test("single-clicks then double-clicks the exact colliding host room", async ({
   const hostARoom = rooms.nth(0);
   await page.locator(".app").evaluate((element) =>
     element.setAttribute("data-room-handoff-frame", "stable"));
+  const commandsBeforeSelection = await fixtureLogs(request);
 
   await hostARoom.click();
   await expect(page).toHaveURL(/\/world$/);
   await expect(hostARoom).toHaveAttribute("data-active", "true");
-  expect(terminalSocketUrls(sockets)).toEqual([]);
+  await expect(page.locator(".world-stage-shell")).toHaveAttribute(
+    "data-selected-key",
+    /same-origin.*main/,
+  );
+  const commandsAfterSelection = await fixtureLogs(request);
+  expect(commandsAfterSelection["host-a"].commands).toHaveLength(
+    commandsBeforeSelection["host-a"].commands.length,
+  );
+  expect(commandsAfterSelection["host-b"].commands).toHaveLength(
+    commandsBeforeSelection["host-b"].commands.length,
+  );
+  const initialTerminalSockets = terminalSocketUrls(sockets).length;
+  expect(initialTerminalSockets).toBe(0);
 
   const layout = await publishedOfficeLayout(page);
   const hostBRect = layout.rooms[1];
@@ -1114,7 +1171,7 @@ test("single-clicks then double-clicks the exact colliding host room", async ({
     })
     .toEqual({ hostA: 0, hostB: 1 });
 
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await waitForOffice(page);
   await page.locator(".space-row").first().click();
   await expect(page.locator(".space-row").first()).toHaveAttribute("data-active", "true");
@@ -1168,7 +1225,7 @@ test("revalidates a colliding live agent and opens its exact host in Spaces", as
     })
     .toEqual({ hostA: 0, hostB: 1 });
 
-  await page.getByRole("button", { name: "Office", exact: true }).click();
+  await page.getByRole("button", { name: "Foundation surface: Office" }).click();
   await waitForOffice(page);
   await page.locator(".agent-row").filter({ hasText: "Codex A" }).click();
   await page.getByRole("button", { name: "Close agent conversation" }).click();
@@ -1315,12 +1372,21 @@ function terminalSocketUrls(urls: readonly string[]) {
 }
 
 async function fixtureLog(request: import("@playwright/test").APIRequestContext) {
+  return (await fixtureLogs(request))["host-a"];
+}
+
+async function fixtureLogs(request: import("@playwright/test").APIRequestContext) {
   const response = await request.get("http://127.0.0.1:4173/__fixture/requests");
   const all = (await response.json()) as Record<
     string,
-    { snapshotRequests: number; capabilityRequests: number }
+    {
+      snapshotRequests: number;
+      capabilityRequests: number;
+      commands: unknown[];
+      selections: unknown[];
+    }
   >;
-  return all["host-a"];
+  return all;
 }
 
 const CORE_SNAPSHOT_REFRESH_INTERVAL_MS = 10_000;

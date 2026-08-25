@@ -17,6 +17,7 @@
     "@capacitor/keyboard": "^8.0.5",
     "@capacitor/preferences": "^8.0.1",
     "@fontsource-variable/geist": "^5.2.9",
+    "@herdr-world/foundation": "file:../.foundation-cache/44507575918e4f745ec35970142fafed2b89113e/foundation.tgz",
     "@uiw/color-convert": "^2.10.3",
     "@uiw/react-color-wheel": "^2.10.3",
     "ghostty-web": "0.4.0",

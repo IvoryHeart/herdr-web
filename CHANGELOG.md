@@ -6,6 +6,19 @@
 
 ### Added
 
+- Composed the public Foundation `v0.1.0-rc.11` package at the Spaces `/`
+  route with the existing World Office `/world` surface. World retains its
+  bridge, Office artwork/providers/settings, storage keys, and observability
+  schemas while using Foundation's qualified facts, commands, launchers,
+  `ManagedTerminal`, and `SurfaceHostV1.extensions.request` seam. The legacy
+  generic source remains recorded as an unreferenced fallback for the later
+  removal tranche. Foundation PRs #9 and #10 supplied runtime admission,
+  recovery, terminal capability and independent extension-transport fixes;
+  rc.10 added strict structural-command, snapshot and capability admission;
+  and PR #13 completed generic contributed-shell parity, transparent managed
+  terminals, downstream branding, same-origin runtime labels, CSP-safe fonts,
+  and settings accessibility required by the final World integration.
+
 - Added the Spec 011 surface API v1 contract, deterministic assembly
   validation, serialized typed lifecycle kernel, settings-contribution parity,
   and least-purpose `SurfaceHostV1` conformance seam. The existing App

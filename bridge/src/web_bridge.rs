@@ -1629,7 +1629,7 @@ fn content_security_policy(policy: &RequestPolicy) -> HeaderValue {
     let value = format!(
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src {}; \
          img-src 'self' data: blob:; \
-         style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'; \
+         style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'; \
          frame-ancestors 'none'",
         connect_src.join(" ")
     );
@@ -6296,6 +6296,7 @@ mod tests {
 
         assert!(value.contains("connect-src 'self' data: http://srv:8787 ws://srv:8787;"));
         assert!(value.contains("img-src 'self' data: blob:;"));
+        assert!(value.contains("font-src 'self' data:;"));
         assert!(value.contains("frame-ancestors 'none'"));
     }
 
